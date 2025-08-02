@@ -1,0 +1,31 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build with Visual Studio 2022",
+            "type": "shell",
+            "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Msbuild\\Current\\Bin\\MSBuild.exe",
+            "args": [
+                "C:\\Projects\\2024\\Smol\\Smol.sln",
+                "/m",
+                "/p:Configuration=Debug"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Run with Visual Studio 2022",
+            "type": "shell",
+            "command": "C:\\Projects\\2024\\Smol\\bin\\x86_64\\smol_game.exe",
+            "args": [],
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        }
+    ]
+}

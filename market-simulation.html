@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Market Simulation with ESP32 Microcontrollers - Declan Porter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>Declan Porter</span>
+                </div>
+                <ul class="nav-menu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="index.html#articles" class="nav-link">Articles</a></li>
+                    <li><a href="index.html#about" class="nav-link">About</a></li>
+                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="article-page">
+        <article class="article-content">
+            <div class="container">
+                <div class="article-header">
+                    <span class="article-category projects-category">Projects</span>
+                    <h1>Real-Time Market Simulation with ESP32 Microcontrollers</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>1st August 2025</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        The Real-Time Market Simulation project was born from my curiosity about market microstructure
+                        and algorithmic trading mechanics. Instead of using traditional simulation environments, I
+                        decided to leverage my experience in embedded systems and use ESP32 microcontrollers as
+                        individual trading nodes, each representing a market participant with its own trading strategy.
+                        This allows me to encounter real world bottle necks and issues, and much more closely represents
+                        the close locality of real scenarios and technology of trading systems, such as using UDP
+                        multicasts.
+                    </p>
+
+                    <div class="video-container">
+                        <iframe width="760" height="470" 
+                                src="https://www.youtube.com/embed/NYVg8hjPzaU" 
+                                title="Market Simulation Demo" 
+                                frameborder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowfullscreen>
+                        </iframe>
+                    </div>
+
+                    <h2>System Architecture</h2>
+                    <p>
+                        The system is made up of three main components:
+                    </p>
+                    <ul>
+                        <li><strong>Market:</strong> A central server running on a desktop computer. This is the brain
+                            of the system—it keeps track of the order book, matches orders, and executes trades.</li>
+                        <li><strong>ESP32 Trader Nodes:</strong> These are tiny microcontrollers simulating individual
+                            traders using basic trading strategies.</li>
+                        <li><strong>Desktop Trader Nodes:</strong> Similar to the ESP32s, but running on full-fledged
+                            desktop machines for more compute-heavy testing.</li>
+                        <li><strong>Shared Library:</strong> A cross-platform library used by all the trading clients to
+                            ensure consistent behavior across devices.</li>
+                        <li><strong>Desktop Terminal:</strong> A Blazor-based monitoring UI that shows what's going on
+                            in real time—useful for visualizing market activity and debugging issues.</li>
+                    </ul>
+
+                    <h2>Key Features</h2>
+
+                    <h3>Market Engine</h3>
+                    <p>
+                        The market engine is built in C++20 and is responsible for:
+                    </p>
+                    <ul>
+                        <li>Matching and executing orders.</li>
+                        <li>Broadcasting L1 market data over UDP.</li>
+                        <li>Receiving new orders over TCP.</li>
+                        <li>Recording historical trades using a basic replay engine for later analysis.</li>
+                    </ul>
+                    <p>
+                        It's designed to be lightweight, fast, and modular.
+                    </p>
+
+                    <h3>Trader Nodes</h3>
+                    <p>
+                        Each trader node runs independently and acts like its own autonomous participant in the market.
+                        Right now, I've implemented three very basic trading strategies:
+                    </p>
+                    <ul>
+                        <li><strong>Market Maker:</strong> Places both bid and ask orders to provide liquidity.</li>
+                        <li><strong>Market Taker:</strong> Aggressively buys or sells at the best available price.</li>
+                        <li><strong>Random:</strong> Just throws random orders within a price range—useful for stress
+                            testing and simulating noise.</li>
+                    </ul>
+                    <p>
+                        Each strategy is implemented by extending a shared <code>MarketClient</code> class and
+                        overriding the <code>Think()</code> method. This method is called repeatedly and makes trading
+                        decisions.
+                    </p>
+
+                    <h3>Shared Library</h3>
+                    <p>
+                        To keep things clean and consistent, I created a shared library that contains all the common
+                        logic, including the core strategy code. This library exposes a simple
+                        <code>DeviceInterface</code> that each platform implements based on its capabilities.
+                    </p>
+                    <p>
+                        Here's what that interface looks like:
+                    </p>
+                    <pre><code>class DeviceInterface {
+public:
+    virtual void        Send( const void * data, int size ) = 0;
+    virtual bool        Recv( PacketBuffer & buffer ) = 0;
+    virtual void        DisplayHeaderText( const char * text ) = 0;
+    virtual void        DisplayTrade( const char * text, int price, int quantity ) = 0;
+    virtual void        Log( const char * text ) = 0;
+};</code></pre>
+                    <p>
+                        Each trader then inherits from <code>MarketClient</code>:
+                    </p>
+                    <pre><code>class MarketClient {
+public:
+    MarketClient( Strategy strat, DeviceInterface * device ) : device( device ), strategy( strat ) {}
+
+    virtual void Think() = 0;
+
+protected:
+    void PlaceOrder( RpcCall call, const OrderEntry & order );
+    DeviceInterface * device;
+
+private:
+    Strategy strategy;
+};</code></pre>
+                    <p>
+                        So if you want to write a new trader, all you need to do is implement the interface and the
+                        <code>Think()</code> method. Easy.
+                    </p>
+
+                    <h2>Challenges I Faced</h2>
+
+                    <h3>1. Throughput & Latency</h3>
+                    <p>
+                        One of my main goals was to push as many orders per second (OPS) as possible. But early on, I
+                        hit some major bottlenecks—especially on the ESP32 nodes.
+                    </p>
+
+                    <h4>Context Switch Hell</h4>
+                    <p>
+                        Originally, the <code>Recv()</code> function on the ESP32 would block using a conditional
+                        variable:
+                    </p>
+                    <pre><code>device->Recv( buffer ); // Blocking call</code></pre>
+                    <p>
+                        Turns out, this was adding a <strong>massive 50ms+ delay</strong> due to context switching. The
+                        ESP32 only has two cores, so if one task blocked, it took forever to resume. The fix? I swapped
+                        the blocking call for a spinning loop:
+                    </p>
+                    <pre><code>while ( device->Recv( buffer ) == false ) {}</code></pre>
+                    <p>
+                        Not elegant, but much faster for our use case.
+                    </p>
+
+                    <h3>2. Memory Limitations on ESP32</h3>
+                    <p>
+                        The ESP32 only has 4MB of flash memory, and when market data was coming in too fast, the
+                        lock-free queue storing the data would eventually blow up and crash the device.
+                    </p>
+                    <p>
+                        Solution? Evict old data. If it hasn't been processed in time, it's probably outdated anyway.
+                    </p>
+
+                    <h3>3. Lock-Free Queues Everywhere</h3>
+                    <p>
+                        To avoid blocking and keep the system snappy, I used lock-free queues for just about everything.
+                        The idea was to keep the hot path (matching and resolving orders) as clean as possible and push
+                        all non-critical work (like logging, metrics, order replies) to other threads.
+                    </p>
+
+                    <h3>4. Network Bandwidth</h3>
+                    <p>
+                        Even with the above fixes, I eventually hit a wall—network bandwidth.
+                    </p>
+                    <p>
+                        ESP32 Ethernet adapters are limited to 100 Mbps. In practice, most people only get 20–40 Mbps,
+                        though with UDP optimization, you can push closer to 80 Mbps. I benchmarked my system and, sure
+                        enough, my ESP32s were hitting ~80 Mbps already.
+                    </p>
+                    <p>
+                        So the next optimization had to come from reducing how much data I send.
+                    </p>
+
+                    <h3>5. Trimming the Order Structure</h3>
+                    <p>
+                        Here's what my original order looked like:
+                    </p>
+                    <pre><code>struct OrderEntry {
+    i64         id = 0;
+    i64         time = 0;
+    i64         price = 0;
+    i64         quantity = 0;
+    OrderType   type = OrderType::MarketOrder;
+    Symbol      symbol;
+};</code></pre>
+                    <p>
+                        This was convenient because I used the same structure for everything. But it's wasteful—traders
+                        don't set <code>id</code> or <code>time</code>, so sending them is pointless.
+                    </p>
+                    <p>
+                        Here's the slimmed-down version:
+                    </p>
+                    <pre><code>#pragma pack(push, 1)
+struct IncomingOrder {
+    i64         price;
+    i32         quantity;
+    OrderType   type = OrderType::MarketOrder;
+    Symbol      symbol;
+};
+#pragma pack(pop)</code></pre>
+                    <p>
+                        This cuts down the payload size, removes padding, and keeps everything tight. Future versions
+                        might pack flags or metadata into the extra bytes if needed.
+                    </p>
+                    <p>
+                        With this change, I was able to push XXX orders per second per device—a XXX% improvement.
+                    </p>
+
+                    <h2>Future Improvements</h2>
+                    <ul>
+                        <li><strong>Switch to Raspberry Pi:</strong> The ESP32 is great, but 240 MHz and 4MB flash only
+                            gets you so far. A Raspberry Pi (or similar SBC) would give me much more CPU power and
+                            better networking performance.</li>
+                        <li><strong>Better Trading Algorithms:</strong> The current strategies are very basic and mostly
+                            useful for stress testing. I'd love to implement more realistic algorithms like:
+                            <ul>
+                                <li>Latency arbitrage</li>
+                                <li>Iceberg orders</li>
+                                <li>Front-running detection</li>
+                                <li>Adversarial slow/fake clients</li>
+                            </ul>
+                        </li>
+                        <li><strong>Order Book Visualization:</strong> Expand the Blazor terminal to show a full
+                            depth-of-book view, along with volume over time and spread charts.</li>
+                        <li><strong>Strategy Scripting:</strong> Let trader nodes load strategies from a Lua or WASM
+                            runtime so I don't have to recompile for every tweak.</li>
+                    </ul>
+
+                    <h2>Final Thoughts</h2>
+                    <p>
+                        This project started out as a fun way to play with market mechanics and microcontrollers—but
+                        it's grown into a proper testbed for low-latency systems, embedded performance profiling, and
+                        systems architecture. There's still a ton to improve, but it's already been incredibly
+                        educational.
+                    </p>
+                    <p>
+                        If you're into systems programming, trading, or embedded development, I highly recommend
+                        building something similar. You learn <em>a lot</em> by simulating a real-world system end to
+                        end.
+                    </p>
+                  
+                    <div class="article-tags">
+                        <span class="tag">ESP32</span>
+                        <span class="tag">Trading</span>
+                        <span class="tag">C++</span>
+                        <span class="tag">IoT</span>
+                        <span class="tag">Distributed Systems</span>
+                        <span class="tag">Low Latency</span>
+                        <span class="tag">Market Microstructure</span>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="footer-logo">
+                        <i class="fas fa-microchip"></i>
+                        <span>Declan Porter</span>
+                    </div>
+                    <p>Exploring embedded systems, IoT, and creative technology projects.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-linkedin"></i></a>
+                        <a href="#"><i class="fab fa-github"></i></a>
+                    </div>
+                </div>
+                <div class="footer-section">
+                    <h4>Categories</h4>
+                    <ul>
+                        <li><a href="index.html#articles">Embedded Systems</a></li>
+                        <li><a href="index.html#articles">IoT Development</a></li>
+                        <li><a href="index.html#articles">ESP32 Projects</a></li>
+                        <li><a href="index.html#articles">Blender Addons</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="#">Code Examples</a></li>
+                        <li><a href="#">ESP32 Tutorials</a></li>
+                        <li><a href="#">C++ Libraries</a></li>
+                        <li><a href="#">IoT Tools</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Contact</h4>
+                    <ul>
+                        <li><a href="mailto:declan@example.com">declan@example.com</a></li>
+                        <li><a href="#">LinkedIn</a></li>
+                        <li><a href="#">GitHub</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Declan Porter. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>

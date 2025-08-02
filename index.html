@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Declan Porter - Embedded Systems & Technology Blog</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>Declan Porter</span>
+                </div>
+                <ul class="nav-menu">
+                    <li><a href="#home" class="nav-link active">Home</a></li>
+                    <li><a href="#articles" class="nav-link">Articles</a></li>
+                    <li><a href="#about" class="nav-link">About</a></li>
+                    <li><a href="#contact" class="nav-link">Contact</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section id="home" class="hero">
+            <div class="hero-container">
+                <div class="hero-content">
+                    <h1>C++ Engineer</h1>
+                    <p>Exploring real-time systems, market simulation, and creative technology projects</p>
+                    <div class="hero-stats">
+                        <div class="stat">
+                            <span class="stat-number">3+</span>
+                            <span class="stat-label">Years Experience</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-text">C++</span>
+                            <span class="stat-label">Expertise</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">100%</span>
+                            <span class="stat-label">Coffee Intake</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="chart-container">
+                        <canvas id="heroChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="about" class="about">
+            <div class="container">
+                <div class="about-content">
+                    <div class="about-text">
+                        <h2>About Me</h2>
+                        <p>I'm a C++ engineer with a passion for high-performance, real-time systems and optimization.
+                            Currently seeking a role in the fintech industry.</p>
+                        <p>My background includes developing the Aqua Scanner and Aqua Meter systems, contributing to
+                            open-source ESP32 frameworks, and creating personal projects like real-time market
+                            simulation using ESP32 microcontrollers.</p>
+                        <!-- <div class="expertise">
+                            <div class="expertise-item">
+                                <i class="fas fa-microchip"></i>
+                                <h4>C++ Programming</h4>
+                                <p>Performance optimization, memory management, and low-latency systems</p>
+                            </div>
+                            <div class="expertise-item">
+                                <i class="fas fa-wifi"></i>
+                                <h4>IoT Development</h4>
+                                <p>MQTT protocols, distributed systems, and edge computing</p>
+                            </div>
+                        </div> -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="articles" class="articles">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Latest Articles</h2>
+                    <p> My latest articles on my projects and experiences </p>
+                </div>
+
+                <div class="filters">
+                    <button class="filter-btn active" data-category="all">All</button>
+                    <button class="filter-btn" data-category="embedded">Embedded</button>
+                    <button class="filter-btn" data-category="iot">IoT</button>
+                    <button class="filter-btn" data-category="projects">Projects</button>
+                    <button class="filter-btn" data-category="tutorials">Tutorials</button>
+                </div>
+
+                <div class="articles-grid" id="articlesGrid">
+                    <!-- Articles will be populated by JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <section class="newsletter">
+            <div class="container">
+                <div class="newsletter-content">
+                    <h3>Contact Me</h3>
+                    <p>Get in touch with me for any questions or collaborations</p>
+                    <a class="filter-btn" href="mailto:porter.declan@gmail.com">porter.declan@gmail.com</a>
+                    <div class="social-links">
+                        <a href="https://github.com/decstar77"><i class="fab fa-github"></i></a>
+                        <a href="https://www.youtube.com/@decstar77"><i class="fab fa-youtube"></i></a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

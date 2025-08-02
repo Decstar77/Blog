@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Performance and Low-Latency C++ Firmware - Declan Porter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>Declan Porter</span>
+                </div>
+                <ul class="nav-menu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="index.html#articles" class="nav-link">Articles</a></li>
+                    <li><a href="index.html#about" class="nav-link">About</a></li>
+                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="article-page">
+        <article class="article-content">
+            <div class="container">
+                <div class="article-header">
+                    <span class="article-category embedded-category">Embedded</span>
+                    <h1>High-Performance and Low-Latency C++ Firmware</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>January 10, 2024</span>
+                        </div>
+                        <div class="read-time">
+                            <i class="far fa-clock"></i>
+                            <span>18 min read</span>
+                        </div>
+                        <div class="article-author">
+                            <i class="far fa-user"></i>
+                            <span>By Declan Porter</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        This article outlines the challenges and lessons learned while developing a real-time RFID
+                        scanning device, the Aqua Scanner, used for water access control in communal households. It
+                        focuses on system design decisions, firmware architecture, and how to build for reliability in
+                        resource-constrained environments.
+                    </p>
+
+                    <h2>The Device</h2>
+                    <h3>What is the Aqua Scanner?</h3>
+                    <p>
+                        The Aqua Scanner is a low-latency embedded device that enables water flow using RFID
+                        authentication. Users scan a tag on the device, and if the tag is authorized, the scanner opens
+                        a solenoid valve via a relay, allowing water to flow.
+                    </p>
+                    <p>
+                        The device is deployed in <strong>low-income communal households in South Africa</strong>, where
+                        water conservation and fair access are both critical. The system helps prevent abuse, ensures
+                        accountability, and reduces water wastage by approximately 20%.
+                    </p>
+
+                    <img src="images/aqua-scanner.jpeg" style="width: 100%; height: auto;" alt="Aqua Scanner" class="img-fluid">
+
+                    <h2>Lesson 1: Keep It a Simple Monolith</h2>
+                    <p>
+                        The initial design split the system into two separate devices:
+                    </p>
+                    <ul>
+                        <li>An <strong>RFID scanner</strong> that authenticated users</li>
+                        <li>A <strong>relay controller</strong> that opened or closed the valve, communicating with the
+                            scanner over MQTT</li>
+                    </ul>
+                    <p>
+                        This introduced fragility. If either device disconnected or failed (e.g., the relay controller
+                        lost power), the system became unusable—even if the scanner was functioning. Users would be
+                        denied access to water due to a communication breakdown.
+                    </p>
+                    <p>
+                        <strong>Solution:</strong> Merge the scanner and relay into a <strong>single holistic
+                            unit</strong>, ensuring local fallback logic in the event of a failure. This dramatically
+                        improved reliability in the field.
+                    </p>
+
+                    <h2>Lesson 2: Internet Connections Are Unreliable</h2>
+                    <p>
+                        In many third-world contexts, such as South Africa where this product is deployed, internet
+                        connectivity is <strong>spotty at best</strong>. When
+                        designing firmware for such environments, assume the device is <strong>offline by
+                            default</strong>. The server should be treated as an optimization, not a dependency.
+                    </p>
+                    <p>
+                        The system must cache as much information as possible locally. For the Aqua Scanner, this means
+                        caching the list of authorized RFID tags. When the device connects to the server, it downloads
+                        an updated tag list and saves it to flash storage.
+                    </p>
+                    <p>
+                        I use an ESP32 module with <strong>16MB flash</strong> to comfortably store the cached data.
+                    </p>
+
+                    <h3>Example: Receiving and Updating Tags</h3>
+
+                    <pre><code>void as_on_received_tag_entries_from_server(void* new_tags, int new_tags_count) {
+    std::lock_guard&lt;std::mutex&gt; lock(tag_mutex);
+
+    ESP_LOGI(TAG, "Received tag entries from server: %d", new_tags_count);
+
+    TagEntry* new_tag_entry = (TagEntry*)new_tags;
+    uint64_t new_check_sum = calculate_tags_check_sum(new_tag_entry, new_tags_count);
+
+    log_tags(new_tag_entry, new_tags_count);
+
+    uint64_t current_check_sum = as_current_tags_check_sum();
+    if (new_check_sum == current_check_sum) {
+        ESP_LOGI(TAG, "Check sum match, not doing anything server %lld, current %lld", 
+                 new_check_sum, current_check_sum);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Check sum mismatch, updating tag entries server %lld, current %lld", 
+             new_check_sum, current_check_sum);
+
+    tag_entries.clear();
+    for (int i = 0; i < new_tags_count; i++) {
+        tag_entries.push_back(new_tag_entry[i]);
+    }
+
+    as_save_tag_entries_to_storage();
+
+    // Confirm to the server that we updated our cache
+    current_check_sum = as_current_tags_check_sum();
+    as_retrieve_tag_entries_from_server(current_check_sum);
+}</code></pre>
+                    <p>
+                        The checksum logic avoids unnecessary writes and bandwidth usage. Tag scans that occur while
+                        offline are stored with a timestamp and uploaded once the device reconnects—ensuring
+                        <strong>complete accountability</strong>.
+                    </p>
+
+                    <h2>Lesson 3: Make It Real-Time</h2>
+                    <p>
+                        Since network requests can be delayed or dropped entirely, I rely on <strong>local
+                            validation</strong>. When a tag is scanned:
+                    </p>
+                    <ul>
+                        <li>The device checks the local cache</li>
+                        <li>In parallel, it sends the scan to the server</li>
+                    </ul>
+                    <p>
+                        If the tag exists locally, the device <strong>immediately opens the valve</strong>, allowing
+                        water to flow with minimal delay. When the server responds, the device reconciles any
+                        discrepancies (e.g., expired tags or new restrictions).
+                    </p>
+                    <p>
+                        This hybrid approach gives users a <strong>responsive experience</strong> while preserving
+                        <strong>centralized control</strong>.
+                    </p>
+
+                    <h2>Design Considerations</h2>
+                    <p>
+                        The Aqua Scanner firmware is built on <strong>FreeRTOS</strong> and takes advantage of the
+                        ESP32's <strong>dual-core architecture</strong>. Key principles in the design include:
+                    </p>
+
+                    <ul>
+                        <li><strong>Concurrency and Thread Safety:</strong> Shared data such as tag caches and scan
+                            buffers are protected with <code>std::mutex</code> to prevent race conditions between tasks.
+                        </li>
+                        <li><strong>Persistent Storage:</strong> RFID tag data and offline scans are stored in flash
+                            memory using efficient serialization. I avoid unnecessary writes to preserve flash
+                            lifespan.</li>
+                        <li><strong>Watchdog-Driven Stability:</strong> Tasks are isolated with timeouts and fail-safes.
+                            If any critical thread hangs, the device will reset to recover automatically.</li>
+                        <li><strong>Modular Logging:</strong> A consistent logging interface across tasks simplifies
+                            debugging and makes remote telemetry more actionable.</li>
+                        <li><strong>Power Awareness:</strong> In off-grid or battery-backed deployments, future
+                            improvements could include low-power sleep modes and more aggressive connection throttling.
+                        </li>
+                        <li><strong>OTA Update Readiness:</strong> The device can support OTA (Over-the-Air) updates.
+                            This ensures that firmware fixes or new features can be rolled out without physical access.
+                        </li>
+                    </ul>
+
+                    <h2>Conclusion</h2>
+                    <p>
+                        Building devices for low-resource, high-risk environments comes with unique challenges. The Aqua
+                        Scanner taught me that <strong>simplicity, resilience, and local autonomy</strong> are
+                        paramount. By unifying the design, leaning on local caching, and handling real-world conditions
+                        gracefully, I created a system that's not just technically effective—but practically deployable
+                        at scale.
+                    </p>
+                    <p>
+                        The key lessons from this project can be applied to any embedded system operating in challenging
+                        environments:
+                    </p>
+                    <ul>
+                        <li><strong>Design for failure:</strong> Assume components will fail and build redundancy</li>
+                        <li><strong>Cache aggressively:</strong> Store critical data locally to handle network outages
+                        </li>
+                        <li><strong>Optimize for user experience:</strong> Real-time response is important</li>
+                        <li><strong>Test in real conditions:</strong> Lab testing doesn't reveal field deployment
+                            challenges</li>
+                        <li><strong>Keep it simple:</strong> Complex systems fail more often in harsh environments</li>
+                    </ul>
+
+                    <div class="article-tags">
+                        <span class="tag">C++</span>
+                        <span class="tag">Embedded</span>
+                        <span class="tag">IoT</span>
+                        <span class="tag">Real-time</span>
+                        <span class="tag">MQTT</span>
+                        <span class="tag">Performance</span>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </main>
+
+</body>
+
+</html>
