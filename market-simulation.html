@@ -196,20 +196,7 @@ private:
                         all non-critical work (like logging, metrics, order replies) to other threads.
                     </p>
 
-                    <h3>4. Network Bandwidth</h3>
-                    <p>
-                        Even with the above fixes, I eventually hit a wall—network bandwidth.
-                    </p>
-                    <p>
-                        ESP32 Ethernet adapters are limited to 100 Mbps. In practice, most people only get 20–40 Mbps,
-                        though with UDP optimization, you can push closer to 80 Mbps. I benchmarked my system and, sure
-                        enough, my ESP32s were hitting ~80 Mbps already.
-                    </p>
-                    <p>
-                        So the next optimization had to come from reducing how much data I send.
-                    </p>
-
-                    <h3>5. Trimming the Order Structure</h3>
+                    <h3>4. Trimming the Order Structure</h3>
                     <p>
                         Here's what my original order looked like:
                     </p>
@@ -240,9 +227,6 @@ struct IncomingOrder {
                         This cuts down the payload size, removes padding, and keeps everything tight. Future versions
                         might pack flags or metadata into the extra bytes if needed.
                     </p>
-                    <p>
-                        With this change, I was able to push XXX orders per second per device—a XXX% improvement.
-                    </p>
 
                     <h2>Future Improvements</h2>
                     <ul>
@@ -270,11 +254,6 @@ struct IncomingOrder {
                         it's grown into a proper testbed for low-latency systems, embedded performance profiling, and
                         systems architecture. There's still a ton to improve, but it's already been incredibly
                         educational.
-                    </p>
-                    <p>
-                        If you're into systems programming, trading, or embedded development, I highly recommend
-                        building something similar. You learn <em>a lot</em> by simulating a real-world system end to
-                        end.
                     </p>
                   
                     <div class="article-tags">
