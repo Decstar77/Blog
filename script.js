@@ -161,7 +161,7 @@ function showNotification(message, type = 'info') {
         position: fixed;
         top: 100px;
         right: 20px;
-        background: ${type === 'success' ? '#00d4ff' : '#ff6b6b'};
+        background: ${type === 'success' ? '#00b894' : '#ff6b6b'};
         color: ${type === 'success' ? '#000' : '#fff'};
         padding: 1rem 1.5rem;
         border-radius: 8px;
@@ -242,7 +242,7 @@ function showArticleModal(article) {
     const content = modal.querySelector('.modal-content');
     content.style.cssText = `
         background: #1a1a1a;
-        border: 1px solid rgba(0, 212, 255, 0.3);
+        border: 1px solid rgba(0, 184, 148, 0.3);
         border-radius: 12px;
         max-width: 600px;
         width: 100%;
@@ -361,7 +361,7 @@ function createHeroChart() {
     const data = [20, 35, 25, 45, 30, 55, 40, 65, 50, 75, 60, 85];
     const step = canvas.width / (data.length - 1);
     
-    ctx.strokeStyle = '#00d4ff';
+    ctx.strokeStyle = '#00b894';
     ctx.lineWidth = 2;
     ctx.beginPath();
     
@@ -379,7 +379,7 @@ function createHeroChart() {
     ctx.stroke();
     
     // Add some dots
-    ctx.fillStyle = '#00d4ff';
+    ctx.fillStyle = '#00b894';
     data.forEach((value, index) => {
         const x = index * step;
         const y = canvas.height - (value / 100) * canvas.height;
