@@ -12,7 +12,7 @@ const articles = [
         title: "High-Reliability C++ Firmware for Distributed IoT Fleets",
         summary: "Lessons learned from engineering low-latency, deterministic firmware for real-time IoT devices — covering multi-threaded design, MQTT integration, and hard-won reliability principles.",
         category: "Embedded",
-        date: "2025-04-06",
+        date: "2026-01-06",
         readTime: "18 min read",
         url: "cpp-firmware.html"
     }
