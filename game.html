@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atto - Declan Porter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .game-page {
+            padding-top: 100px;
+            min-height: 100vh;
+            background: #0d1117;
+        }
+
+        .game-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 20px 40px;
+        }
+
+        .game-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .game-header h1 {
+            font-size: 2.4rem;
+            font-weight: 700;
+            color: #e6edf3;
+            margin-bottom: 8px;
+        }
+
+        .game-header p {
+            color: #8b949e;
+            font-size: 1rem;
+        }
+
+        .game-toolbar {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .game-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: #1a7f37;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .game-btn:hover {
+            background: #2da44e;
+        }
+
+        .game-btn i {
+            font-size: 1rem;
+        }
+
+        .game-frame {
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #30363d;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            position: relative;
+        }
+
+        .game-frame canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 16 / 9;
+            background: #000;
+        }
+
+        .game-status-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: #161b22;
+            border-top: 1px solid #30363d;
+            color: #8b949e;
+            font-size: 0.85rem;
+        }
+
+        .game-status-bar .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #30363d;
+            border-top-color: #1a7f37;
+            border-radius: 50%;
+            animation: rotation 0.8s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .game-status-bar progress {
+            height: 6px;
+            border-radius: 3px;
+            appearance: none;
+            flex: 1;
+            max-width: 200px;
+        }
+
+        .game-status-bar progress::-webkit-progress-bar {
+            background: #30363d;
+            border-radius: 3px;
+        }
+
+        .game-status-bar progress::-webkit-progress-value {
+            background: #1a7f37;
+            border-radius: 3px;
+        }
+
+        .game-status-bar progress::-moz-progress-bar {
+            background: #1a7f37;
+            border-radius: 3px;
+        }
+
+        .game-hint {
+            text-align: center;
+            margin-top: 16px;
+            color: #484f58;
+            font-size: 0.8rem;
+        }
+
+        @keyframes rotation {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Fullscreen styles */
+        .game-frame:fullscreen canvas,
+        .game-frame:-webkit-full-screen canvas {
+            width: 100vw;
+            height: 100vh;
+            aspect-ratio: unset;
+        }
+
+        @media (max-width: 768px) {
+            .game-header h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <a href="index.html" class="nav-logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>Declan Porter</span>
+                </a>
+                <ul class="nav-menu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="articles.html" class="nav-link">Articles</a></li>
+                    <li><a href="game.html" class="nav-link active">Game</a></li>
+                    <li><a href="index.html#about" class="nav-link">About</a></li>
+                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="game-page">
+        <div class="game-container">
+            <div class="game-header">
+                <h1>Atto</h1>
+                <p>A game built with C++ and compiled to WebAssembly</p>
+            </div>
+
+            <div class="game-toolbar">
+                <button class="game-btn" id="fullscreenBtn" onclick="goFullscreen()">
+                    <i class="fas fa-expand"></i> Fullscreen
+                </button>
+            </div>
+
+            <div class="game-frame" id="gameFrame">
+                <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+                <div class="game-status-bar" id="statusBar">
+                    <div class="spinner" id="spinner"></div>
+                    <span id="status">Downloading...</span>
+                    <progress hidden id="progress" max="100" value="0"></progress>
+                </div>
+            </div>
+
+            <p class="game-hint">Click the canvas to capture mouse input. Press Escape to release.</p>
+        </div>
+    </main>
+
+    <script>
+        function goFullscreen() {
+            var frame = document.getElementById('gameFrame');
+            if (frame.requestFullscreen) {
+                frame.requestFullscreen();
+            } else if (frame.webkitRequestFullscreen) {
+                frame.webkitRequestFullscreen();
+            } else if (frame.msRequestFullscreen) {
+                frame.msRequestFullscreen();
+            }
+        }
+
+        var statusElement = document.getElementById('status');
+        var progressElement = document.getElementById('progress');
+        var spinnerElement = document.getElementById('spinner');
+        var statusBar = document.getElementById('statusBar');
+        var canvasElement = document.getElementById('canvas');
+
+        canvasElement.addEventListener("webglcontextlost", function(e) {
+            alert('WebGL context lost. You will need to reload the page.');
+            e.preventDefault();
+        }, false);
+
+        var Module = {
+            print: function() {
+                var args = Array.prototype.slice.call(arguments);
+                console.log.apply(console, args);
+            },
+            canvas: canvasElement,
+            setStatus: function(text) {
+                if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+                if (text === Module.setStatus.last.text) return;
+                var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+                var now = Date.now();
+                if (m && now - Module.setStatus.last.time < 30) return;
+                Module.setStatus.last.time = now;
+                Module.setStatus.last.text = text;
+                if (m) {
+                    text = m[1];
+                    progressElement.value = parseInt(m[2]) * 100;
+                    progressElement.max = parseInt(m[4]) * 100;
+                    progressElement.hidden = false;
+                    spinnerElement.hidden = false;
+                } else {
+                    progressElement.value = null;
+                    progressElement.max = null;
+                    progressElement.hidden = true;
+                    if (!text) {
+                        spinnerElement.style.display = 'none';
+                        statusBar.style.display = 'none';
+                    }
+                }
+                statusElement.innerHTML = text;
+            },
+            totalDependencies: 0,
+            monitorRunDependencies: function(left) {
+                this.totalDependencies = Math.max(this.totalDependencies, left);
+                Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+            }
+        };
+        Module.setStatus('Downloading...');
+        window.onerror = function(event) {
+            Module.setStatus('Exception thrown, see JavaScript console');
+            spinnerElement.style.display = 'none';
+            Module.setStatus = function(text) {
+                if (text) console.error('[post-exception status] ' + text);
+            };
+        };
+    </script>
+    <script async src="game/atto.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
