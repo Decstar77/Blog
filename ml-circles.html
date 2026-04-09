@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learning ML #2: Binary Classification on Circles - Declan Porter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <a href="index.html" class="nav-logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>Declan Porter</span>
+                </a>
+                <ul class="nav-menu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="articles.html" class="nav-link active">Articles</a></li>
+                    <li><a href="game.html" class="nav-link">Game</a></li>
+                    <li><a href="index.html#about" class="nav-link">About</a></li>
+                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="article-page">
+        <article class="article-content">
+            <div class="container">
+                <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
+                <div class="article-header">
+                    <span class="article-category" style="background:#2563eb;color:#fff;padding:4px 12px;border-radius:4px;font-size:0.85rem;font-weight:600;">Machine Learning</span>
+                    <h1>Learning ML #2: Binary Classification on Circles</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>April 6, 2026</span>
+                        </div>
+                        <div class="read-time">
+                            <i class="far fa-clock"></i>
+                            <span>10 min read</span>
+                        </div>
+                        <div class="article-author">
+                            <i class="far fa-user"></i>
+                            <span>By Declan Porter</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        After regression, the next logical step is classification. I used scikit-learn's
+                        <code>make_circles</code> to generate a synthetic 2D dataset — two concentric rings,
+                        each a different class — and trained an MLP to separate them.
+                        This taught me logits, BCE loss, accuracy metrics, and what overfitting actually looks like.
+                    </p>
+
+                    <h2>The Dataset</h2>
+                    <p>
+                        <code>sklearn.datasets.make_circles</code> generates points in 2D space forming two
+                        concentric rings. Every point has coordinates (x₁, x₂) and a label — 0 for the outer
+                        ring, 1 for the inner ring. It's a purely synthetic dataset, generated on the fly,
+                        no downloading required.
+                    </p>
+                    <pre><code>noisy_circles_x, noisy_circles_y = make_circles(
+    n_samples=2000, noise=0.1, random_state=6
+)</code></pre>
+                    <p>
+                        2000 samples with a noise factor of 0.1 — enough to make it non-trivial without being
+                        impossible. Input shape: <code>[N, 2]</code>. Labels: <code>[N]</code> of 0s and 1s.
+                    </p>
+
+                    <h2>Loss Function: Why Not MSE?</h2>
+                    <p>
+                        For regression I used MSE. For binary classification the right loss is
+                        <strong><code>BCEWithLogitsLoss</code></strong>. Here's why the distinction matters.
+                    </p>
+                    <p>
+                        The model outputs a raw float — a <strong>logit</strong> — not a probability.
+                        A logit can be any real number. BCEWithLogitsLoss internally applies sigmoid to
+                        convert the logit to a probability, then computes binary cross-entropy:
+                    </p>
+                    <p style="font-family:monospace;background:#f4f4f4;padding:1rem;border-radius:6px;">
+                        BCE(z, y) = −[y · log(σ(z)) + (1−y) · log(1−σ(z))]
+                    </p>
+                    <p>
+                        Doing the sigmoid inside the loss (rather than in the model) is numerically more stable.
+                        And crucially — during training you <strong>never round or threshold the output</strong>.
+                        Rounding kills gradients; the model needs soft probabilities to know which direction to move.
+                    </p>
+
+                    <h2>The Model</h2>
+                    <p>
+                        Two inputs (x₁, x₂), two hidden layers of width 64, one output neuron (the logit):
+                    </p>
+                    <pre><code>class Classifier(nn.Module):
+    def __init__(self):
+        super(Classifier, self).__init__()
+        size = 64
+        self.input = nn.Linear(2, size)
+        self.input_act = nn.Tanh()
+        self.hidden = nn.Linear(size, size)
+        self.hidden_act = nn.Tanh()
+        self.output = nn.Linear(size, 1)
+
+    def forward(self, x):
+        res_1 = self.input_act(self.input(x))
+        res_2 = self.hidden_act(self.hidden(res_1))
+        res_3 = self.output(res_2)
+        return res_3</code></pre>
+
+                    <h2>Overfitting: Seeing It Happen Live</h2>
+                    <p>
+                        Early in training, with only a handful of samples, I saw this:
+                    </p>
+                    <pre><code>Training loss=0.4538 | Validation loss=0.7188</code></pre>
+                    <p>
+                        Training loss was going <em>down</em>, validation loss was going <em>up</em>.
+                        That's textbook overfitting — the model was memorising the training points rather than
+                        learning the general ring structure.
+                    </p>
+                    <p>
+                        The fixes, in order of effectiveness:
+                    </p>
+                    <ul>
+                        <li><strong>More data</strong> — I bumped up to 2000 samples. This was the biggest win.</li>
+                        <li><strong>Reduce model capacity</strong> if the model is too large for the dataset.</li>
+                        <li><strong>Weight decay via AdamW</strong> — the decoupled shrinkage discourages large weights.</li>
+                        <li>Early stopping based on validation loss.</li>
+                    </ul>
+                    <p>
+                        After these fixes:
+                    </p>
+                    <pre><code>Training loss=0.3468 | Validation loss=0.3598 | Validation acc = 0.8250</code></pre>
+                    <p>
+                        Train and validation losses tracking together — healthy. ~82.5% accuracy on noisy circles
+                        is solid.
+                    </p>
+
+                    <h2>Accuracy: What It Is and How to Compute It</h2>
+                    <p>
+                        Loss is a continuous signal the model optimises. Accuracy is the human-readable metric:
+                        the fraction of predictions that are correct after thresholding.
+                    </p>
+                    <p>
+                        For BCEWithLogitsLoss there's a handy shortcut. Instead of applying sigmoid and rounding,
+                        you can just check the sign of the logit — a positive logit maps to class 1, negative to class 0:
+                    </p>
+                    <pre><code>def calc_accuracy(predictions, answers):
+    probabilities = torch.sigmoid(predictions)
+    guesses = torch.round(probabilities)
+    total = torch.numel(guesses)
+    num_correct = total - torch.count_nonzero(guesses - answers)
+    return num_correct / total</code></pre>
+                    <p>
+                        Two models can have the same accuracy but different losses. The one with lower loss is
+                        outputting more <em>confident</em> correct predictions — further from the 0.5 threshold.
+                        Loss captures quality; accuracy just captures correctness.
+                    </p>
+
+                    <h2>BCE Baseline: The Random Guess Number</h2>
+                    <p>
+                        For roughly balanced classes, a random model outputs logits near 0, giving a BCE loss of
+                        approximately <strong>ln(2) ≈ 0.693</strong>. If your loss is above that after training,
+                        your model is worse than a coin flip. If it's well below, it's learning.
+                    </p>
+                    <p>
+                        My model started around 0.69 and converged to ~0.35 — roughly half the random-guess loss,
+                        which is a meaningful improvement on a noisy problem.
+                    </p>
+
+                    <h2>What I Learned</h2>
+                    <ul>
+                        <li>BCEWithLogitsLoss = sigmoid + BCE in one numerically stable operation. Don't apply sigmoid yourself before the loss.</li>
+                        <li>Overfitting has a clear visual signature: training loss down, validation loss up.</li>
+                        <li>More data is usually the cheapest fix for overfitting.</li>
+                        <li>Accuracy and loss measure different things. Track both.</li>
+                        <li>For BCE loss: random guessing ≈ 0.693. Use this as your sanity-check baseline.</li>
+                    </ul>
+
+                    <p>
+                        Next: MNIST — real image data, multi-class classification, and convolutional networks.
+                    </p>
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Declan Porter. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

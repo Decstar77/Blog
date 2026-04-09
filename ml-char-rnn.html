@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learning ML #4: Tiny Character-Level RNN on Shakespeare - Declan Porter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <a href="index.html" class="nav-logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>Declan Porter</span>
+                </a>
+                <ul class="nav-menu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="articles.html" class="nav-link active">Articles</a></li>
+                    <li><a href="game.html" class="nav-link">Game</a></li>
+                    <li><a href="index.html#about" class="nav-link">About</a></li>
+                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="article-page">
+        <article class="article-content">
+            <div class="container">
+                <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
+                <div class="article-header">
+                    <span class="article-category" style="background:#2563eb;color:#fff;padding:4px 12px;border-radius:4px;font-size:0.85rem;font-weight:600;">Machine Learning</span>
+                    <h1>Learning ML #4: Tiny Character-Level RNN on Shakespeare</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>April 6, 2026</span>
+                        </div>
+                        <div class="read-time">
+                            <i class="far fa-clock"></i>
+                            <span>14 min read</span>
+                        </div>
+                        <div class="article-author">
+                            <i class="far fa-user"></i>
+                            <span>By Declan Porter</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        This was the most complex project so far — training a character-level language model from
+                        scratch. Given a sequence of characters, the model learns to predict the next character.
+                        After training on a corpus of Shakespeare, it can continue a prompt in a vaguely
+                        Shakespearean style. It's bad at first. Watching it get less bad is satisfying.
+                    </p>
+
+                    <h2>What Is a Character-Level Language Model?</h2>
+                    <p>
+                        The task: given the characters <code>h e l l</code>, predict <code>o</code>.
+                        Given <code>e l l o</code>, predict the next character. Repeat across an entire corpus.
+                    </p>
+                    <p>
+                        Why characters instead of words? It's simpler to implement (the vocabulary is just the
+                        unique characters in the text — usually around 65–100 items) and it teaches the core
+                        ideas without the complexity of tokenisation algorithms like BPE.
+                    </p>
+
+                    <h2>From Text to Tokens</h2>
+                    <p>
+                        The pipeline starts by reading the full text corpus and building a character vocabulary:
+                    </p>
+                    <pre><code>unique_chars = sorted(set(content))   # deterministic ordering
+
+vocab = {}
+vocab_inv = {}
+for i, c in enumerate(unique_chars):
+    vocab[c] = i
+    vocab_inv[i] = c
+
+vocab_len = len(vocab)   # ~65 for Shakespeare</code></pre>
+                    <p>
+                        Using <code>sorted(set(...))</code> is important for determinism — if the vocab assignment
+                        changes between runs, saved checkpoints become incompatible. Then the full text gets
+                        mapped to a list of integer IDs:
+                    </p>
+                    <pre><code>tokens_list = [vocab[c] for c in content]
+tokens = torch.tensor(tokens_list, dtype=torch.long)</code></pre>
+                    <p>
+                        80% becomes training tokens, 20% validation. The dtype must be <code>torch.long</code>
+                        (int64) — embeddings and CrossEntropyLoss both require integer indices, not floats.
+                    </p>
+
+                    <h2>The Sliding Window Dataset</h2>
+                    <p>
+                        Rather than feeding one character at a time, the model receives a <em>context window</em>
+                        of T characters and predicts the next T characters (the same window shifted by one position):
+                    </p>
+                    <pre><code>class TokenDataset(Dataset):
+    def __init__(self, data_tensor, window_size):
+        self.data = data_tensor
+        self.window_size = window_size
+
+    def __len__(self):
+        return len(self.data) - self.window_size
+
+    def __getitem__(self, idx):
+        inputs = self.data[idx : idx + self.window_size]
+        targets = self.data[idx + 1 : idx + self.window_size + 1]
+        return (inputs, targets)</code></pre>
+                    <p>
+                        For example with window_size=4 and text "hello":
+                    </p>
+                    <ul>
+                        <li>Input: <code>[h, e, l, l]</code> → Target: <code>[e, l, l, o]</code></li>
+                    </ul>
+                    <p>
+                        Every position in the window is simultaneously a prediction task. This is what gets
+                        flattened for the loss computation later.
+                    </p>
+
+                    <h2>The Model: Embedding + GRU + Linear</h2>
+                    <p>
+                        Before anything else: what is an <strong>embedding</strong>?
+                    </p>
+                    <p>
+                        An <code>nn.Embedding(vocab_size, embed_dim)</code> is a learnable lookup table.
+                        Each token ID maps to a row vector of length <em>embed_dim</em>. Instead of feeding
+                        the raw integer 42 into a linear layer (which has no geometric meaning), you get a
+                        vector of 256 learned floats that the model can find meaningful.
+                        It's just a matrix lookup: token → row.
+                    </p>
+                    <p>
+                        After embedding, the token sequence goes into a <strong>GRU</strong> (Gated Recurrent Unit).
+                        Unlike a plain linear layer, which processes each input in isolation, an RNN carries a
+                        <em>hidden state</em> forward through time:
+                    </p>
+                    <p style="font-family:monospace;background:#f4f4f4;padding:1rem;border-radius:6px;">
+                        h<sub>t</sub> = f(W<sub>x</sub>·x<sub>t</sub> + W<sub>h</sub>·h<sub>t−1</sub> + b)
+                    </p>
+                    <p>
+                        The GRU improves on vanilla RNN by adding update and reset gates that control how much
+                        past context to keep versus overwrite. This substantially helps with longer sequences
+                        where plain RNNs lose signal to the vanishing gradient problem.
+                    </p>
+                    <pre><code>class TinyCharRNN(nn.Module):
+    def __init__(self):
+        super(TinyCharRNN, self).__init__()
+        self.embed = nn.Embedding(vocab_len, 256)
+        self.rnn1 = nn.GRU(256, 256, batch_first=True)
+        self.rnn2 = nn.GRU(256, 256)
+        self.linear = nn.Linear(256, vocab_len)
+
+    def forward(self, x):
+        l1 = self.embed(x)
+        rnn_out1, h = self.rnn1(l1)
+        rnn_out2, h = self.rnn2(rnn_out1)
+        l3 = self.linear(rnn_out2)
+        return l3</code></pre>
+                    <p>
+                        Shape flow through the model for a batch of size B and window T:
+                    </p>
+                    <ul>
+                        <li>Token IDs: <code>[B, T]</code></li>
+                        <li>After embedding: <code>[B, T, 256]</code></li>
+                        <li>After GRU: <code>[B, T, 256]</code></li>
+                        <li>After linear: <code>[B, T, vocab_len]</code> — one logit vector per position</li>
+                    </ul>
+                    <p>
+                        The <code>batch_first=True</code> flag is important — by default PyTorch's RNN layers
+                        expect shape <code>[T, B, features]</code>, not <code>[B, T, features]</code>.
+                        Since the embedding output is batch-first, <code>rnn1</code> needs the flag.
+                        Note that <code>rnn2</code> receives the output of <code>rnn1</code> which is also
+                        already in the right order.
+                    </p>
+
+                    <h2>Loss: Flattening for CrossEntropy</h2>
+                    <p>
+                        <code>CrossEntropyLoss</code> expects logits of shape <code>[N, C]</code> and targets
+                        of shape <code>[N]</code>. My output is <code>[B, T, vocab_len]</code> and targets are
+                        <code>[B, T]</code>. Flattening collapses the batch and time dimensions together —
+                        every position is treated as an independent classification task:
+                    </p>
+                    <pre><code>training_preds = model(training_inputs)         # [B, T, V]
+training_preds = torch.flatten(training_preds, 0, 1)  # [B*T, V]
+training_targets = torch.flatten(training_targets, 0)  # [B*T]
+loss = criterion(training_preds, training_targets)</code></pre>
+
+                    <h2>Perplexity</h2>
+                    <p>
+                        For language models, cross-entropy loss in nats has a useful interpretation via perplexity:
+                    </p>
+                    <p style="font-family:monospace;background:#f4f4f4;padding:1rem;border-radius:6px;">
+                        perplexity = e<sup>loss</sup>
+                    </p>
+                    <p>
+                        It's the model's "effective number of equally likely choices" per next character.
+                        A random model on a 65-character vocab would have loss ≈ ln(65) ≈ 4.17 and perplexity ≈ 65.
+                        After a few epochs of training:
+                    </p>
+                    <pre><code>avg_t_loss=1.6852 | avg_v_loss=1.9097 | perplexity=6.75</code></pre>
+                    <p>
+                        Down from ~65 to ~6.75 — the model is genuinely learning structure in the text.
+                        It's uncertain among about 6–7 plausible next characters on average rather than 65.
+                    </p>
+
+                    <h2>Watching It Generate</h2>
+                    <p>
+                        After each epoch I ran a generation test using the model's predictions as new input —
+                        greedy decoding with argmax. The output after a few epochs on a CPU:
+                    </p>
+                    <pre><code>---Test---
+General:
+Are we blind !?
+Deploy the garrison!
+Move!!!
+     adr g
+Ane ti seong tf
+oaler the srleoehr:
+are
+tEOEII1</code></pre>
+                    <p>
+                        It picks up on punctuation patterns and capital letter usage surprisingly quickly.
+                        The actual words are mostly gibberish at this scale, but you can see the model has
+                        learned something about the structure of the text — newlines, colons after character names,
+                        short words.
+                    </p>
+                    <p>
+                        This quality is expected for a small vanilla RNN trained for only a few epochs on CPU.
+                        The next steps to improve it: GRU (already done) → LSTM, longer context window,
+                        more hidden units, more epochs, and better generation (temperature sampling instead of greedy argmax).
+                    </p>
+
+                    <h2>What I Learned</h2>
+                    <ul>
+                        <li>Character-level models are a great way to learn sequence modelling without needing to understand subword tokenisation first.</li>
+                        <li>Use <code>sorted(set(...))</code> for deterministic vocab assignment — otherwise saved checkpoints are incompatible across runs.</li>
+                        <li><code>nn.Embedding</code> is just a learnable lookup table. Token ID → learned vector of length E.</li>
+                        <li>RNN returns two outputs: the sequence of hidden states (one per time step) and the final hidden state. Use the former for per-token predictions.</li>
+                        <li>Always pass <code>batch_first=True</code> if your tensors are batch-first, or transpose before the RNN.</li>
+                        <li>Flatten <code>[B, T, V]</code> → <code>[B*T, V]</code> for CrossEntropyLoss. Every position is an independent classification.</li>
+                        <li>Perplexity = e^loss. For reference: random on a 65-char vocab ≈ 65. A trained model on Shakespeare gets to ~6–7.</li>
+                        <li>Greedy argmax generation is simple but repetitive. Temperature sampling produces more natural-looking text.</li>
+                    </ul>
+
+                    <p>
+                        Next: building a tiny decoder-only Transformer (GPT-style) for the same char-level task,
+                        and understanding self-attention from scratch.
+                    </p>
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Declan Porter. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

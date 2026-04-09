@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learning ML #1: Teaching a Neural Net to Fit a Parabola - Declan Porter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <a href="index.html" class="nav-logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>Declan Porter</span>
+                </a>
+                <ul class="nav-menu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="articles.html" class="nav-link active">Articles</a></li>
+                    <li><a href="game.html" class="nav-link">Game</a></li>
+                    <li><a href="index.html#about" class="nav-link">About</a></li>
+                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="article-page">
+        <article class="article-content">
+            <div class="container">
+                <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
+                <div class="article-header">
+                    <span class="article-category" style="background:#2563eb;color:#fff;padding:4px 12px;border-radius:4px;font-size:0.85rem;font-weight:600;">Machine Learning</span>
+                    <h1>Learning ML #1: Teaching a Neural Net to Fit a Parabola</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>April 6, 2026</span>
+                        </div>
+                        <div class="read-time">
+                            <i class="far fa-clock"></i>
+                            <span>10 min read</span>
+                        </div>
+                        <div class="article-author">
+                            <i class="far fa-user"></i>
+                            <span>By Declan Porter</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        I decided to learn machine learning properly — not by copying tutorials, but by building
+                        everything from scratch with an LLM as my teacher. No code handed to me upfront.
+                        Just concepts, questions, and my own implementation. This is the first project: training
+                        a small neural network to fit <em>y = x²</em>.
+                    </p>
+
+                    <h2>Why a Parabola?</h2>
+                    <p>
+                        It's the simplest nonlinear regression problem you can construct. One input, one output,
+                        a curve a human could draw in two seconds. If a neural net can't learn this, something is
+                        fundamentally wrong. And it turns out there's a lot to learn just from this one problem.
+                    </p>
+
+                    <h2>The Dataset</h2>
+                    <p>
+                        I sampled 2000 random x values uniformly in [−1, 1], computed <em>y = x²</em>, and split
+                        80/20 into training and validation sets. Nothing fancy. The important thing I learned immediately:
+                        PyTorch's <code>nn.Linear</code> expects 2D tensors of shape <code>[N, features]</code>,
+                        not 1D arrays.
+                    </p>
+                    <p>
+                        So a list of 1600 scalars needs to become a tensor of shape <code>[1600, 1]</code>.
+                        The fix is <code>reshape(-1, 1)</code>. The <code>-1</code> means "figure out this
+                        dimension for me" — PyTorch divides the total elements by 1 and gets 1600 rows automatically.
+                        It's not in-place, so you need assignment:
+                    </p>
+                    <pre><code>trainingTensor = trainingTensor.reshape(-1, 1)</code></pre>
+
+                    <h2>The Model</h2>
+                    <p>
+                        A single <code>Linear(1, 1)</code> can only learn a straight line. A parabola is nonlinear,
+                        so I needed hidden layers with nonlinear activations between them. I went with:
+                    </p>
+                    <pre><code>class FirstNN(nn.Module):
+    def __init__(self):
+        super(FirstNN, self).__init__()
+        self.input = nn.Linear(1, 32)
+        self.input_act = nn.Tanh()
+        self.hidden = nn.Linear(32, 32)
+        self.hidden_act = nn.Tanh()
+        self.output = nn.Linear(32, 1)
+
+    def forward(self, x):
+        l1 = self.input_act(self.input(x))
+        l2 = self.hidden_act(self.hidden(l1))
+        l3 = self.output(l2)
+        return l3</code></pre>
+                    <p>
+                        Width 32 in the hidden layers, Tanh activations between them, no activation on the output
+                        (important — Tanh squashes to [−1, 1], but our targets can be anything in [0, 1]).
+                        Loss function: <code>nn.MSELoss</code>, the mean squared error between predicted and true y.
+                    </p>
+
+                    <h2>The Training Loop</h2>
+                    <p>
+                        The most important thing I learned in this project is the <strong>exact order of operations</strong>
+                        inside a training loop:
+                    </p>
+                    <ol>
+                        <li><strong>Zero gradients</strong> — PyTorch accumulates gradients by default, so you clear old ones first.</li>
+                        <li><strong>Forward pass</strong> — run inputs through the model to get predictions.</li>
+                        <li><strong>Compute loss</strong> — the single number that tells the model how wrong it is.</li>
+                        <li><strong>Backward pass</strong> — compute gradients ∂loss/∂θ for every parameter.</li>
+                        <li><strong>Optimizer step</strong> — update the parameters using those gradients.</li>
+                    </ol>
+                    <pre><code>for epoch in range(1000):
+    optimizer.zero_grad()
+    preds = model(training_x_tensor).reshape(-1)
+    train_loss = loss(preds, training_y_tensor)
+    train_loss.backward()
+    optimizer.step()
+
+    if epoch % 10 == 0:
+        with torch.no_grad():
+            val_preds = model(validation_x_tensor).reshape(-1)
+            val_loss = loss(val_preds, validation_y_tensor)
+            print(f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f}")</code></pre>
+
+                    <h2>Optimizers: SGD vs Adam vs AdamW</h2>
+                    <p>
+                        I went deep on optimizers here. SGD is the conceptual foundation — you move parameters
+                        in the direction that reduces loss:
+                    </p>
+                    <p style="font-family:monospace;background:#f4f4f4;padding:1rem;border-radius:6px;">
+                        θ<sub>t+1</sub> = θ<sub>t</sub> − η · ∇L(θ<sub>t</sub>)
+                    </p>
+                    <p>
+                        Adam is fancier. It keeps two running averages per parameter:
+                        <em>m</em> (first moment — the direction) and <em>v</em> (second moment — the magnitude squared).
+                        These let Adam adapt the step size per parameter individually. Parameters with large, unstable
+                        gradients get smaller steps; parameters with small gradients get relatively larger ones.
+                    </p>
+                    <p>
+                        AdamW is Adam plus <strong>decoupled weight decay</strong>. Instead of mixing the decay
+                        into the gradient before the adaptive scaling (like regular Adam + L2), AdamW applies
+                        a direct shrink each step:
+                    </p>
+                    <p style="font-family:monospace;background:#f4f4f4;padding:1rem;border-radius:6px;">
+                        θ<sub>t+1</sub> = (1 − η·λ) · θ<sub>t</sub> − η · (Adam update term)
+                    </p>
+                    <p>
+                        I tested all three. Interestingly, SGD converged much more smoothly on this simple problem —
+                        AdamW sat near loss ~86 for a while before diving down. The conclusion: adaptive methods
+                        have warm-up overhead (their moment estimates take a few steps to become reliable), which can
+                        look like a plateau on simple problems.
+                    </p>
+
+                    <h2>Results</h2>
+                    <p>
+                        After 1000 epochs with Adam at lr=0.001:
+                    </p>
+                    <pre><code>train_loss=0.0002 | val_loss=0.0002</code></pre>
+                    <p>
+                        The model learned the parabola. Train and validation losses tracking together (no divergence)
+                        confirmed no overfitting. An RMSE of ~0.014 on a y range of [0, 1] is excellent.
+                    </p>
+
+                    <h2>What I Learned</h2>
+                    <ul>
+                        <li>Tensor shapes are the #1 source of bugs in PyTorch. Print shapes constantly early on.</li>
+                        <li>The training loop order — zero_grad, forward, loss, backward, step — is sacred. Never swap backward and step.</li>
+                        <li>Always use <code>nn.Module</code>. It gives you parameter management, train/eval modes, state dict saving, and cleaner code for free.</li>
+                        <li>Don't put an activation on your regression output — it will clip your predictions.</li>
+                        <li>Adam's "bias correction" is about correcting cold-start underestimation of its moment estimates, not about layer biases.</li>
+                    </ul>
+
+                    <p>
+                        Next up: binary classification on 2D synthetic data — the circle classifier.
+                    </p>
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Declan Porter. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
