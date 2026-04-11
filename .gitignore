@@ -1,0 +1,9 @@
+__pycache__
+.claude
+.vscode
+.venv
+data
+build
+model
+mapgen
+checkpoints
