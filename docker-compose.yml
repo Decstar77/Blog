@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   site:
     build:
@@ -11,6 +9,7 @@ services:
 
   runner:
     build:
-      context: ./runner
+      context: .            # repo root — needed to COPY projects/
+      dockerfile: runner/Dockerfile
     expose:
       - "8000"

@@ -1,8 +1,7 @@
-import random
+import importlib.util
+import os
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -15,49 +14,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Project loader ────────────────────────────────────────────────
+# Each project file must define a class named `Model` and ship a
+# `model.pt` state dict next to it.  The runner imports the file
+# without executing anything (training lives behind __main__ guard).
 
-# ── Model ────────────────────────────────────────────────────────
+def load_project(py_path: str, weights_path: str):
+    if not os.path.exists(py_path):
+        raise FileNotFoundError(f"Project file not found: {py_path}")
+    if not os.path.exists(weights_path):
+        raise FileNotFoundError(f"Weights not found: {weights_path}  — run the project script first")
 
-class ParabolaNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.input  = nn.Linear(1, 32)
-        self.act1   = nn.Tanh()
-        self.hidden = nn.Linear(32, 32)
-        self.act2   = nn.Tanh()
-        self.output = nn.Linear(32, 1)
+    spec   = importlib.util.spec_from_file_location("project_module", py_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
 
-    def forward(self, x):
-        x = self.act1(self.input(x))
-        x = self.act2(self.hidden(x))
-        return self.output(x)
+    if not hasattr(module, "Model"):
+        raise AttributeError(f"{py_path} must define a class named `Model`")
+
+    model = module.Model()
+    model.load_state_dict(torch.load(weights_path, weights_only=True))
+    model.eval()
+    return model
 
 
-# ── Train on startup ─────────────────────────────────────────────
+# ── Load models at startup ────────────────────────────────────────
 
-print("Training parabola model...")
+BASE = os.path.dirname(__file__)
 
-samples = 2000
-xs = [random.uniform(-1, 1) for _ in range(samples)]
-ys = [x ** 2 for x in xs]
+parabola_model = load_project(
+    py_path      = os.path.join(BASE, "projects/project1-parabola/parabola.py"),
+    weights_path = os.path.join(BASE, "projects/project1-parabola/model.pt"),
+)
 
-split = int(0.8 * samples)
-train_x = torch.tensor(xs[:split], dtype=torch.float32).reshape(-1, 1)
-train_y = torch.tensor(ys[:split], dtype=torch.float32)
-
-model = ParabolaNet()
-loss_fn = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-for epoch in range(1000):
-    optimizer.zero_grad()
-    preds = model(train_x).reshape(-1)
-    loss = loss_fn(preds, train_y)
-    loss.backward()
-    optimizer.step()
-
-model.eval()
-print(f"Training complete. Final loss: {loss.item():.6f}")
+print("Parabola model loaded.")
 
 
 # ── API ──────────────────────────────────────────────────────────
@@ -70,8 +60,8 @@ class RunRequest(BaseModel):
 def run_parabola(req: RunRequest):
     x = max(-1.0, min(1.0, req.x))
     with torch.no_grad():
-        x_tensor = torch.tensor([[x]], dtype=torch.float32)
-        prediction = float(model(x_tensor).item())
+        x_tensor   = torch.tensor([[x]], dtype=torch.float32)
+        prediction = float(parabola_model(x_tensor).item())
     actual = x ** 2
     return {
         "prediction": round(prediction, 6),
