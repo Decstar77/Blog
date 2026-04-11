@@ -63,8 +63,8 @@
 
                 <div class="article-body">
                     <p class="lead">
-                        So I decided to learn diffusion models next. My goodness, there was a lot of math —
-                        so I'm writing this to reinforce what I learned and to help anyone else working through
+                        I've beening learning all about diffusion models, and my goodness, the math took me by suprise lol.
+                        I'm writing this to reinforce what I learnt and to help anyone else working through
                         the same material.
                     </p>
 
@@ -153,7 +153,8 @@
                     <p>
                         Note that the noise term is scaled by $\sqrt{\beta_t}$, not $\beta_t$ — because $\beta_t$
                         is the <em>variance</em>, and we need the <em>standard deviation</em> to scale the noise sample.
-                        The $\sqrt{1-\beta_t}$ I'll come to later.
+                        Why both coefficients must be square roots specifically is covered in the
+                        variance preservation section below.
                     </p>
 
                     <h2>Substitution: Introducing $\alpha_t$</h2>
@@ -221,36 +222,45 @@
                         pure noise; as $t \to 0$, $\bar{\alpha}_t \to 1$ and you recover the original image.
                     </p>
 
-                    <h2>Why the $\sqrt{1-\beta_t}$ /$\sqrt{\bar{\alpha}_t}$ </h2>
+                    <h2>Why the Square Roots? Variance Preservation</h2>
                     <p>
-                        The reason is because we need a stable variance $Var(x_t) = 1$
+                        Both coefficients are square roots because of a requirement called
+                        <strong>variance preservation</strong>. We want each forward step to
+                        maintain unit variance — if $\operatorname{Var}(x_{t-1}) = 1$, we
+                        need $\operatorname{Var}(x_t) = 1$ as well. This keeps the signal
+                        scale stable as noise accumulates.
                     </p>
                     <p>
-                        $Var(x_t) = Var(\sqrt{alpha_t} * x_{t-1} ) + Var(\sqrt{1 -alpha_t} * \varepsilon) = 1$ 
+                        Starting from $x_t = \sqrt{\alpha_t}\, x_{t-1} + \sqrt{1 - \alpha_t}\, \varepsilon$,
+                        and using $\operatorname{Var}(aX) = a^2 \operatorname{Var}(X)$ for independent terms:
                     </p>
+                    $$\operatorname{Var}(x_t) = \left(\sqrt{\alpha_t}\right)^2 \operatorname{Var}(x_{t-1}) + \left(\sqrt{1 - \alpha_t}\right)^2 \operatorname{Var}(\varepsilon)$$
+                    $$= \alpha_t \cdot \operatorname{Var}(x_{t-1}) + (1 - \alpha_t) \cdot \operatorname{Var}(\varepsilon)$$
                     <p>
-                        $Var(x_t) = (\sqrt{alpha_t})^2 Var( x_{t-1} ) + (\sqrt{1 -alpha_t})^2 * Var( \varepsilon) = 1 $ 
+                        Now assume $\operatorname{Var}(x_{t-1}) = 1$ (by induction, with $x_0$ being
+                        normalised data), and recall $\varepsilon \sim \mathcal{N}(0, \mathbf{I})$
+                        so $\operatorname{Var}(\varepsilon) = 1$:
                     </p>
+                    $$\operatorname{Var}(x_t) = \alpha_t \cdot 1 + (1 - \alpha_t) \cdot 1 = 1 \checkmark$$
                     <p>
-                        Now assume that $var(x_{t-1}) = 1$ 
+                        Variance is perfectly preserved at every step. To see why the square roots are
+                        necessary, consider what happens without them — say we used
+                        $x_t = \alpha_t\, x_{t-1} + (1 - \alpha_t)\, \varepsilon$ instead:
                     </p>
+                    $$\operatorname{Var}(x_t) = \alpha_t^2 + (1 - \alpha_t)^2 \neq 1$$
                     <p>
-                        With $\varepsilon \sim \mathcal{N}(0, 1)$ we have $Var(\varepsilon) = 1$ we get
-                    </p>
-                    <p>
-                        $Var(x_t) = alpha_t * + 1 - alpha_t = 1
-                    </p>
-                    <p>
-                        $Var(x_t) =  1
-                    </p>
-                    <p>
-                        If we didn't have the sqaure root we'd have a lingering $(alpha_t)^2$ term
+                        The squared terms no longer cancel to 1, and the signal scale drifts across steps.
+                        The square roots are precisely what ensures the two coefficients sum to 1
+                        <em>after squaring</em>.
                     </p>
 
                     <h2>Conclusion</h2>
                     <p>
-                        This covers the math regarding board diffusion process of Gaussians.
-                        The next part is the reverse, which is also math heavy, that will come in the next article.
+                        This covers the math behind the forward diffusion process — how to corrupt data
+                        with Gaussians, why the square roots are necessary for variance stability, and
+                        how to derive the closed-form $q(x_t \mid x_0)$ that makes training tractable.
+                        The next part is the reverse process, which is also math-heavy, and will come
+                        in the next article.
                     </p>
 
                     <div class="article-tags">
