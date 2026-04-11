@@ -1,44 +1,12 @@
 // All articles, newest first
 const articles = [
     {
-        title: "Learning Diffusion #1: The Forward Process",
+        title: "Diffusion #1: The Math Of The Gaussian Forward Pass",
         summary: "Deriving the closed-form forward process for diffusion models from first principles — the noise schedule, sampling form of the Gaussian, the reparameterization trick, and how to jump to any noisy x_t directly from x_0.",
         category: "Machine Learning",
         date: "2026-04-11",
         readTime: "15 min read",
         url: "diffusion-forward-process.html"
-    },
-    {
-        title: "Learning ML #4: Tiny Character-Level RNN on Shakespeare",
-        summary: "Building a character-level language model from scratch using an RNN on the Tiny Shakespeare corpus. Covers embeddings, GRU, sliding-window datasets, CrossEntropyLoss flattening, perplexity, and greedy text generation.",
-        category: "Machine Learning",
-        date: "2026-04-06",
-        readTime: "14 min read",
-        url: "ml-char-rnn.html"
-    },
-    {
-        title: "Learning ML #3: MNIST — From MLP to CNN",
-        summary: "Classifying handwritten digits with torchvision, CrossEntropyLoss, and argmax accuracy. Built an MLP baseline first, then upgraded to a two-block convolutional network — and learned how spatial feature extraction actually works.",
-        category: "Machine Learning",
-        date: "2026-04-06",
-        readTime: "12 min read",
-        url: "ml-mnist.html"
-    },
-    {
-        title: "Learning ML #2: Binary Classification on Circles",
-        summary: "Training an MLP to separate two concentric rings of points. First encounter with BCEWithLogitsLoss, logits vs probabilities, overfitting in the wild, and computing accuracy properly.",
-        category: "Machine Learning",
-        date: "2026-04-06",
-        readTime: "10 min read",
-        url: "ml-circles.html"
-    },
-    {
-        title: "Learning ML #1: Teaching a Neural Net to Fit a Parabola",
-        summary: "The fundamentals of PyTorch from zero — tensor shapes, the training loop order, MSE loss, and a deep dive into SGD vs Adam vs AdamW. Built entirely from scratch without copying tutorial code.",
-        category: "Machine Learning",
-        date: "2026-04-06",
-        readTime: "10 min read",
-        url: "ml-parabola.html"
     },
     {
         title: "Real-Time Market Simulation with ESP32 Microcontrollers",

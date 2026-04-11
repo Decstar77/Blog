@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Learning Diffusion #1: The Forward Process - Declan Porter</title>
+    <title>Diffusion #1: The Math Of The Gaussian Forward Pass - Declan Porter</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -50,7 +50,7 @@
                 <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
                 <div class="article-header">
                     <span class="article-category">Machine Learning</span>
-                    <h1>Learning Diffusion #1: The Forward Process</h1>
+                    <h1>Diffusion #1: The Math Of The Gaussian Forward Pass</h1>
                     <div class="article-meta">
                         <div class="article-date">
                             <i class="far fa-calendar"></i>
@@ -120,8 +120,36 @@
                     </p>
                     $$f(x) = \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)$$
                     <p>
-                        That form is unwieldy when we want to isolate and manipulate the randomness directly.
-                        The equivalent sampling form is much more practical:
+                        That form is unwieldy when we want to isolate the randomness. But where does the
+                        sampling form actually come from? The answer is the <strong>change of variables formula</strong>.
+                    </p>
+                    <p>
+                        Start with a standard normal $z \sim \mathcal{N}(0, 1)$ and define $x = \mu + \sigma z$.
+                        To find the distribution of $x$, we use the change of variables formula. For a
+                        1D transformation $x = g(z)$:
+                    </p>
+                    $$p_x(x) = p_z(z) \left|\frac{dz}{dx}\right|$$
+                    <p>
+                        Inverting $x = \mu + \sigma z$ gives $z = \frac{x - \mu}{\sigma}$, so the derivative is:
+                    </p>
+                    $$\frac{dz}{dx} = \frac{1}{\sigma}$$
+                    <p>
+                        Substituting both into the formula:
+                    </p>
+                    $$p_x(x) = p_z\!\left(\frac{x-\mu}{\sigma}\right) \cdot \left|\frac{1}{\sigma}\right|$$
+                    <p>
+                        Now expand using the standard normal PDF $p_z(z) = \frac{1}{\sqrt{2\pi}} e^{-z^2/2}$:
+                    </p>
+                    $$p_x(x) = \frac{1}{\sqrt{2\pi}} \exp\!\left(-\frac{1}{2}\left(\frac{x-\mu}{\sigma}\right)^{\!2}\right) \cdot \frac{1}{\sigma}$$
+                    <p>
+                        Rearranging (assuming $\sigma > 0$):
+                    </p>
+                    $$p_x(x) = \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left(-\frac{(x-\mu)^2}{2\sigma^2}\right)$$
+                    <p>
+                        That is exactly $\mathcal{N}(\mu, \sigma^2)$. So the sampling form is not a trick —
+                        it is a direct consequence of change of variables. Sampling $z \sim \mathcal{N}(0,1)$
+                        and computing $x = \mu + \sigma z$ gives you a sample from $\mathcal{N}(\mu, \sigma^2)$.
+                        This is the equivalent sampling form:
                     </p>
                     $$x = \mu + \sigma\,\varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, 1)$$
                     <p>
