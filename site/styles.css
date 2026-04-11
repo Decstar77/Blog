@@ -842,6 +842,29 @@ body {
     min-height: 1.2em;
 }
 
+.classifier-canvas-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+#classifierCanvas {
+    width: 100%;
+    max-width: 400px;
+    height: auto;
+    border-radius: 6px;
+    cursor: crosshair;
+    display: block;
+}
+
+.demo-canvas-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin: 0;
+    font-style: italic;
+}
+
 @media (max-width: 600px) {
     .demo-result-value { font-size: 1rem; }
     .demo-result-label { font-size: 0.7rem; }
