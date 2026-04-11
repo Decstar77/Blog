@@ -18,10 +18,15 @@
             ]
         })"></script>
     <style>
-        /* KaTeX display-mode centering */
+        /* KaTeX display-mode — horizontal padding prevents the phantom
+           scrollbar caused by KaTeX's internal spacing slightly exceeding
+           the container edge. overflow-y: hidden stops that from producing
+           a compound scrollbar. */
         .katex-display {
             margin: 1.6rem 0;
+            padding: 0 4px;
             overflow-x: auto;
+            overflow-y: hidden;
         }
         /* Inline math alignment */
         .katex { font-size: 1.05em; }
