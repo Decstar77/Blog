@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  site:
+    build:
+      context: ./site
+    ports:
+      - "80:80"
+    depends_on:
+      - runner
+
+  runner:
+    build:
+      context: ./runner
+    expose:
+      - "8000"

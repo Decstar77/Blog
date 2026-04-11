@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parabola — Decstar's Blog</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Machine Learning</span>
+            <h1 style="text-align: center;">Parabola</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-calendar-alt"></i> April 2025</span>
+                <span><i class="fas fa-tag"></i> Python · PyTorch</span>
+                <span><i class="fas fa-hashtag"></i> Project 1</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                The simplest possible supervised learning problem: can a neural network learn the curve
+                y&nbsp;=&nbsp;x²? Spoiler — yes, and remarkably well.
+            </p>
+
+            <h2 style="text-align: center;">Live demo</h2>
+        </div>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <canvas id="parabolaCanvas" width="640" height="300"></canvas>
+
+            <div class="demo-controls">
+                <label class="demo-label" for="xSlider">
+                    x = <span id="xDisplay">0.50</span>
+                </label>
+                <input
+                    id="xSlider"
+                    class="demo-slider"
+                    type="range"
+                    min="-1" max="1" step="0.01"
+                    value="0.5"
+                >
+            </div>
+
+            <div class="demo-results" id="demoResults">
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Model prediction</span>
+                    <span class="demo-result-value" id="resultPrediction">—</span>
+                </div>
+                <div class="demo-result-divider"></div>
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Actual (x²)</span>
+                    <span class="demo-result-value demo-result-actual" id="resultActual">0.2500</span>
+                </div>
+                <div class="demo-result-divider"></div>
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Error</span>
+                    <span class="demo-result-value demo-result-error" id="resultError">—</span>
+                </div>
+            </div>
+
+            <p class="demo-status" id="demoStatus">Start the runner service to enable live queries.</p>
+        </div>
+
+        <!-- ── Code ─────────────────────────────────────────────── -->
+        <div class="article-body">
+            <h2 style="text-align: center;">Code</h2>
+            <pre><code>import torch
+import torch.nn as nn
+import torch.optim as optim
+import random
+
+def parabola(x):
+    return x ** 2
+
+samples = 2000
+training_x = [random.uniform(-1, 1) for _ in range(samples)]
+random.shuffle(training_x)
+training_y = [parabola(x) for x in training_x]
+
+training_x_tensor = torch.tensor(
+    training_x[:int(0.8 * samples)], dtype=torch.float32
+).reshape(-1, 1)
+training_y_tensor = torch.tensor(
+    training_y[:int(0.8 * samples)], dtype=torch.float32
+)
+
+validation_x_tensor = torch.tensor(
+    training_x[int(0.8 * samples):], dtype=torch.float32
+).reshape(-1, 1)
+validation_y_tensor = torch.tensor(
+    training_y[int(0.8 * samples):], dtype=torch.float32
+)
+
+class FirstNN(nn.Module):
+    def __init__(self):
+        super(FirstNN, self).__init__()
+        self.input      = nn.Linear(1, 32)
+        self.input_act  = nn.Tanh()
+        self.hidden     = nn.Linear(32, 32)
+        self.hidden_act = nn.Tanh()
+        self.output     = nn.Linear(32, 1)
+
+    def forward(self, x):
+        l1 = self.input_act(self.input(x))
+        l2 = self.hidden_act(self.hidden(l1))
+        l3 = self.output(l2)
+        return l3
+
+model     = FirstNN()
+loss      = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+for epoch in range(1000):
+    optimizer.zero_grad()
+    preds      = model(training_x_tensor).reshape(-1)
+    train_loss = loss(preds, training_y_tensor)
+    train_loss.backward()
+    optimizer.step()
+
+    if epoch % 10 == 0:
+        with torch.no_grad():
+            val_preds = model(validation_x_tensor).reshape(-1)
+            val_loss  = loss(val_preds, validation_y_tensor)
+            print(f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f}")</code></pre>
+        </div>
+
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+<script>
+// ── Canvas drawing ────────────────────────────────────────────────
+
+const canvas = document.getElementById('parabolaCanvas');
+const ctx    = canvas.getContext('2d');
+
+const PAD  = 44;
+const W    = canvas.width;
+const H    = canvas.height;
+const XMIN = -1.2, XMAX = 1.2;
+const YMIN = -0.08, YMAX = 1.28;
+
+function cx(x) { return PAD + (x - XMIN) / (XMAX - XMIN) * (W - 2 * PAD); }
+function cy(y) { return H - PAD - (y - YMIN) / (YMAX - YMIN) * (H - 2 * PAD); }
+
+function drawScene(xVal, prediction, actual) {
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = '#f5fbf5';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = '#d4e8d4';
+    ctx.lineWidth = 1;
+    [-1, -0.5, 0, 0.5, 1].forEach(gx => {
+        ctx.beginPath(); ctx.moveTo(cx(gx), PAD); ctx.lineTo(cx(gx), H - PAD); ctx.stroke();
+    });
+    [0, 0.25, 0.5, 0.75, 1].forEach(gy => {
+        ctx.beginPath(); ctx.moveTo(PAD, cy(gy)); ctx.lineTo(W - PAD, cy(gy)); ctx.stroke();
+    });
+
+    // Axes
+    ctx.strokeStyle = '#5a6e5a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(PAD, cy(0)); ctx.lineTo(W - PAD, cy(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx(0), PAD); ctx.lineTo(cx(0), H - PAD); ctx.stroke();
+
+    // Axis labels
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#7a8e7a';
+    ctx.textAlign = 'center';
+    [-1, -0.5, 0.5, 1].forEach(gx => {
+        ctx.fillText(gx.toFixed(1), cx(gx), H - 10);
+    });
+    ctx.textAlign = 'right';
+    [0.25, 0.5, 0.75, 1].forEach(gy => {
+        ctx.fillText(gy.toFixed(2), PAD - 6, cy(gy) + 4);
+    });
+
+    // True parabola curve
+    ctx.beginPath();
+    ctx.strokeStyle = '#c8dcc8';
+    ctx.lineWidth = 2;
+    for (let px = XMIN; px <= XMAX; px += 0.005) {
+        const py = px * px;
+        if (px <= XMIN + 0.005) ctx.moveTo(cx(px), cy(py));
+        else ctx.lineTo(cx(px), cy(py));
+    }
+    ctx.stroke();
+
+    // Vertical dashed line at x
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = '#b0c8b0';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx(xVal), cy(YMAX)); ctx.lineTo(cx(xVal), cy(YMIN)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Actual point (green)
+    ctx.beginPath();
+    ctx.arc(cx(xVal), cy(actual), 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#1f7a1f';
+    ctx.fill();
+
+    // Prediction point (red) — only if we have a value
+    if (prediction !== null) {
+        ctx.beginPath();
+        ctx.arc(cx(xVal), cy(prediction), 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#e05252';
+        ctx.fill();
+        ctx.strokeStyle = '#c0392b';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    // Legend
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#1f7a1f';
+    ctx.beginPath(); ctx.arc(W - 130, 20, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillText('actual y = x²', W - 120, 25);
+    if (prediction !== null) {
+        ctx.fillStyle = '#e05252';
+        ctx.beginPath(); ctx.arc(W - 130, 40, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = '#e05252';
+        ctx.fillText('model output', W - 120, 45);
+    }
+}
+
+// Initial draw
+drawScene(0.5, null, 0.25);
+
+// ── Runner query ──────────────────────────────────────────────────
+
+const RUNNER = '/api'; // nginx proxies /api/* → runner:8000/*
+
+let debounceTimer = null;
+
+async function queryRunner(x) {
+    const status = document.getElementById('demoStatus');
+    status.textContent = 'Querying model…';
+    status.style.color = 'var(--text-muted)';
+
+    try {
+        const res = await fetch(`${RUNNER}/run/parabola`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ x }),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+
+        document.getElementById('resultPrediction').textContent = data.prediction.toFixed(4);
+        document.getElementById('resultActual').textContent     = data.actual.toFixed(4);
+        document.getElementById('resultError').textContent      = data.error.toFixed(4);
+
+        status.textContent = '';
+        drawScene(x, data.prediction, data.actual);
+
+    } catch (err) {
+        status.textContent = 'Runner unavailable — start the Docker services to enable live queries.';
+        status.style.color = '#b05050';
+
+        // Still update the actual value locally
+        const actual = x * x;
+        document.getElementById('resultActual').textContent = actual.toFixed(4);
+        drawScene(x, null, actual);
+    }
+}
+
+// ── Slider ────────────────────────────────────────────────────────
+
+const slider   = document.getElementById('xSlider');
+const xDisplay = document.getElementById('xDisplay');
+
+slider.addEventListener('input', () => {
+    const x = parseFloat(slider.value);
+    xDisplay.textContent = x.toFixed(2);
+
+    // Update actual immediately (no network needed)
+    const actual = x * x;
+    document.getElementById('resultActual').textContent = actual.toFixed(4);
+    drawScene(x, null, actual);
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => queryRunner(x), 150);
+});
+
+// Kick off an initial query
+queryRunner(0.5);
+</script>
+</body>
+</html>

@@ -715,3 +715,134 @@ body {
         box-shadow: none;
     }
 }
+
+/* ============================================================
+   Project demo
+   ============================================================ */
+
+.project-demo {
+    margin: 0 0 2.5rem;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+#parabolaCanvas {
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+}
+
+.demo-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.demo-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    font-family: var(--font-mono);
+}
+
+.demo-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+}
+
+.demo-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.demo-slider::-webkit-slider-thumb:hover {
+    background: var(--accent-dark);
+}
+
+.demo-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+}
+
+.demo-results {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.demo-result-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 12px;
+    gap: 4px;
+}
+
+.demo-result-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border);
+}
+
+.demo-result-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+}
+
+.demo-result-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: #e05252;
+}
+
+.demo-result-actual {
+    color: var(--accent);
+}
+
+.demo-result-error {
+    color: var(--text-muted);
+}
+
+.demo-status {
+    font-size: 0.83rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin: 0;
+    min-height: 1.2em;
+}
+
+@media (max-width: 600px) {
+    .demo-result-value { font-size: 1rem; }
+    .demo-result-label { font-size: 0.7rem; }
+}

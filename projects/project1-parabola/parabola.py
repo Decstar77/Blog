@@ -56,4 +56,4 @@ for epoch in range(1000):
             val_loss = loss(val_preds, validation_y_tensor )
             print(f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f}")
 
-
+torch.save( model.state_dict(), "projects/project1-parabola/parabola_final.pth" )

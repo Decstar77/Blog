@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects — Decstar's Blog</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <section class="posts-section">
+        <h2 style="text-align: center;">Projects</h2>
+        <p style="text-align: center; color: var(--text-muted); font-size: 0.95rem; margin-bottom: 32px;">
+            Runnable machine learning experiments — each with a live interactive demo.
+        </p>
+        <ul class="post-list">
+
+            <li class="post-list-item">
+                <div class="post-list-row">
+                    <span class="post-list-date">Apr 2025</span>
+                    <a class="post-list-title" href="project-parabola.html"> Project 1 - The Parabola</a>
+                </div>
+                <div class="post-list-meta">
+                    <span class="post-category">Machine Learning</span>
+                    <span class="post-readtime">Python · PyTorch</span>
+                </div>
+                <p class="post-list-summary">
+                    A minimal MLP trained to approximate a parabola. Drag the slider to query the model live.
+                </p>
+            </li>
+
+        </ul>
+    </section>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="index.html">&larr; Home</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
