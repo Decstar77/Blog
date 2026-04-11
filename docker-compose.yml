@@ -2,8 +2,6 @@ services:
   site:
     build:
       context: ./site
-    ports:
-      - "8080:80"
     depends_on:
       - runner
 
