@@ -619,3 +619,100 @@ a:hover {
 
     .post-list-date { min-width: unset; }
 }
+
+/* ============================================================
+   Dark background theme — triangle canvas sits behind the
+   white rounded card; no top nav bar.
+   ============================================================ */
+
+body {
+    background: #1a1a1a;
+}
+
+/* ── White content card ── */
+.wrapper {
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 0 80px rgba(0, 0, 0, 0.6);
+    padding-top: 32px;
+    padding-bottom: 52px;
+    margin-top: 44px;
+    margin-bottom: 44px;
+}
+
+/* ── Inner nav (lives inside the white card) ── */
+.inner-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 18px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+}
+
+.inner-nav-brand {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-decoration: none;
+    letter-spacing: -0.2px;
+}
+
+.inner-nav-brand:hover {
+    color: var(--accent-dark);
+    text-decoration: none;
+}
+
+.inner-nav-links {
+    display: flex;
+    gap: 18px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-wrap: wrap;
+}
+
+.inner-nav-links a {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.inner-nav-links a:hover,
+.inner-nav-links a.active {
+    color: var(--accent);
+}
+
+/* ── Footer: dark strip below card ── */
+.site-footer {
+    background: transparent;
+    border-top: none;
+    margin-top: 0;
+    padding: 16px 0 32px;
+}
+
+.site-footer-inner {
+    color: rgba(160, 160, 160, 0.45);
+}
+
+.site-footer a {
+    color: rgba(160, 160, 160, 0.45);
+}
+
+.site-footer a:hover {
+    color: #2da44e;
+    text-decoration: none;
+}
+
+/* ── Mobile: full-width card, no rounded corners ── */
+@media (max-width: 600px) {
+    .wrapper {
+        border-radius: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+        box-shadow: none;
+    }
+}
