@@ -11,7 +11,7 @@ const articles = [
     {
         title: "Real-Time Market Simulation with ESP32 Microcontrollers",
         summary: "Exploring my experimental market simulator that uses ESP32 trader nodes to study market microstructure and algorithmic trading mechanics with a TCP/UDP-based order book engine.",
-        category: "Projects",
+        category: "Embedded",
         date: "2025-08-01",
         readTime: "12 min read",
         url: "market-simulation.html"
