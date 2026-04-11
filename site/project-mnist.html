@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MNIST: MLP vs CNN — Decstar's Blog</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Machine Learning</span>
+            <h1 style="text-align: center;">MNIST Digit Recognition — MLP vs CNN</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-calendar-alt"></i> April 2025</span>
+                <span><i class="fas fa-tag"></i> Python · PyTorch · torchvision</span>
+                <span><i class="fas fa-hashtag"></i> Projects 3 &amp; 4</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                This project trained two classifiers for the mnist digit dataset.
+                The first uses a standard MLP and the second uses convolutional layers. 
+            </p>
+
+            <h2>Live demo</h2>
+            <p style="color: var(--text-muted); font-size: 0.92rem; margin-top: -0.5rem;">
+                Draw a digit in the black canvas. Both models predict simultaneously.
+            </p>
+        </div>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+
+            <!-- Drawing area -->
+            <div class="mnist-draw-row">
+                <div class="mnist-draw-col">
+                    <canvas id="drawCanvas" width="280" height="280"></canvas>
+                    <button id="clearBtn" class="mnist-clear-btn">Clear</button>
+                </div>
+                <div class="mnist-preview-col">
+                    <p class="mnist-preview-label">What the model sees</p>
+                    <canvas id="previewCanvas" width="28" height="28"></canvas>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="mnist-results-grid">
+
+                <div class="mnist-model-card">
+                    <div class="mnist-model-header">
+                        <span class="mnist-model-tag">Project 3</span>
+                        <span class="mnist-model-name">MLP</span>
+                    </div>
+                    <div class="mnist-prediction-digit" id="mlpDigit">—</div>
+                    <div class="mnist-bars" id="mlpBars"></div>
+                </div>
+
+                <div class="mnist-model-card">
+                    <div class="mnist-model-header">
+                        <span class="mnist-model-tag">Project 4</span>
+                        <span class="mnist-model-name">CNN</span>
+                    </div>
+                    <div class="mnist-prediction-digit" id="cnnDigit">—</div>
+                    <div class="mnist-bars" id="cnnBars"></div>
+                </div>
+
+            </div>
+
+            <p class="demo-status" id="demoStatus">Start the runner service to enable live queries.</p>
+        </div>
+
+        <!-- ── Code ─────────────────────────────────────────────── -->
+        <div class="article-body">
+            <h2 style="text-align: center;">Code — Project 3 (MLP)</h2>
+            <pre><code>import torch
+import torch.nn as nn
+
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.input      = nn.Linear(784, 784)
+        self.input_act  = nn.Tanh()
+        self.hidden     = nn.Linear(784, 784)
+        self.hidden_act = nn.Tanh()
+        self.output     = nn.Linear(784, 10)
+
+    def forward(self, x):
+        l1 = self.input_act(self.input(x))
+        l2 = self.hidden_act(self.hidden(l1))
+        return self.output(l2)
+
+
+if __name__ == "__main__":
+    import torch.optim as optim
+    import torchvision
+    from torch.utils.data import DataLoader
+    import os
+
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5,), (0.5,)),
+        torchvision.transforms.Lambda(lambda x: torch.flatten(x)),
+    ])
+
+    train_data   = torchvision.datasets.MNIST(root='./data', train=True,  download=True, transform=transform)
+    val_data     = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+    train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
+    val_loader   = DataLoader(val_data,   batch_size=64)
+
+    model     = Model()
+    loss_fn   = nn.CrossEntropyLoss()
+    optimizer = optim.AdamW(model.parameters(), lr=0.001)
+
+    for epoch in range(10):
+        model.train()
+        for inputs, labels in train_loader:
+            optimizer.zero_grad()
+            loss = loss_fn(model(inputs), labels)
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+        total_acc, n = 0.0, 0
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                total_acc += (model(inputs).argmax(dim=1) == labels).float().sum().item()
+                n += len(labels)
+        print(f"epoch={epoch+1:2d}  val_acc={total_acc/n:.4f}")
+
+    torch.save(model.state_dict(), os.path.join(os.path.dirname(__file__), "model.pt"))</code></pre>
+
+            <h2 style="text-align: center;">Code — Project 4 (CNN)</h2>
+            <pre><code>import torch
+import torch.nn as nn
+
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1      = nn.Conv2d(1, 32, 3)   # 28x28 → 26x26
+        self.conv1_act  = nn.ReLU()
+        self.conv1_pool = nn.MaxPool2d(2)        # → 13x13
+        self.conv2      = nn.Conv2d(32, 64, 3)  # → 11x11
+        self.conv2_act  = nn.ReLU()
+        self.conv2_pool = nn.MaxPool2d(2)        # → 5x5
+        self.output     = nn.Linear(1600, 10)   # 64×5×5 = 1600
+
+    def forward(self, x):
+        x = self.conv1_pool(self.conv1_act(self.conv1(x)))
+        x = self.conv2_pool(self.conv2_act(self.conv2(x)))
+        return self.output(torch.flatten(x, 1))
+
+
+if __name__ == "__main__":
+    import torch.optim as optim
+    import torchvision
+    from torch.utils.data import DataLoader
+    import os
+
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5,), (0.5,)),
+    ])
+
+    train_data   = torchvision.datasets.MNIST(root='./data', train=True,  download=True, transform=transform)
+    val_data     = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+    train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
+    val_loader   = DataLoader(val_data,   batch_size=64)
+
+    model     = Model()
+    loss_fn   = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    for epoch in range(5):
+        model.train()
+        for inputs, labels in train_loader:
+            optimizer.zero_grad()
+            loss = loss_fn(model(inputs), labels)
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+        total_acc, n = 0.0, 0
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                total_acc += (model(inputs).argmax(dim=1) == labels).float().sum().item()
+                n += len(labels)
+        print(f"epoch={epoch+1:2d}  val_acc={total_acc/n:.4f}")
+
+    torch.save(model.state_dict(), os.path.join(os.path.dirname(__file__), "model.pt"))</code></pre>
+        </div>
+
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+<script>
+const RUNNER = '/api';
+
+// ── Drawing canvas ────────────────────────────────────────────────
+
+const drawCanvas   = document.getElementById('drawCanvas');
+const previewCanvas = document.getElementById('previewCanvas');
+const dctx = drawCanvas.getContext('2d');
+const pctx = previewCanvas.getContext('2d');
+
+// Black background
+dctx.fillStyle = '#000';
+dctx.fillRect(0, 0, 280, 280);
+
+let painting = false;
+let lastX = 0, lastY = 0;
+
+function getPos(e) {
+    const rect = drawCanvas.getBoundingClientRect();
+    const scaleX = 280 / rect.width;
+    const scaleY = 280 / rect.height;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return [(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY];
+}
+
+function drawStroke(x, y) {
+    // Soft round brush
+    const r = 14;
+    const grad = dctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0,   'rgba(255,255,255,1)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.8)');
+    grad.addColorStop(1,   'rgba(255,255,255,0)');
+    dctx.fillStyle = grad;
+    dctx.beginPath();
+    dctx.arc(x, y, r, 0, Math.PI * 2);
+    dctx.fill();
+}
+
+function interpolateAndDraw(x1, y1, x2, y2) {
+    const dist = Math.hypot(x2 - x1, y2 - y1);
+    const steps = Math.max(1, Math.ceil(dist / 4));
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        drawStroke(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+    }
+}
+
+drawCanvas.addEventListener('mousedown', e => {
+    painting = true;
+    [lastX, lastY] = getPos(e);
+    drawStroke(lastX, lastY);
+});
+
+drawCanvas.addEventListener('mousemove', e => {
+    if (!painting) return;
+    const [x, y] = getPos(e);
+    interpolateAndDraw(lastX, lastY, x, y);
+    [lastX, lastY] = [x, y];
+});
+
+drawCanvas.addEventListener('mouseup',    () => { painting = false; updatePreviewAndPredict(); });
+drawCanvas.addEventListener('mouseleave', () => { if (painting) { painting = false; updatePreviewAndPredict(); } });
+
+drawCanvas.addEventListener('touchstart', e => { e.preventDefault(); painting = true; [lastX, lastY] = getPos(e); drawStroke(lastX, lastY); }, { passive: false });
+drawCanvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!painting) return; const [x,y] = getPos(e); interpolateAndDraw(lastX, lastY, x, y); [lastX, lastY] = [x, y]; }, { passive: false });
+drawCanvas.addEventListener('touchend',   e => { e.preventDefault(); painting = false; updatePreviewAndPredict(); }, { passive: false });
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+    dctx.fillStyle = '#000';
+    dctx.fillRect(0, 0, 280, 280);
+    pctx.clearRect(0, 0, 28, 28);
+    document.getElementById('mlpDigit').textContent = '—';
+    document.getElementById('cnnDigit').textContent = '—';
+    document.getElementById('mlpBars').innerHTML = '';
+    document.getElementById('cnnBars').innerHTML = '';
+    document.getElementById('demoStatus').textContent = '';
+});
+
+// ── Pixel extraction ──────────────────────────────────────────────
+
+function getPixels() {
+    // Downsample 280×280 → 28×28
+    pctx.drawImage(drawCanvas, 0, 0, 28, 28);
+    const imageData = pctx.getImageData(0, 0, 28, 28);
+    const pixels = new Array(784);
+    for (let i = 0; i < 784; i++) {
+        const r = imageData.data[i * 4]; // greyscale — drawn in white so R=G=B
+        pixels[i] = r / 127.5 - 1.0;    // [0,255] → [-1, 1] matching training normalisation
+    }
+    return pixels;
+}
+
+// ── Result rendering ──────────────────────────────────────────────
+
+function renderBars(containerId, probs, prediction) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    probs.forEach((prob, digit) => {
+        const isTop = digit === prediction;
+        const row = document.createElement('div');
+        row.className = 'mnist-bar-row' + (isTop ? ' mnist-bar-active' : '');
+        row.innerHTML =
+            `<span class="mnist-bar-label">${digit}</span>` +
+            `<div class="mnist-bar-track"><div class="mnist-bar-fill" style="width:${(prob*100).toFixed(1)}%"></div></div>` +
+            `<span class="mnist-bar-pct">${(prob*100).toFixed(1)}%</span>`;
+        container.appendChild(row);
+    });
+}
+
+// ── Runner query ──────────────────────────────────────────────────
+
+let debounceTimer = null;
+
+function updatePreviewAndPredict() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(predict, 200);
+}
+
+async function predict() {
+    const pixels = getPixels();
+
+    // Check if canvas is mostly empty
+    if (pixels.reduce((s, v) => s + v, 0) < -770) return;
+
+    const status = document.getElementById('demoStatus');
+    status.textContent = 'Querying models…';
+    status.style.color = 'var(--text-muted)';
+
+    try {
+        const res  = await fetch(`${RUNNER}/run/mnist`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ pixels }),
+        });
+        const data = await res.json();
+
+        document.getElementById('mlpDigit').textContent = data.mlp.prediction;
+        document.getElementById('cnnDigit').textContent = data.cnn.prediction;
+        renderBars('mlpBars', data.mlp.probabilities, data.mlp.prediction);
+        renderBars('cnnBars', data.cnn.probabilities, data.cnn.prediction);
+        status.textContent = '';
+
+    } catch {
+        status.textContent = 'Runner unavailable — start the Docker services to enable live queries.';
+        status.style.color = '#b05050';
+    }
+}
+</script>
+</body>
+</html>

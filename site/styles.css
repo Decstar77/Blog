@@ -865,6 +865,174 @@ body {
     font-style: italic;
 }
 
+/* ============================================================
+   MNIST demo
+   ============================================================ */
+
+.mnist-draw-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.mnist-draw-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+#drawCanvas {
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    cursor: crosshair;
+    background: #000;
+    width: 280px;
+    height: 280px;
+    touch-action: none;
+}
+
+.mnist-clear-btn {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 18px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.mnist-clear-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.mnist-preview-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+}
+
+.mnist-preview-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0;
+    font-style: italic;
+}
+
+#previewCanvas {
+    width: 112px;
+    height: 112px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    image-rendering: pixelated;
+    background: #000;
+}
+
+.mnist-results-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.mnist-model-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.mnist-model-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.mnist-model-tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--accent-muted);
+    background: var(--accent-light);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.mnist-model-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.mnist-prediction-digit {
+    font-size: 3.5rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    text-align: center;
+    line-height: 1;
+    padding: 12px 0;
+}
+
+.mnist-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.mnist-bar-label {
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    width: 12px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.mnist-bar-track {
+    flex: 1;
+    height: 10px;
+    background: var(--bg-alt);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.mnist-bar-fill {
+    height: 100%;
+    background: var(--border);
+    border-radius: 3px;
+    transition: width 0.25s ease;
+}
+
+.mnist-bar-active .mnist-bar-fill {
+    background: var(--accent);
+}
+
+.mnist-bar-active .mnist-bar-label {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.mnist-bar-pct {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    width: 36px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+    .mnist-results-grid { grid-template-columns: 1fr; }
+    #drawCanvas { width: 100%; height: auto; aspect-ratio: 1; }
+}
+
 @media (max-width: 600px) {
     .demo-result-value { font-size: 1rem; }
     .demo-result-label { font-size: 0.7rem; }

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sklearn.datasets import make_circles
+from typing import List
 
 app = FastAPI()
 
@@ -26,7 +27,9 @@ def load_project(py_path: str, weights_path: str):
     if not os.path.exists(weights_path):
         raise FileNotFoundError(f"Weights not found: {weights_path}  — run the project script first")
 
-    spec   = importlib.util.spec_from_file_location("project_module", py_path)
+    # Use the filename as the module name so multiple projects don't collide in sys.modules
+    module_name = os.path.splitext(os.path.basename(py_path))[0]
+    spec   = importlib.util.spec_from_file_location(module_name, py_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -53,7 +56,19 @@ circle_model = load_project(
     py_path      = os.path.join(BASE, "projects/project2-classifier/circle_classifier.py"),
     weights_path = os.path.join(BASE, "projects/project2-classifier/model.pt"),
 )
-print("Circle classifier model loaded.")
+print("Circle classifier loaded.")
+
+mnist_mlp_model = load_project(
+    py_path      = os.path.join(BASE, "projects/project3-mnst-mlp/mnist_mlp.py"),
+    weights_path = os.path.join(BASE, "projects/project3-mnst-mlp/model.pt"),
+)
+print("MNIST MLP loaded.")
+
+mnist_conv_model = load_project(
+    py_path      = os.path.join(BASE, "projects/project4-mnst-conv/mnist_conv.py"),
+    weights_path = os.path.join(BASE, "projects/project4-mnst-conv/model.pt"),
+)
+print("MNIST CNN loaded.")
 
 # Pre-generate the circle dataset (deterministic — random_state=6)
 _circle_xs, _circle_ys = make_circles(n_samples=2000, noise=0.1, random_state=6)
@@ -109,10 +124,8 @@ def run_circle(req: CirclePointRequest):
 @app.post("/run/circle-classifier/grid")
 def run_circle_grid(req: CircleGridRequest):
     n = max(10, min(req.resolution, 100))
-    r = 1.5  # coordinate range [-1.5, 1.5]
+    r = 1.5
 
-    # Build grid: row gy = top-to-bottom (y decreases), col gx = left-to-right (x increases)
-    # This matches canvas pixel order so the JS can render without flipping.
     points = []
     for gy in range(n):
         for gx in range(n):
@@ -131,6 +144,38 @@ def run_circle_grid(req: CircleGridRequest):
 @app.get("/data/circle-classifier")
 def circle_data():
     return circle_dataset
+
+
+# ── MNIST ─────────────────────────────────────────────────────────
+
+class MnistRequest(BaseModel):
+    pixels: List[float]  # 784 floats, normalised to [-1, 1], row-major
+
+
+@app.post("/run/mnist")
+def run_mnist(req: MnistRequest):
+    if len(req.pixels) != 784:
+        return {"error": "Expected 784 pixels"}
+
+    pixels = torch.tensor(req.pixels, dtype=torch.float32)
+
+    with torch.no_grad():
+        mlp_logits  = mnist_mlp_model(pixels.unsqueeze(0)).squeeze(0)       # (10,)
+        cnn_logits  = mnist_conv_model(pixels.reshape(1, 1, 28, 28)).squeeze(0)  # (10,)
+
+    mlp_probs = torch.softmax(mlp_logits, dim=0).tolist()
+    cnn_probs = torch.softmax(cnn_logits, dim=0).tolist()
+
+    return {
+        "mlp": {
+            "prediction":    int(mlp_logits.argmax().item()),
+            "probabilities": [round(p, 4) for p in mlp_probs],
+        },
+        "cnn": {
+            "prediction":    int(cnn_logits.argmax().item()),
+            "probabilities": [round(p, 4) for p in cnn_probs],
+        },
+    }
 
 
 # ── Health ────────────────────────────────────────────────────────
