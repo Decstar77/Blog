@@ -1,6 +1,14 @@
 // All articles, newest first
 const articles = [
     {
+        title: "Learning Diffusion #1: The Forward Process",
+        summary: "Deriving the closed-form forward process for diffusion models from first principles — the noise schedule, sampling form of the Gaussian, the reparameterization trick, and how to jump to any noisy x_t directly from x_0.",
+        category: "Machine Learning",
+        date: "2026-04-11",
+        readTime: "15 min read",
+        url: "diffusion-forward-process.html"
+    },
+    {
         title: "Learning ML #4: Tiny Character-Level RNN on Shakespeare",
         summary: "Building a character-level language model from scratch using an RNN on the Tiny Shakespeare corpus. Covers embeddings, GRU, sliding-window datasets, CrossEntropyLoss flattening, perplexity, and greedy text generation.",
         category: "Machine Learning",
@@ -52,43 +60,32 @@ const articles = [
 
 function formatDate(dateString) {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function renderArticles() {
-    const list = document.getElementById('articlesList');
+function renderPostList(containerId, limit) {
+    const list = document.getElementById(containerId);
     if (!list) return;
 
-    // Sort newest first
     const sorted = [...articles].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const items = limit ? sorted.slice(0, limit) : sorted;
 
-    list.innerHTML = sorted.map(article => `
-        <a href="${article.url}" class="article-list-item">
-            <div class="article-list-meta">
-                <span class="article-list-date">${formatDate(article.date)}</span>
-                <span class="article-list-category">${article.category}</span>
+    list.innerHTML = items.map(article => `
+        <li class="post-list-item">
+            <div class="post-list-row">
+                <span class="post-list-date">${formatDate(article.date)}</span>
+                <a href="${article.url}" class="post-list-title">${article.title}</a>
             </div>
-            <div class="article-list-title">${article.title}</div>
-            <div class="article-list-summary">${article.summary}</div>
-            <div class="article-list-readtime">
-                <i class="far fa-clock"></i>
-                ${article.readTime}
+            <div class="post-list-summary">${article.summary}</div>
+            <div class="post-list-meta">
+                <span class="post-category">${article.category}</span>
+                <span class="post-readtime">${article.readTime}</span>
             </div>
-        </a>
+        </li>
     `).join('');
 }
 
-// Mobile nav toggle
-document.querySelector('.hamburger').addEventListener('click', () => {
-    document.querySelector('.hamburger').classList.toggle('active');
-    document.querySelector('.nav-menu').classList.toggle('active');
+document.addEventListener('DOMContentLoaded', () => {
+    renderPostList('articlesList');    // full list on articles.html
+    renderPostList('recentPosts', 4); // preview on index.html
 });
-
-document.querySelectorAll('.nav-link').forEach(link => {
-    link.addEventListener('click', () => {
-        document.querySelector('.hamburger').classList.remove('active');
-        document.querySelector('.nav-menu').classList.remove('active');
-    });
-});
-
-document.addEventListener('DOMContentLoaded', renderArticles);

@@ -11,30 +11,22 @@
 </head>
 
 <body>
-    <header class="header">
-        <nav class="navbar">
-            <div class="nav-container">
-                <a href="index.html" class="nav-logo">
-                    <i class="fas fa-microchip"></i>
-                    <span>Declan Porter</span>
-                </a>
-                <ul class="nav-menu">
-                    <li><a href="index.html" class="nav-link">Home</a></li>
-                    <li><a href="articles.html" class="nav-link active">Articles</a></li>
-                    <li><a href="game.html" class="nav-link">Game</a></li>
-                    <li><a href="index.html#about" class="nav-link">About</a></li>
-                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
-                </ul>
-                <div class="hamburger">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-        </nav>
-    </header>
+<header class="site-header">
+    <div class="site-header-inner">
+        <a href="index.html" class="site-title">Declan Porter</a>
+        <button class="hamburger" aria-label="Toggle navigation">
+            <span></span><span></span><span></span>
+        </button>
+        <ul class="site-nav">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="articles.html" class="active">Articles</a></li>
+            <li><a href="index.html#about">About</a></li>
+            <li><a href="index.html#contact">Contact</a></li>
+        </ul>
+    </div>
+</header>
 
-    <main class="article-page">
+<main class="wrapper article-page">
         <article class="article-content">
             <div class="container">
                 <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
@@ -60,16 +52,14 @@
                 <div class="article-body">
                     <p class="lead">
                         I decided to learn machine learning properly — not by copying tutorials, but by building
-                        everything from scratch with an LLM as my teacher. No code handed to me upfront.
-                        Just concepts, questions, and my own implementation. This is the first project: training
+                        everything from scratch with an LLM as my teacher. This is the first project, training
                         a small neural network to fit <em>y = x²</em>.
                     </p>
 
                     <h2>Why a Parabola?</h2>
                     <p>
                         It's the simplest nonlinear regression problem you can construct. One input, one output,
-                        a curve a human could draw in two seconds. If a neural net can't learn this, something is
-                        fundamentally wrong. And it turns out there's a lot to learn just from this one problem.
+                        a curve a human could draw in two seconds.
                     </p>
 
                     <h2>The Dataset</h2>
@@ -193,13 +183,14 @@
         </article>
     </main>
 
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Declan Porter. All rights reserved.</p>
-        </div>
-    </footer>
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Declan Porter</span>
+        <a href="articles.html">&larr; All Articles</a>
+    </div>
+</footer>
 
-    <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 
 </html>

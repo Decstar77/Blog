@@ -1,55 +1,54 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Articles - Declan Porter</title>
+    <title>Articles — Declan Porter</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-
 <body>
-    <header class="header">
-        <nav class="navbar">
-            <div class="nav-container">
-                <a href="index.html" class="nav-logo">
-                    <i class="fas fa-microchip"></i>
-                    <span>Declan Porter</span>
-                </a>
-                <ul class="nav-menu">
-                    <li><a href="index.html" class="nav-link">Home</a></li>
-                    <li><a href="articles.html" class="nav-link active">Articles</a></li>
-                    <li><a href="game.html" class="nav-link">Game</a></li>
-                    <li><a href="index.html#about" class="nav-link">About</a></li>
-                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
-                </ul>
-                <div class="hamburger">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-        </nav>
-    </header>
 
-    <main class="articles-page">
-        <div class="articles-page-header">
-            <div class="container">
-                <h1>Articles</h1>
-                <p>Notes on embedded systems, C++, and personal projects</p>
-            </div>
-        </div>
+<header class="site-header">
+    <div class="site-header-inner">
+        <a href="index.html" class="site-title">Declan Porter</a>
+        <button class="hamburger" aria-label="Toggle navigation">
+            <span></span><span></span><span></span>
+        </button>
+        <ul class="site-nav">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="articles.html" class="active">Articles</a></li>
+            <li><a href="index.html#about">About</a></li>
+            <li><a href="index.html#contact">Contact</a></li>
+        </ul>
+    </div>
+</header>
 
-        <div class="articles-list">
-            <div class="container" id="articlesList">
-                <!-- Populated by JavaScript -->
-            </div>
-        </div>
-    </main>
+<main class="wrapper article-page">
 
-    <script src="articles.js"></script>
+    <div class="articles-page-header">
+        <h1>Articles</h1>
+        <p>Notes on embedded systems, C++, machine learning, and personal projects.</p>
+    </div>
+
+    <section class="posts-section">
+        <h2>All Posts</h2>
+        <ul class="post-list" id="articlesList">
+            <!-- Populated by articles.js -->
+        </ul>
+    </section>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Declan Porter</span>
+        <a href="index.html">&larr; Home</a>
+    </div>
+</footer>
+
+<script src="articles.js"></script>
+<script src="script.js"></script>
 </body>
-
 </html>

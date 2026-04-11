@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(grep -oP 'locateFile[^,;]{0,200}' C:/Projects/2025/Blog/game/atto.js)",
-      "Bash(grep -o 'locateFile.\\\\{0,200\\\\}' C:/Projects/2025/Blog/game/atto.js)"
+      "Bash(grep -o 'locateFile.\\\\{0,200\\\\}' C:/Projects/2025/Blog/game/atto.js)",
+      "Bash(file game/atto.*)",
+      "WebFetch(domain:lisyarus.github.io)"
     ]
   }
 }

@@ -11,30 +11,22 @@
 </head>
 
 <body>
-    <header class="header">
-        <nav class="navbar">
-            <div class="nav-container">
-                <a href="index.html" class="nav-logo">
-                    <i class="fas fa-microchip"></i>
-                    <span>Declan Porter</span>
-                </a>
-                <ul class="nav-menu">
-                    <li><a href="index.html" class="nav-link">Home</a></li>
-                    <li><a href="articles.html" class="nav-link active">Articles</a></li>
-                    <li><a href="game.html" class="nav-link">Game</a></li>
-                    <li><a href="index.html#about" class="nav-link">About</a></li>
-                    <li><a href="index.html#contact" class="nav-link">Contact</a></li>
-                </ul>
-                <div class="hamburger">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-        </nav>
-    </header>
+<header class="site-header">
+    <div class="site-header-inner">
+        <a href="index.html" class="site-title">Declan Porter</a>
+        <button class="hamburger" aria-label="Toggle navigation">
+            <span></span><span></span><span></span>
+        </button>
+        <ul class="site-nav">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="articles.html" class="active">Articles</a></li>
+            <li><a href="index.html#about">About</a></li>
+            <li><a href="index.html#contact">Contact</a></li>
+        </ul>
+    </div>
+</header>
 
-    <main class="article-page">
+<main class="wrapper article-page">
         <article class="article-content">
             <div class="container">
                 <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
@@ -220,13 +212,14 @@
         </article>
     </main>
 
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Declan Porter. All rights reserved.</p>
-        </div>
-    </footer>
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Declan Porter</span>
+        <a href="articles.html">&larr; All Articles</a>
+    </div>
+</footer>
 
-    <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 
 </html>

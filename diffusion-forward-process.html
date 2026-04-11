@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learning Diffusion #1: The Forward Process - Declan Porter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        })"></script>
+    <style>
+        /* KaTeX display-mode centering */
+        .katex-display {
+            margin: 1.6rem 0;
+            overflow-x: auto;
+        }
+        /* Inline math alignment */
+        .katex { font-size: 1.05em; }
+    </style>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="site-header-inner">
+        <a href="index.html" class="site-title">Declan Porter</a>
+        <button class="hamburger" aria-label="Toggle navigation">
+            <span></span><span></span><span></span>
+        </button>
+        <ul class="site-nav">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="articles.html" class="active">Articles</a></li>
+            <li><a href="index.html#about">About</a></li>
+            <li><a href="index.html#contact">Contact</a></li>
+        </ul>
+    </div>
+</header>
+
+<main class="wrapper article-page">
+        <article class="article-content">
+            <div class="container">
+                <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
+                <div class="article-header">
+                    <span class="article-category">Machine Learning</span>
+                    <h1>Learning Diffusion #1: The Forward Process</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>April 11, 2026</span>
+                        </div>
+                        <div class="read-time">
+                            <i class="far fa-clock"></i>
+                            <span>15 min read</span>
+                        </div>
+                        <div class="article-author">
+                            <i class="far fa-user"></i>
+                            <span>By Declan Porter</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        So I decided to learn diffusion models next. My goodness, there was a lot of math —
+                        so I'm writing this to reinforce what I learned and to help anyone else working through
+                        the same material.
+                    </p>
+
+                    <h2>The General Idea</h2>
+                    <p>
+                        The core idea behind diffusion models is surprisingly straightforward: you train a
+                        neural network to predict a noise term drawn from a Gaussian distribution. Concretely,
+                        you corrupt an input (an image, say) by gradually adding noise over $T$ steps, then
+                        train the network to reverse that process — predicting and removing noise step by step
+                        until you recover something clean.
+                    </p>
+
+                    <h2>The Forward Process</h2>
+                    <p>
+                        The forward process runs from $t = 0$ to $t = T$ (typically $T = 1000$), slowly
+                        corrupting the input into pure Gaussian noise. The tricky part is that we need to be
+                        able to compute $x_t$ — the noisy image at an arbitrary time step $t$ — without
+                        running the process step-by-step from $x_0$.
+                    </p>
+                    <p>
+                        This contrasts with the naive approach of just progressively adding noise. Because
+                        Gaussians are closed under addition, you <em>could</em> do that. But during training
+                        you need to jump to any arbitrary $x_t$ directly from $x_0$, so you need a
+                        closed-form expression. That is what the math below builds toward.
+                    </p>
+
+                    <h2>Notation: The Gaussian</h2>
+                    <p>
+                        A Gaussian (normal) distribution is written as:
+                    </p>
+                    $$\mathcal{N}(\mu,\, \sigma^2)$$
+                    <p>
+                        Let $\beta_t$ be a small real number that grows as $t$ increases. The rate at which
+                        $\beta_t$ changes is called the <strong>noise schedule</strong> (more on that later).
+                    </p>
+                    <p>
+                        The forward transition — the distribution of $x_t$ given $x_{t-1}$ — is defined as:
+                    </p>
+                    $$q(x_t \mid x_{t-1}) = \mathcal{N}\!\left(x_t;\; \sqrt{1-\beta_t}\, x_{t-1},\; \beta_t \mathbf{I}\right)$$
+                    <p>
+                        This gives you the next noisy image $x_t$ given the previous one, $x_{t-1}$.
+                    </p>
+
+                    <h2>The Sampling Form</h2>
+                    <p>
+                        The familiar PDF form is:
+                    </p>
+                    $$f(x) = \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)$$
+                    <p>
+                        That form is unwieldy when we want to isolate and manipulate the randomness directly.
+                        The equivalent sampling form is much more practical:
+                    </p>
+                    $$x = \mu + \sigma\,\varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, 1)$$
+                    <p>
+                        Plugging our transition parameters into the sampling form gives:
+                    </p>
+                    $$x_t = \sqrt{1 - \beta_t}\; x_{t-1} + \sqrt{\beta_t}\; \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, \mathbf{I})$$
+                    <p>
+                        Note that the noise term is scaled by $\sqrt{\beta_t}$, not $\beta_t$ — because $\beta_t$
+                        is the <em>variance</em>, and we need the <em>standard deviation</em> to scale the noise sample.
+                        The $\sqrt{1-\beta_t}$ I'll come to later.
+                    </p>
+
+                    <h2>Substitution: Introducing $\alpha_t$</h2>
+                    <p>
+                        To clean things up, define:
+                    </p>
+                    $$\alpha_t = 1 - \beta_t$$
+                    <p>
+                        The transition becomes:
+                    </p>
+                    $$x_t = \sqrt{\alpha_t}\; x_{t-1} + \sqrt{1 - \alpha_t}\; \varepsilon$$
+                    <p>
+                        This is the same equation — just written more compactly.
+                    </p>
+
+                    <h2>The Key Insight: Any $x_t$ Directly from $x_0$</h2>
+                    <p>
+                        The equation above gives $x_t$ from $x_{t-1}$ — one step back. What we want is $x_t$
+                        directly from $x_0$, so we can sample any noise level in a single operation during
+                        training. Let's expand a few steps and look for the pattern.
+                    </p>
+                    <p>
+                        <strong>$t = 0$:</strong> $\quad x_0 = x_0 \quad$ (the original input image)
+                    </p>
+                    <p>
+                        <strong>$t = 1$:</strong>
+                    </p>
+                    $$x_1 = \sqrt{\alpha_1}\; x_0 + \sqrt{1 - \alpha_1}\; \varepsilon_1$$
+                    <p>
+                        <strong>$t = 2$:</strong>
+                    </p>
+                    $$x_2 = \sqrt{\alpha_2}\; x_1 + \sqrt{1 - \alpha_2}\; \varepsilon_2$$
+                    <p>
+                        Now substitute $x_1$ into the expression for $x_2$ and expand:
+                    </p>
+                    $$x_2 = \sqrt{\alpha_1 \alpha_2}\; x_0 + \underbrace{\sqrt{\alpha_2}\sqrt{1-\alpha_1}\;\varepsilon_1 + \sqrt{1-\alpha_2}\;\varepsilon_2}_{\text{linear combination of Gaussians}}$$
+                    <p>
+                        The remaining terms (after $x_0$) don't depend on $x_0$ — they are a linear combination
+                        of independent Gaussians. By the closure property of Gaussians:
+                    </p>
+                    <blockquote>
+                        A sum of independent Gaussians is itself a Gaussian.
+                    </blockquote>
+                    <p>
+                        Those terms collapse into a single noise term. The <em>only</em> thing that matters for
+                        the pattern is the coefficient on $x_0$. Continuing:
+                    </p>
+                    <ul>
+                        <li>$t = 2$: coefficient is $\sqrt{\alpha_1 \alpha_2}$</li>
+                        <li>$t = 3$: coefficient would be $\sqrt{\alpha_1 \alpha_2 \alpha_3}$</li>
+                        <li>$t = k$: coefficient is $\sqrt{\alpha_1 \alpha_2 \cdots \alpha_k}$</li>
+                    </ul>
+                    <p>
+                        Define the cumulative product:
+                    </p>
+                    $$\bar{\alpha}_t = \prod_{s=1}^{t} \alpha_s$$
+                    <p>
+                        Then the <strong>closed-form expression</strong> for $x_t$ given $x_0$ is:
+                    </p>
+                    $$\boxed{x_t = \sqrt{\bar{\alpha}_t}\; x_0 + \sqrt{1 - \bar{\alpha}_t}\; \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, \mathbf{I})}$$
+                    <p>
+                        This is the key result of the forward process. Given any input image $x_0$, you can
+                        sample the noisy version at any time step $t$ in a single operation — no need to iterate
+                        through all previous steps. As $t \to T$, $\bar{\alpha}_t \to 0$ and the image becomes
+                        pure noise; as $t \to 0$, $\bar{\alpha}_t \to 1$ and you recover the original image.
+                    </p>
+
+                    <h2>Why the $\sqrt{1-\beta_t}$ /$\sqrt{\bar{\alpha}_t}$ </h2>
+                    <p>
+                        The reason is because we need a stable variance $Var(x_t) = 1$
+                    </p>
+                    <p>
+                        $Var(x_t) = Var(\sqrt{alpha_t} * x_{t-1} ) + Var(\sqrt{1 -alpha_t} * \varepsilon) = 1$ 
+                    </p>
+                    <p>
+                        $Var(x_t) = (\sqrt{alpha_t})^2 Var( x_{t-1} ) + (\sqrt{1 -alpha_t})^2 * Var( \varepsilon) = 1 $ 
+                    </p>
+                    <p>
+                        Now assume that $var(x_{t-1}) = 1$ 
+                    </p>
+                    <p>
+                        With $\varepsilon \sim \mathcal{N}(0, 1)$ we have $Var(\varepsilon) = 1$ we get
+                    </p>
+                    <p>
+                        $Var(x_t) = alpha_t * + 1 - alpha_t = 1
+                    </p>
+                    <p>
+                        $Var(x_t) =  1
+                    </p>
+                    <p>
+                        If we didn't have the sqaure root we'd have a lingering $(alpha_t)^2$ term
+                    </p>
+
+                    <h2>Conclusion</h2>
+                    <p>
+                        This covers the math regarding board diffusion process of Gaussians.
+                        The next part is the reverse, which is also math heavy, that will come in the next article.
+                    </p>
+
+                    <div class="article-tags">
+                        <span class="tag">Diffusion</span>
+                        <span class="tag">Machine Learning</span>
+                        <span class="tag">Math</span>
+                        <span class="tag">Gaussian</span>
+                        <span class="tag">PyTorch</span>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Declan Porter</span>
+        <a href="articles.html">&larr; All Articles</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

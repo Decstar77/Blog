@@ -1,101 +1,94 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Declan Porter - Embedded Systems & Technology Blog</title>
+    <title>Declan Porter — Embedded Systems &amp; Technology Blog</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-
 <body>
-    <header class="header">
-        <nav class="navbar">
-            <div class="nav-container">
-                <a href="index.html" class="nav-logo">
-                    <i class="fas fa-microchip"></i>
-                    <span>Declan Porter</span>
-                </a>
-                <ul class="nav-menu">
-                    <li><a href="index.html" class="nav-link active">Home</a></li>
-                    <li><a href="articles.html" class="nav-link">Articles</a></li>
-                    <li><a href="game.html" class="nav-link">Game</a></li>
-                    <li><a href="#about" class="nav-link">About</a></li>
-                    <li><a href="#contact" class="nav-link">Contact</a></li>
-                </ul>
-                <div class="hamburger">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-        </nav>
-    </header>
 
-    <main>
-        <section id="home" class="hero">
-            <div class="hero-container">
-                <div class="hero-content">
-                    <h1>C++ Engineer</h1>
-                    <p>Exploring low level architecture, machine learning and creative technology projects</p>
-                    <div class="hero-stats">
-                        <div class="stat">
-                            <span class="stat-number">3+</span>
-                            <span class="stat-label">Years Experience</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-text">C++</span>
-                            <span class="stat-label">Expertise</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-number">100%</span>
-                            <span class="stat-label">Coffee Intake</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="hero-visual">
-                    <div class="chart-container">
-                        <canvas id="heroChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </section>
+<header class="site-header">
+    <div class="site-header-inner">
+        <a href="index.html" class="site-title">Declan Porter</a>
+        <button class="hamburger" aria-label="Toggle navigation">
+            <span></span><span></span><span></span>
+        </button>
+        <ul class="site-nav">
+            <li><a href="index.html" class="active">Home</a></li>
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#contact">Contact</a></li>
+        </ul>
+    </div>
+</header>
 
-        <section id="about" class="about">
-            <div class="container">
-                <div class="about-content">
-                    <div class="about-text">
-                        <h2>About Me</h2>
-                        <p>I'm a C++ engineer with a passion for low level programming, machine learning and optimization.</p>
-                        <p>I currently work as a C++ programmer in AAA game development.</p>
-                        <p>My background includes developing the Aqua Scanner and Aqua Meter systems, contributing to
-                            open-source frameworks, and creating personal projects. </p>
-                        <p style="margin-top: 2rem;">
-                            <a href="articles.html" class="filter-btn">Read My Articles &rarr;</a>
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </section>
+<main class="wrapper">
 
-        <section id="contact" class="newsletter">
-            <div class="container">
-                <div class="newsletter-content">
-                    <h3>Contact Me</h3>
-                    <p>Get in touch for questions, collaborations, or opportunities</p>
-                    <a class="filter-btn" href="mailto:porter.declan@gmail.com">porter.declan@gmail.com</a>
-                    <div class="social-links">
-                        <a href="https://github.com/decstar77" title="GitHub"><i class="fab fa-github"></i></a>
-                        <a href="https://www.youtube.com/@decstar77" title="YouTube"><i class="fab fa-youtube"></i></a>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
+    <section class="home-intro">
+        <h1>C++ Engineer</h1>
+        <p>Exploring low-level architecture, machine learning, and creative technology projects.</p>
+    </section>
 
-    <script src="script.js"></script>
+    <section class="posts-section">
+        <h2>Recent Articles</h2>
+        <ul class="post-list" id="recentPosts">
+            <!-- Populated by articles.js -->
+        </ul>
+    </section>
+
+    <section id="about" class="about-section">
+        <h2>About</h2>
+        <p>I'm a C++ engineer with a passion for low-level programming, machine learning, and optimization.</p>
+        <p>I currently work as a C++ programmer in AAA game development.</p>
+        <p>My background includes developing the Aqua Scanner and Aqua Meter systems — RFID-based
+           water access control devices — contributing to open-source frameworks, and building
+           personal projects spanning embedded systems, simulations, and ML.</p>
+
+        <div class="expertise-grid">
+            <div class="expertise-card">
+                <h4>Embedded Systems</h4>
+                <p>ESP32, FreeRTOS, real-time firmware and deterministic design.</p>
+            </div>
+            <div class="expertise-card">
+                <h4>C++ Engineering</h4>
+                <p>Modern C++17/20, AAA game dev, performance-critical code.</p>
+            </div>
+            <div class="expertise-card">
+                <h4>Machine Learning</h4>
+                <p>PyTorch, neural nets, learning from first principles.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="contact" class="contact-section">
+        <h2>Contact</h2>
+        <p>Get in touch for questions, collaborations, or opportunities.</p>
+        <div class="contact-links">
+            <a href="mailto:porter.declan@gmail.com" class="contact-link">
+                <i class="fas fa-envelope"></i> porter.declan@gmail.com
+            </a>
+            <a href="https://github.com/decstar77" class="contact-link" title="GitHub">
+                <i class="fab fa-github"></i> GitHub
+            </a>
+            <a href="https://www.youtube.com/@decstar77" class="contact-link" title="YouTube">
+                <i class="fab fa-youtube"></i> YouTube
+            </a>
+        </div>
+    </section>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Declan Porter</span>
+        <a href="articles.html">All articles &rarr;</a>
+    </div>
+</footer>
+
+<script src="articles.js"></script>
+<script src="script.js"></script>
 </body>
-
 </html>
