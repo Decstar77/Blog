@@ -48,12 +48,12 @@ class TinyDiffusion(nn.Module):
         self.ecn2max = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.up1     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
-        self.dcn1p   = nn.Linear(32, 64)
+        #self.dcn1p   = nn.Linear(32, 64)
         self.dcn1    = nn.Conv2d( in_channels=128, out_channels=32, kernel_size=3, padding=1 )
         self.dcn1a   = nn.ReLU()
 
         self.up2     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
-        self.dcn2p   = nn.Linear(32, 32)
+        #self.dcn2p   = nn.Linear(32, 32)
         self.dcn2    = nn.Conv2d( in_channels=64, out_channels=1, kernel_size=3, padding=1 )
 
     def forward( self, x ):

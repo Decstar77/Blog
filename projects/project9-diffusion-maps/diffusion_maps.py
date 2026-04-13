@@ -11,13 +11,6 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        
-    def forward(self, x):
-        pass
-
 beta_start = 1e-4
 beta_end = 0.02
 t_max = 1000
@@ -77,6 +70,59 @@ class GridDataset(Dataset):
     def __getitem__(self, index):
         return encode_map( self.data[index] )
 
+class EncoderBlock(nn.Module):
+    def __init__(self, embed_vec, in_channels, out_channels):
+        super(EncoderBlock, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.linn = nn.Linear(embed_vec, out_channels)
+        self.lina = nn.ReLU()
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+
+    def forward(self, x):
+        r, embed = x
+        r = self.conv(r)
+        self.residual = self.lina( r + self.linn( embed ).unsqueeze(-1).unsqueeze(-1))
+        r = self.pool(self.residual)
+        return r
+
+class DecoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, relu = True):
+        super(DecoderBlock, self).__init__()
+        self.relu = relu
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        self.conv = nn.Conv2d(in_channels=in_channels,out_channels=out_channels, kernel_size=3, padding=1)
+        if ( relu ):
+            self.lina = nn.ReLU()
+
+    def forward(self, x):
+        r, residual = x 
+        r = self.up(r)
+        r = torch.cat( [r, residual], dim=1 )
+        r = self.conv(r)
+        if self.relu:
+            r = self.lina(r)
+        return r
+
+class Model(nn.Module):
+    def __init__(self):
+        super(Model, self).__init__()
+        self.embed = nn.Embedding(t_max, 32)
+        self.e1 = EncoderBlock(embed_vec=32, in_channels=5,  out_channels=32)
+        self.e2 = EncoderBlock(embed_vec=32, in_channels=32, out_channels=64)
+        self.d1 = DecoderBlock(in_channels=64 * 2, out_channels=32)
+        self.d2 = DecoderBlock(in_channels=32 * 2, out_channels=5, relu=False)
+
+    def forward(self, x):
+        r, t = x
+        embed = self.embed( t )
+
+        r = self.e1( ( r, embed ) )
+        r = self.e2( ( r, embed ) )
+        r = self.d1( ( r, self.e2.residual ) )
+        r = self.d2( ( r, self.e1.residual ) )
+
+        return r
+
 if __name__ == "__main__":
     from mapgen import Cellular, Drunk, BSP, generate_map_data
     import os
@@ -91,26 +137,57 @@ if __name__ == "__main__":
     else:
         print("Loading data...")
         data = np.load(maps_path)
-        map_grids = [data[key] for key in data.files[0:10]]
+        #map_grids = [data[key] for key in data.files[0:2000]]
+        map_grids = [data[key] for key in data.files]
 
-    dataset     = GridDataset(map_grids)
-    dataloader  = DataLoader(dataset=dataset, batch_size=1, shuffle=True)
+    training_dataset        = GridDataset(map_grids[:int( 0.9 * len(map_grids) )])
+    training_dataloader     = DataLoader(dataset=training_dataset,     batch_size=32, shuffle=True)
+    validation_dataset      = GridDataset(map_grids[int(0.9 * len(map_grids)):])
+    validation_dataloader   = DataLoader(dataset=validation_dataset,   batch_size=32)
+
     model       = Model()
     loss_func   = nn.MSELoss()
-    #optimizer   = optim.Adam( model.parameters(), lr=0.001 )
+    optimizer   = optim.Adam( model.parameters(), lr=0.001 )
 
     alpha_tensor        = torch.tensor([ f_alpha( i ) for i in range(t_max) ], dtype=float )
     alpha_bar_tensor    = torch.cumprod( alpha_tensor, dim=0 )
+
+    def compute_xt_t(x0, B):
+        epsilon = torch.randn_like( x0 )
+        t = torch.randint(low=0, high=t_max, size=(B,), dtype=torch.long)
+        alpha_bar_t = alpha_bar_tensor[t].reshape(B, 1, 1, 1)
+        xt = torch.sqrt( alpha_bar_t ) * x0  + torch.sqrt( 1 - alpha_bar_t ) * epsilon
+        return xt.float(), t, epsilon
     
     for epoch in range(1):
-        for i, x in enumerate(dataloader):
-            B = x.shape[0]
-            #print(x.shape)
-            p = decode_map(x[0])
-            display_map(p)
-            #print(x[0][1])
-            #epsilon = torch.randn_like( x )
-            #t_value = torch.randint(low=0, high=t_max, size=(B,), dtype=torch.long)
-            #print(epsilon.shape)
-            break
+        print(f"============Epoch={epoch}============")
 
+        training_loss = 0
+        training_count = 0
+        model.train()
+        pbar = tqdm(training_dataloader, desc="Training")
+        for i, x0 in enumerate(pbar):
+            optimizer.zero_grad()
+            xt, t, epsilon = compute_xt_t(x0, x0.shape[0])
+            preds = model((xt, t))
+            loss = loss_func(preds, epsilon)
+            loss.backward()
+            optimizer.step()
+
+            training_loss += loss.item()
+            training_count += 1
+            loss_str = f"{(training_loss / training_count):.4f}"
+            pbar.set_postfix({"Loss" : loss_str})
+
+        validation_loss = 0
+        validation_count = 0
+        model.eval()
+        pbar = tqdm(validation_dataloader, desc="Validatn")
+        for i, x0 in enumerate(pbar):
+            xt, t, epsilon = compute_xt_t(x0, x0.shape[0])
+            preds = model((xt, t))
+            loss = loss_func(preds, epsilon)
+            validation_loss += loss.item()
+            validation_count += 1
+            loss_str = f"{(validation_loss / validation_count):.4f}"
+            pbar.set_postfix({"Loss" : loss_str})
