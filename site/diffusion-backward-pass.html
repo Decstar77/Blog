@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diffusion #2: The Math Of The Gaussian Backward Pass - Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        })"></script>
+    <style>
+        .katex-display {
+            margin: 1.6rem 0;
+            padding: 0 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .katex { font-size: 1.05em; }
+    </style>
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html" class="active">Articles</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <article class="article-content">
+        <div class="container">
+            <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
+            <div class="article-header">
+                <span class="article-category">Machine Learning</span>
+                <h1>Diffusion #2: The Math Of The Gaussian Backward Pass</h1>
+                <div class="article-meta">
+                    <div class="article-date">
+                        <i class="far fa-calendar"></i>
+                        <span>April 14, 2026</span>
+                    </div>
+                    <div class="read-time">
+                        <i class="far fa-clock"></i>
+                        <span>20 min read</span>
+                    </div>
+                    <div class="article-author">
+                        <i class="far fa-user"></i>
+                        <span>By Declan Porter</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="article-body">
+                <p class="lead">
+                    The forward process was the easy half. The backward pass is where things get
+                    genuinely interesting — and genuinely dense. This article works through the full
+                    derivation of the posterior mean and variance that a diffusion model is trained to match,
+                    step by step, from Bayes' theorem to the final noise-prediction form.
+                </p>
+
+                <h2>Step 1 — Why We Condition on $x_0$</h2>
+                <p>
+                    We cannot directly compute the reverse distribution:
+                </p>
+                $$q(x_{t-1} \mid x_t)$$
+                <p>
+                    because evaluating it requires integrating over all possible images. So, we "cheat" by conditioning on the clean image $x_0$, which makes the math tractable
+                </p>
+                $$q(x_{t-1} \mid x_t,\, x_0)$$
+                <p>
+                    We will eliminate $x_0$ later by substituting in the noise prediction from our model.
+                </p>
+
+                <h2>Step 2 — Apply Bayes' Theorem</h2>
+                <p>
+                    Bayes' theorem in three-variable form is:
+                </p>
+                $$P(A \mid B, C) = \frac{P(B \mid A, C)\cdot P(A \mid C)}{P(B \mid C)}$$
+                <p>
+                    Set $A = x_{t-1}$, $B = x_t$, $C = x_0$. Then:
+                </p>
+                $$q(x_{t-1} \mid x_t, x_0)
+                = \frac{q(x_t \mid x_{t-1}, x_0)\cdot q(x_{t-1} \mid x_0)}{q(x_t \mid x_0)}$$
+                <p>
+                    The forward process is a <strong>Markov chain</strong>: each state $x_t$ depends
+                    only on the immediately preceding state $x_{t-1}$, not on any earlier history.
+                    Formally, for any $s &lt; t-1$:
+                </p>
+                $$q(x_t \mid x_{t-1}, x_s) = q(x_t \mid x_{t-1})$$
+                <p>
+                    So that allows us to drop $x_0$ because $x_{t-1}$ is known:
+                </p>
+                $$q(x_t \mid x_{t-1}, x_0) = q(x_t \mid x_{t-1})$$
+                <p>
+                    The denominator $q(x_t \mid x_0)$ does not depend on $x_{t-1}$, so it is just a
+                    normalisation constant. Dropping it gives the proportionality:
+                </p>
+                $$q(x_{t-1} \mid x_t, x_0)
+                \propto q(x_t \mid x_{t-1})\cdot q(x_{t-1} \mid x_0)$$
+                <p>
+                   We use this method of proportionality to isolate the important terms, which makes things simplier.
+                </p>
+                <h2>Step 3 — Write the Gaussians</h2>
+                <p>
+                    Recall from the forward process derivation that, using
+                    $\alpha_t = 1 - \beta_t$ and $\bar{\alpha}_t = \prod_{s=1}^{t}\alpha_s$:
+                </p>
+                $$q(x_t \mid x_{t-1})
+                = \mathcal{N}\!\left(x_t;\; \sqrt{\alpha_t}\,x_{t-1},\; (1-\alpha_t)\mathbf{I}\right)$$
+                $$q(x_{t-1} \mid x_0)
+                = \mathcal{N}\!\left(x_{t-1};\; \sqrt{\bar{\alpha}_{t-1}}\,x_0,\; (1-\bar{\alpha}_{t-1})\mathbf{I}\right)$$
+                <p>
+                    These are all Gaussians with known means and variances — exactly the form we need
+                    to multiply together in log-space. Why log-space ? This is one of those, "Because Computers" reasons.
+                    If we don't use log scale, gradients and values can either get really large or really small. 
+                    Log-scale smooths things out make everything more stable
+                </p>
+
+                <h2>Step 4 — Work in Log-Space</h2>
+                <p>
+                    For a Gaussian, $\log \mathcal{N}(x;\,\mu,\,\sigma^2) \propto -\frac{(x-\mu)^2}{2\sigma^2}$.
+                    Taking the log of the proportionality from Step 2 and treating only the
+                    $x_{t-1}$-dependent parts:
+                </p>
+                $$\log q(\cdot)
+                \propto
+                -\frac{(x_t - \sqrt{\alpha_t}\,x_{t-1})^2}{2(1-\alpha_t)}
+                -\frac{(x_{t-1} - \sqrt{\bar{\alpha}_{t-1}}\,x_0)^2}{2(1-\bar{\alpha}_{t-1})}$$
+                <p>
+                    Why can we omit the $1/(\sigma\sqrt{2\pi})$ part of the PDF ? Again proportionality, nothing depends on 
+                    $x$ so it's a just a constant.
+                </p>
+                <h3>Expand the Terms</h3>
+                <p><strong>Term 1</strong> — expand the square in the numerator:</p>
+                $$-\frac{\alpha_t\,x_{t-1}^2 - 2\sqrt{\alpha_t}\,x_t\,x_{t-1} + x_t^2}{2(1-\alpha_t)}$$
+                <p>
+                    The $x_t^2$ piece does not involve $x_{t-1}$, so it folds into the constant
+                    we are ignoring.
+                </p>
+                <p><strong>Term 2</strong> — expand similarly:</p>
+                $$-\frac{x_{t-1}^2 - 2\sqrt{\bar{\alpha}_{t-1}}\,x_0\,x_{t-1} + \bar{\alpha}_{t-1}\,x_0^2}{2(1-\bar{\alpha}_{t-1})}$$
+                <p>
+                    Again the $x_0^2$ piece is constant in $x_{t-1}$ and can be dropped.
+                </p>
+
+                <h3>Collect Terms in $x_{t-1}$</h3>
+                <p>
+                    Grouping the $x_{t-1}^2$ and $x_{t-1}$ coefficients:
+                </p>
+                $$\propto
+                -\frac{1}{2}
+                \left(
+                    \frac{\alpha_t}{1-\alpha_t} + \frac{1}{1-\bar{\alpha}_{t-1}}
+                \right)x_{t-1}^2
+                +
+                \left(
+                    \frac{\sqrt{\alpha_t}\,x_t}{1-\alpha_t} + \frac{\sqrt{\bar{\alpha}_{t-1}}\,x_0}{1-\bar{\alpha}_{t-1}}
+                \right)x_{t-1}$$
+                <p>
+                    This is exactly the log of a Gaussian in $x_{t-1}$. We can read off the variance
+                    and mean by matching to the standard form $-\frac{1}{2\sigma^2}x^2 + \frac{\mu}{\sigma^2}x$.
+                </p>
+
+                <h2>Step 5 — Posterior Variance</h2>
+                <p>
+                    Matching the $x_{t-1}^2$ coefficient to $\frac{1}{2\tilde{\beta}_t}$:
+                </p>
+                $$\frac{1}{\tilde{\beta}_t}
+                = \frac{\alpha_t}{1-\alpha_t} + \frac{1}{1-\bar{\alpha}_{t-1}}$$
+                <p>Combining over a common denominator:</p>
+                $$\frac{1}{\tilde{\beta}_t}
+                = \frac{\alpha_t(1-\bar{\alpha}_{t-1}) + (1-\alpha_t)}{(1-\alpha_t)(1-\bar{\alpha}_{t-1})}$$
+                <p>
+                    The numerator simplifies using $\bar{\alpha}_t = \alpha_t\bar{\alpha}_{t-1}$:
+                </p>
+                $$\alpha_t - \alpha_t\bar{\alpha}_{t-1} + 1 - \alpha_t
+                = 1 - \alpha_t\bar{\alpha}_{t-1}
+                = 1 - \bar{\alpha}_t$$
+                <p>Inverting gives the <strong>posterior variance</strong>:</p>
+                $$\boxed{
+                \tilde{\beta}_t
+                = \frac{(1-\alpha_t)(1-\bar{\alpha}_{t-1})}{1-\bar{\alpha}_t}
+                }$$
+                <p>
+                    Since $1-\alpha_t = \beta_t$, this can also be written as
+                    $\tilde{\beta}_t = \frac{\beta_t(1-\bar{\alpha}_{t-1})}{1-\bar{\alpha}_t}$.
+                    Note that $\tilde{\beta}_t \leq \beta_t$ — the posterior is always narrower than
+                    the forward step, which makes sense: conditioning on $x_0$ removes uncertainty.
+                </p>
+
+                <h2>Step 6 — Posterior Mean</h2>
+                <p>
+                    Matching the $x_{t-1}$ coefficient to $\frac{\tilde{\mu}_t}{\tilde{\beta}_t}$:
+                </p>
+                $$\tilde{\mu}_t
+                = \tilde{\beta}_t
+                \left(
+                    \frac{\sqrt{\alpha_t}\,x_t}{1-\alpha_t}
+                    + \frac{\sqrt{\bar{\alpha}_{t-1}}\,x_0}{1-\bar{\alpha}_{t-1}}
+                \right)$$
+                <p>Substituting in $\tilde{\beta}_t$ and simplifying each term:</p>
+                $$\tilde{\mu}_t
+                = \frac{(1-\bar{\alpha}_{t-1})\sqrt{\alpha_t}}{1-\bar{\alpha}_t}\,x_t
+                + \frac{(1-\alpha_t)\sqrt{\bar{\alpha}_{t-1}}}{1-\bar{\alpha}_t}\,x_0$$
+                <p>
+                    This is the posterior mean as a weighted combination of $x_t$ and $x_0$.
+                    Useful — but it still contains $x_0$, which we do not have at inference time.
+                </p>
+
+                <h2>Step 7 — Eliminate $x_0$</h2>
+                <p>
+                    From the closed-form forward process derived in Part 1:
+                </p>
+                $$x_t = \sqrt{\bar{\alpha}_t}\,x_0 + \sqrt{1-\bar{\alpha}_t}\,\varepsilon$$
+                <p>Solving for $x_0$:</p>
+                $$x_0 = \frac{x_t - \sqrt{1-\bar{\alpha}_t}\,\varepsilon}{\sqrt{\bar{\alpha}_t}}$$
+                <p>
+                    Substituting this into the expression for $\tilde{\mu}_t$ and collecting terms
+                    (the algebra is tedious but mechanical — the $x_t$ terms from both parts combine
+                    cleanly):
+                </p>
+                $$\tilde{\mu}_t
+                = \frac{1}{\sqrt{\alpha_t}}
+                \left(
+                    x_t - \frac{1-\alpha_t}{\sqrt{1-\bar{\alpha}_t}}\,\varepsilon
+                \right)$$
+
+                <h2>Final Result</h2>
+                <p>
+                    Using $1 - \alpha_t = \beta_t$ and replacing the true noise $\varepsilon$ with
+                    the model's noise prediction $\varepsilon_\theta(x_t, t)$:
+                </p>
+                $$\boxed{
+                \tilde{\mu}_t(x_t,\,\varepsilon)
+                = \frac{1}{\sqrt{\alpha_t}}
+                \left(
+                    x_t - \frac{1-\alpha_t}{\sqrt{1-\bar{\alpha}_t}}\,\varepsilon
+                \right)
+                }$$
+                $$\boxed{
+                \tilde{\mu}_t
+                = \frac{1}{\sqrt{\alpha_t}}
+                \left(
+                    x_t - \frac{\beta_t}{\sqrt{1-\bar{\alpha}_t}}\,\varepsilon_\theta(x_t,\,t)
+                \right)
+                }$$
+                <p>
+                    Combined with the posterior variance $\tilde{\beta}_t$, this defines the full
+                    reverse step distribution:
+                </p>
+                $$p_\theta(x_{t-1} \mid x_t)
+                = \mathcal{N}\!\left(x_{t-1};\; \tilde{\mu}_t,\; \tilde{\beta}_t\,\mathbf{I}\right)$$
+
+                <h2>Putting It Together: The Denoising Loop</h2>
+                <p>
+                    At each reverse step $t$ from $T$ down to $1$:
+                </p>
+                <ol>
+                    <li>
+                        <strong>Predict the noise:</strong> run the neural network forward to get
+                        $\varepsilon_\theta(x_t, t)$.
+                    </li>
+                    <li>
+                        <strong>Compute the mean:</strong>
+                        $$\tilde{\mu}_t = \frac{1}{\sqrt{\alpha_t}}\!\left(x_t - \frac{\beta_t}{\sqrt{1-\bar{\alpha}_t}}\,\varepsilon_\theta(x_t,t)\right)$$
+                    </li>
+                    <li>
+                        <strong>Sample the next state:</strong>
+                        $$x_{t-1} \sim \mathcal{N}(\tilde{\mu}_t,\;\tilde{\beta}_t\,\mathbf{I})$$
+                        (At $t = 1$ the stochastic noise term is usually dropped and you just take
+                        $x_0 = \tilde{\mu}_1$.)
+                    </li>
+                </ol>
+
+                <h2>Intuition</h2>
+                <p>
+                    Look at what the mean formula actually does: it takes the current noisy image
+                    $x_t$, subtracts a scaled estimate of the noise, and rescales everything by
+                    $\frac{1}{\sqrt{\alpha_t}}$. Each step:
+                </p>
+                <ul>
+                    <li>removes a small amount of the predicted noise,</li>
+                    <li>rescales the signal back toward unit variance,</li>
+                    <li>adds a small amount of fresh Gaussian randomness (the $\tilde{\beta}_t$ term).</li>
+                </ul>
+                <p>
+                    The fresh randomness is what keeps samples diverse — without it you would always
+                    converge to the same image from any starting noise. The process is a
+                    <em>gradual denoising</em> guided by learned noise estimation, with just enough
+                    stochasticity reinjected at each step to explore the data distribution:
+                </p>
+                $$x_T \;\rightarrow\; x_{T-1} \;\rightarrow\; \cdots \;\rightarrow\; x_1 \;\rightarrow\; x_0$$
+
+                <h2>Conclusion</h2>
+                <p>
+                    Starting from Bayes' theorem and the Gaussian distributions established in Part 1,
+                    we derived the complete posterior $q(x_{t-1} \mid x_t, x_0)$: a Gaussian with
+                    analytically tractable mean $\tilde{\mu}_t$ and variance $\tilde{\beta}_t$. After
+                    eliminating $x_0$ via the forward-process reparameterisation, the mean reduces to
+                    a simple function of $x_t$ and the predicted noise — exactly what a neural network
+                    can be trained to supply. The next part will look at the training objective and
+                    how the ELBO simplifies to a mean-squared noise-prediction loss.
+                </p>
+
+                <div class="article-tags">
+                    <span class="tag">Diffusion</span>
+                    <span class="tag">Machine Learning</span>
+                    <span class="tag">Math</span>
+                    <span class="tag">Gaussian</span>
+                    <span class="tag">Bayesian</span>
+                </div>
+            </div>
+        </div>
+    </article>
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="articles.html">&larr; All Articles</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

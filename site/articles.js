@@ -1,6 +1,14 @@
 // All articles, newest first
 const articles = [
     {
+        title: "Diffusion #2: The Math Of The Gaussian Backward Pass",
+        summary: "Deriving the reverse diffusion posterior from Bayes' theorem — working through log-space algebra to obtain the closed-form mean and variance, then eliminating x₀ via the reparameterisation trick to arrive at the noise-prediction form used during sampling.",
+        category: "Machine Learning",
+        date: "2026-04-14",
+        readTime: "20 min read",
+        url: "diffusion-backward-pass.html"
+    },
+    {
         title: "Diffusion #1: The Math Of The Gaussian Forward Pass",
         summary: "Deriving the closed-form forward process for diffusion models from first principles — the noise schedule, sampling form of the Gaussian, the reparameterization trick, and how to jump to any noisy x_t directly from x_0.",
         category: "Machine Learning",
