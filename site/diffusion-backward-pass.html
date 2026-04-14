@@ -169,13 +169,23 @@
                     \frac{\sqrt{\alpha_t}\,x_t}{1-\alpha_t} + \frac{\sqrt{\bar{\alpha}_{t-1}}\,x_0}{1-\bar{\alpha}_{t-1}}
                 \right)x_{t-1}$$
                 <p>
+                    Recall that the full log of a Gaussian is:
+                </p>
+                $$\log \mathcal{N}(x;\,\mu,\,\sigma^2)
+                = -\frac{1}{2}\log(2\pi\sigma^2) - \frac{(x-\mu)^2}{2\sigma^2}$$
+                <p>
+                    Expanding the square and dropping all terms that do not depend on $x$:
+                </p>
+                $$\propto -\frac{x^2}{2\sigma^2} + \frac{\mu\,x}{\sigma^2}
+                \;=\; -\frac{1}{2\sigma^2}x^2 + \frac{\mu}{\sigma^2}x$$
+                <p>
                     This is exactly the log of a Gaussian in $x_{t-1}$. We can read off the variance
                     and mean by matching to the standard form $-\frac{1}{2\sigma^2}x^2 + \frac{\mu}{\sigma^2}x$.
                 </p>
 
                 <h2>Step 5 — Posterior Variance</h2>
                 <p>
-                    Matching the $x_{t-1}^2$ coefficient to $\frac{1}{2\tilde{\beta}_t}$:
+                    Matching the $x_{t-1}^2$ coefficient to $\frac{1}{\tilde{\beta}_t}$:
                 </p>
                 $$\frac{1}{\tilde{\beta}_t}
                 = \frac{\alpha_t}{1-\alpha_t} + \frac{1}{1-\bar{\alpha}_{t-1}}$$
