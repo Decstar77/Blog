@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiny Transformer — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Machine Learning</span>
+            <h1 style="text-align: center;">Tiny Transformer — Character-Level Language Model</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-calendar-alt"></i> April 2025</span>
+                <span><i class="fas fa-tag"></i> Python · PyTorch · CUDA</span>
+                <span><i class="fas fa-hashtag"></i> Project 6</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                A decoder-only transformer trained from scratch on WhatsApp chat logs with my best friend.
+                Given a prompt, it generates plausible continuations in the style of our actual conversations.
+            </p>
+
+            <h2>Overview</h2>
+            <p>
+                This is a character-level language model built entirely from first principles using PyTorch.
+                No pre-trained weights, no hugging face — just raw attention, embeddings, and a lot of GPU time.
+                The architecture is a GPT-style decoder: token embeddings plus learned positional embeddings,
+                six transformer blocks with masked multi-head self-attention and feed-forward layers,
+                then a linear projection to vocabulary logits.
+            </p>
+            <p>
+                The model has around <strong>~9 million parameters</strong> — tiny by any modern standard,
+                but enough to pick up conversational rhythm, names, punctuation habits,
+                and the general cadence of two people chatting over years.
+            </p>
+
+            <h2>Training data</h2>
+            <p>
+                The dataset is exported WhatsApp chat history between myself and my best friend Gareth.
+                Years of messages, jokes, plans, and general nonsense — exported, cleaned, and fed in as a single
+                flat text file. The model sees everything at the character level, so it learns spelling, spacing,
+                line breaks, and even the <code>Declan:</code> / <code>Gareth:</code> speaker prefixes.
+            </p>
+            <p>
+                The training split was 80/20. Context window was 128 characters.
+            </p>
+
+            <h2>Hardware</h2>
+            <p>
+                Training was done on a <strong>rented RTX 5060 Ti</strong>. Running on CPU alone would have been
+                painful — the GPU made each epoch fast enough to iterate on hyperparameters in a reasonable session.
+                Batch size 128, AdamW with a learning rate of <code>3e-5</code> and weight decay of <code>0.1</code>,
+                gradient clipping at <code>1.0</code>, trained for 10 epochs.
+            </p>
+
+            <h2>What I learnt</h2>
+            <ul>
+                <li>How <strong>multi-head self-attention</strong> works end-to-end — splitting Q/K/V across heads, scaling by √d, applying a causal mask, then projecting back.</li>
+                <li>The role of <strong>residual connections and layer norm</strong> in keeping gradients healthy through deep stacks.</li>
+                <li>Why the FFN expands to <strong>4 × d_model</strong> before projecting back down.</li>
+                <li><strong>GELU</strong> vs ReLU in practice, and why the smoother activation helps transformers.</li>
+                <li><strong>Dropout</strong> placement — both on attention weights and on the FFN output.</li>
+                <li><strong>Weight decay</strong> and <strong>gradient clipping</strong> to stabilise training.</li>
+                <li>Debugging shape mismatches in <code>CrossEntropyLoss</code> — it expects <code>(B×T, V)</code>, not <code>(B, T, V)</code>.</li>
+            </ul>
+
+            <h2>Example output</h2>
+            <p style="color: var(--text-muted); font-size: 0.92rem; margin-top: -0.5rem;">
+                Prompted with <code>"Declan: Henlo boyo"</code>, the model generated:
+            </p>
+        </div>
+
+        <!-- ── Chat output ─────────────────────────────────────────── -->
+        <div class="project-demo">
+            <div class="chat-window">
+                <div class="chat-message chat-declan">
+                    <span class="chat-speaker">Declan</span>
+                    <span class="chat-text">Henlo boyo</span>
+                </div>
+                <div class="chat-message chat-gareth">
+                    <span class="chat-speaker">Gareth</span>
+                    <span class="chat-text">Hola</span>
+                </div>
+                <div class="chat-message chat-declan">
+                    <span class="chat-speaker">Declan</span>
+                    <span class="chat-text">How goes?</span>
+                </div>
+                <div class="chat-message chat-gareth">
+                    <span class="chat-speaker">Gareth</span>
+                    <span class="chat-text">Good and you</span>
+                </div>
+                <div class="chat-message chat-declan">
+                    <span class="chat-speaker">Declan</span>
+                    <span class="chat-text">Meh same same</span>
+                </div>
+                <div class="chat-message chat-declan">
+                    <span class="chat-speaker">Declan</span>
+                    <span class="chat-text">What you been up to?</span>
+                </div>
+                <div class="chat-message chat-gareth">
+                    <span class="chat-speaker">Gareth</span>
+                    <span class="chat-text">The fuck all</span>
+                </div>
+                <div class="chat-message chat-declan">
+                    <span class="chat-speaker">Declan</span>
+                    <span class="chat-text">Ah yes, what you doing today?</span>
+                </div>
+                <div class="chat-message chat-gareth">
+                    <span class="chat-speaker">Gareth</span>
+                    <span class="chat-text">I want to see it</span>
+                </div>
+                <div class="chat-message chat-declan">
+                    <span class="chat-speaker">Declan</span>
+                    <span class="chat-text">Ah yes</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Code ─────────────────────────────────────────────── -->
+        <div class="article-body">
+            <h2 style="text-align: center;">Code</h2>
+            <pre><code>import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
+import math
+from tqdm import tqdm
+
+batch_size      = 128
+context_window  = 128
+model_size      = 256
+model_heads     = 8
+
+with open("data/garethdeclan/clean_data.txt", "r") as file:
+    content = file.read()
+
+unique_chars = sorted(set(content))
+vocab     = { char: i for i, char in enumerate(unique_chars) }
+vocab_inv = { i: char for i, char in enumerate(unique_chars) }
+vocab_size = len(vocab)
+
+content_vocab       = [vocab[c] for c in content]
+raw_training_data   = content_vocab[:int(0.8 * len(content_vocab))]
+raw_validation_data = content_vocab[ int(0.8 * len(content_vocab)):]
+
+
+class TinyDataset(Dataset):
+    def __init__(self, raw_data):
+        self.data = raw_data
+
+    def __len__(self):
+        return len(self.data) - context_window
+
+    def __getitem__(self, idx):
+        inputs  = torch.tensor(self.data[idx     : idx + context_window],     dtype=torch.long)
+        targets = torch.tensor(self.data[idx + 1 : idx + context_window + 1], dtype=torch.long)
+        return inputs, targets
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model, n_heads, device):
+        super().__init__()
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.device  = device
+        self.Q          = nn.Linear(d_model, d_model)
+        self.K          = nn.Linear(d_model, d_model)
+        self.V          = nn.Linear(d_model, d_model)
+        self.proj       = nn.Linear(d_model, d_model)
+        self.layernorm1 = nn.LayerNorm(d_model)
+        self.layernorm2 = nn.LayerNorm(d_model)
+        self.ffn1       = nn.Linear(d_model, 4 * d_model)
+        self.ffn2       = nn.Linear(4 * d_model, d_model)
+        self.ffnA       = nn.GELU()
+        self.softmax    = nn.Softmax(-1)
+        self.attn_drop  = nn.Dropout(0.2)
+        self.ffn_drop   = nn.Dropout(0.2)
+
+    def forward(self, x):
+        B, T, _ = x.shape
+        dims = self.d_model // self.n_heads
+        norm = self.layernorm1(x)
+
+        q = self.Q(norm).reshape(B, T, self.n_heads, dims).transpose(1, 2)
+        k = self.K(norm).reshape(B, T, self.n_heads, dims).transpose(1, 2)
+        v = self.V(norm).reshape(B, T, self.n_heads, dims).transpose(1, 2)
+
+        a = q @ k.transpose(-2, -1) / math.sqrt(dims)
+        mask = ~torch.tril(torch.ones(T, T, dtype=torch.bool, device=self.device))
+        a = self.attn_drop(self.softmax(a.masked_fill(mask, float("-inf")))) @ v
+
+        a_out = self.proj(a.transpose(1, 2).reshape(B, T, self.d_model))
+        ar  = x + a_out
+        out = ar + self.ffn_drop(self.ffn2(self.ffnA(self.ffn1(self.layernorm2(ar)))))
+        return out
+
+
+class TinyDecoder(nn.Module):
+    def __init__(self, d_model, n_heads, device):
+        super().__init__()
+        self.device      = device
+        self.token_embed = nn.Embedding(vocab_size, d_model)
+        self.pos_embed   = nn.Embedding(context_window, d_model)
+        self.embed_drop  = nn.Dropout(0.2)
+        self.blocks      = nn.ModuleList([
+            TransformerBlock(d_model, n_heads, device) for _ in range(6)
+        ])
+        self.outln       = nn.LayerNorm(d_model)
+        self.outffn      = nn.Linear(d_model, vocab_size)
+
+    def forward(self, x):
+        t  = x.shape[1]
+        e  = self.embed_drop(
+            self.token_embed(x) +
+            self.pos_embed(torch.arange(t, dtype=torch.long, device=self.device))
+        )
+        for block in self.blocks:
+            e = block(e)
+        return self.outffn(self.outln(e))
+
+
+device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model     = TinyDecoder(d_model=model_size, n_heads=model_heads, device=device).to(device)
+losser    = nn.CrossEntropyLoss()
+optimizer = optim.AdamW(model.parameters(), lr=0.3e-4, weight_decay=0.1)
+
+train_loader = DataLoader(TinyDataset(raw_training_data),   batch_size=batch_size, shuffle=True)
+val_loader   = DataLoader(TinyDataset(raw_validation_data), batch_size=batch_size)
+
+for epoch in range(10):
+    model.train()
+    pbar = tqdm(train_loader, desc=f"Epoch {epoch+1} train")
+    for inputs, targets in pbar:
+        inputs, targets = inputs.to(device), targets.to(device)
+        optimizer.zero_grad()
+        logits = model(inputs).reshape(-1, vocab_size)
+        loss   = losser(logits, targets.reshape(-1))
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        pbar.set_postfix(loss=f"{loss.item():.4f}")
+
+    model.eval()
+    val_loss, n = 0.0, 0
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            logits    = model(inputs).reshape(-1, vocab_size)
+            val_loss += losser(logits, targets.reshape(-1)).item()
+            n        += 1
+    print(f"epoch={epoch+1}  val_loss={val_loss/n:.4f}")
+
+    torch.save(model.state_dict(), f"checkpoints/checkpoint_{epoch}.pth")</code></pre>
+        </div>
+
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

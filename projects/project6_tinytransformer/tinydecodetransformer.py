@@ -223,7 +223,4 @@ else:
     
     print("=======================")
     prompt("Declan: Henlo boyo")
-    print("=======================")
-    prompt("Declan: How's the meise ?")
-    print("=======================")
-    prompt("Declan: You moving to Cape town ?")
+

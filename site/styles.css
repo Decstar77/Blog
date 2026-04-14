@@ -1037,3 +1037,60 @@ body {
     .demo-result-value { font-size: 1rem; }
     .demo-result-label { font-size: 0.7rem; }
 }
+
+/* ============================================================
+   Chat window (tiny transformer output)
+   ============================================================ */
+
+.chat-window {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 560px;
+    margin: 0 auto;
+    font-family: var(--font);
+    font-size: 0.9rem;
+}
+
+.chat-message {
+    display: flex;
+    flex-direction: column;
+    max-width: 72%;
+}
+
+.chat-declan {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.chat-gareth {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.chat-speaker {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-bottom: 3px;
+    color: var(--text-muted);
+}
+
+.chat-text {
+    padding: 8px 13px;
+    border-radius: 14px;
+    line-height: 1.4;
+}
+
+.chat-declan .chat-text {
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-gareth .chat-text {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+}
