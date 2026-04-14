@@ -53,8 +53,8 @@ def visualize_noise():
         visualize(gauss_circle, noisy_circles_y)
 
 class TinyDiffusionAutocoder(nn.Module):
-    def _init_( self ):
-        super(TinyDiffusionAutocoder, self)._init_()
+    def __init__( self ):
+        super(TinyDiffusionAutocoder, self).__init__()
         self.embed  = nn.Embedding(t_max_steps, 8)
         self.ln1    = nn.Linear(2 + 8, 64)
         self.ln12_a = nn.ReLU()

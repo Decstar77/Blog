@@ -7,4 +7,5 @@ build
 model
 mapgen
 checkpoints
+checkpoints2
 *.npz
