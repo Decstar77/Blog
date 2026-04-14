@@ -4,6 +4,7 @@ services:
       context: ./site
     depends_on:
       - runner
+      - tracker
 
   runner:
     build:
@@ -11,3 +12,14 @@ services:
       dockerfile: runner/Dockerfile
     expose:
       - "8000"
+
+  tracker:
+    build:
+      context: ./tracker
+    expose:
+      - "8001"
+    volumes:
+      - tracker_data:/data
+
+volumes:
+  tracker_data:

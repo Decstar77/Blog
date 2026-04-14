@@ -94,6 +94,12 @@
     draw();
 })();
 
+// ── Page visit tracking ──────────────────────────────────────
+(function () {
+    const slug = location.pathname.replace(/^\/|\.html$/g, '') || 'index';
+    fetch('/tracker/ping?page=' + encodeURIComponent(slug), { method: 'POST' }).catch(() => {});
+})();
+
 // ── Navigation & smooth scroll ───────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     const hamburger = document.querySelector('.hamburger');
