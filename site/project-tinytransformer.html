@@ -37,20 +37,13 @@
 
         <div class="article-body">
             <p class="lead">
-                A decoder-only transformer trained from scratch on WhatsApp chat logs with my best friend.
-                Given a prompt, it generates plausible continuations in the style of our actual conversations.
+                I thought it would be fun to train a  decoder-only transformer trained from scratch on WhatsApp chat logs with my best friend.
+                This was a quite a jump from my previous projects, which had me learning a whole bunch. But was a good experience.
             </p>
 
             <h2>Overview</h2>
             <p>
-                This is a character-level language model built entirely from first principles using PyTorch.
-                No pre-trained weights, no hugging face — just raw attention, embeddings, and a lot of GPU time.
-                The architecture is a GPT-style decoder: token embeddings plus learned positional embeddings,
-                six transformer blocks with masked multi-head self-attention and feed-forward layers,
-                then a linear projection to vocabulary logits.
-            </p>
-            <p>
-                The model has around <strong>~9 million parameters</strong> — tiny by any modern standard,
+                The model has around <strong>~5 million parameters</strong>, tiny by any modern standard,
                 but enough to pick up conversational rhythm, names, punctuation habits,
                 and the general cadence of two people chatting over years.
             </p>
@@ -58,7 +51,7 @@
             <h2>Training data</h2>
             <p>
                 The dataset is exported WhatsApp chat history between myself and my best friend Gareth.
-                Years of messages, jokes, plans, and general nonsense — exported, cleaned, and fed in as a single
+                3 years of messages, jokes, plans, and general nonsense — exported, cleaned, and fed in as a single
                 flat text file. The model sees everything at the character level, so it learns spelling, spacing,
                 line breaks, and even the <code>Declan:</code> / <code>Gareth:</code> speaker prefixes.
             </p>
@@ -68,8 +61,9 @@
 
             <h2>Hardware</h2>
             <p>
-                Training was done on a <strong>rented RTX 5060 Ti</strong>. Running on CPU alone would have been
-                painful — the GPU made each epoch fast enough to iterate on hyperparameters in a reasonable session.
+                Training was done on a <strong>rented RTX 5060 Ti</strong> through Vast.ai for a few dollars. This was the first time 
+                running on CPU alone would have been painful, I think it would have been around 10 hours for a single epoch... 
+                The GPU made each epoch fast enough to iterate on hyperparameters in a reasonable session.
                 Batch size 128, AdamW with a learning rate of <code>3e-5</code> and weight decay of <code>0.1</code>,
                 gradient clipping at <code>1.0</code>, trained for 10 epochs.
             </p>
