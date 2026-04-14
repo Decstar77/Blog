@@ -64,10 +64,11 @@
 
             <div class="article-body">
                 <p class="lead">
-                    The forward process was the easy half. The backward pass is where things get
-                    genuinely interesting — and genuinely dense. This article works through the full
-                    derivation of the posterior mean and variance that a diffusion model is trained to match,
-                    step by step, from Bayes' theorem to the final noise-prediction form.
+                    In my last post I ran through the forward process of Gaussian Diffusion.
+                    In this post I'll be breaking down the backward process. When I was running through this
+                    I found many steps were either omitted or just assumed to be known. I tried to fill in the
+                    blanks of other explanations as much as possible, eg putting the technique definition before it's use.
+                    I will still skip steps with algebra though as I think most readers will be familiar with that.
                 </p>
 
                 <h2>Step 1 — Why We Condition on $x_0$</h2>
@@ -110,7 +111,7 @@
                 $$q(x_{t-1} \mid x_t, x_0)
                 \propto q(x_t \mid x_{t-1})\cdot q(x_{t-1} \mid x_0)$$
                 <p>
-                   We use this method of proportionality to isolate the important terms, which makes things simplier.
+                   We use this method of proportionality to isolate the important terms, which makes things simpler.
                 </p>
                 <h2>Step 3 — Write the Gaussians</h2>
                 <p>
@@ -125,7 +126,7 @@
                     These are all Gaussians with known means and variances — exactly the form we need
                     to multiply together in log-space. Why log-space ? This is one of those, "Because Computers" reasons.
                     If we don't use log scale, gradients and values can either get really large or really small. 
-                    Log-scale smooths things out make everything more stable
+                    Log-scale smooths things out and makes everything more stable.
                 </p>
 
                 <h2>Step 4 — Work in Log-Space</h2>
@@ -139,8 +140,8 @@
                 -\frac{(x_t - \sqrt{\alpha_t}\,x_{t-1})^2}{2(1-\alpha_t)}
                 -\frac{(x_{t-1} - \sqrt{\bar{\alpha}_{t-1}}\,x_0)^2}{2(1-\bar{\alpha}_{t-1})}$$
                 <p>
-                    Why can we omit the $1/(\sigma\sqrt{2\pi})$ part of the PDF ? Again proportionality, nothing depends on 
-                    $x$ so it's a just a constant.
+                    Why can we omit the $1/(\sigma\sqrt{2\pi})$ part of the PDF ? Again proportionality, nothing depends on
+                    $x_{t-1}$ so it's just a constant.
                 </p>
                 <h3>Expand the Terms</h3>
                 <p><strong>Term 1</strong> — expand the square in the numerator:</p>
@@ -185,6 +186,17 @@
 
                 <h2>Step 5 — Posterior Variance</h2>
                 <p>
+                    Look at what the collected expression gives us for the $x_{t-1}^2$ coefficient:
+                </p>
+                $$-\frac{1}{2}\left(\frac{\alpha_t}{1-\alpha_t} + \frac{1}{1-\bar{\alpha}_{t-1}}\right)x_{t-1}^2$$
+                <p>
+                    In the standard Gaussian log-form, that coefficient is $-\frac{1}{2\sigma^2}$,
+                    so the whole bracket equals $\frac{1}{\sigma^2}$ reciprocal variance, not the variance itself. 
+                    That is why we write $\frac{1}{\tilde{\beta}_t}$ rather than $\tilde{\beta}_t$. The algebra
+                    hands us the reciprocal variance, and we will invert at the end to get
+                    the variance. This confused me for a bit which is why I emphasise it.
+                </p>
+                <p>
                     Matching the $x_{t-1}^2$ coefficient to $\frac{1}{\tilde{\beta}_t}$:
                 </p>
                 $$\frac{1}{\tilde{\beta}_t}
@@ -206,13 +218,19 @@
                 <p>
                     Since $1-\alpha_t = \beta_t$, this can also be written as
                     $\tilde{\beta}_t = \frac{\beta_t(1-\bar{\alpha}_{t-1})}{1-\bar{\alpha}_t}$.
-                    Note that $\tilde{\beta}_t \leq \beta_t$ — the posterior is always narrower than
-                    the forward step, which makes sense: conditioning on $x_0$ removes uncertainty.
                 </p>
 
                 <h2>Step 6 — Posterior Mean</h2>
                 <p>
-                    Matching the $x_{t-1}$ coefficient to $\frac{\tilde{\mu}_t}{\tilde{\beta}_t}$:
+                    Matching the $x_{t-1}$ coefficient to $\frac{\tilde{\mu}_t}{\tilde{\beta}_t}$
+                </p>
+                $$\frac{\tilde{\mu}_t} {\tilde{\beta}_t}
+                = \left(
+                    \frac{\sqrt{\alpha_t}\,x_t}{1-\alpha_t}
+                    + \frac{\sqrt{\bar{\alpha}_{t-1}}\,x_0}{1-\bar{\alpha}_{t-1}}
+                \right)$$
+                <p>
+                    Multiply by $\tilde{\beta}_t$ 
                 </p>
                 $$\tilde{\mu}_t
                 = \tilde{\beta}_t
@@ -226,7 +244,8 @@
                 + \frac{(1-\alpha_t)\sqrt{\bar{\alpha}_{t-1}}}{1-\bar{\alpha}_t}\,x_0$$
                 <p>
                     This is the posterior mean as a weighted combination of $x_t$ and $x_0$.
-                    Useful — but it still contains $x_0$, which we do not have at inference time.
+                    We need to eliminate $x_0$ as we do not have it at inference time. 
+                    $x_0$ is actually the result that inference is working towards.
                 </p>
 
                 <h2>Step 7 — Eliminate $x_0$</h2>
@@ -238,7 +257,7 @@
                 $$x_0 = \frac{x_t - \sqrt{1-\bar{\alpha}_t}\,\varepsilon}{\sqrt{\bar{\alpha}_t}}$$
                 <p>
                     Substituting this into the expression for $\tilde{\mu}_t$ and collecting terms
-                    (the algebra is tedious but mechanical — the $x_t$ terms from both parts combine
+                    (the algebra is tedious, the $x_t$ terms from both parts combine
                     cleanly):
                 </p>
                 $$\tilde{\mu}_t
@@ -294,34 +313,11 @@
                     </li>
                 </ol>
 
-                <h2>Intuition</h2>
-                <p>
-                    Look at what the mean formula actually does: it takes the current noisy image
-                    $x_t$, subtracts a scaled estimate of the noise, and rescales everything by
-                    $\frac{1}{\sqrt{\alpha_t}}$. Each step:
-                </p>
-                <ul>
-                    <li>removes a small amount of the predicted noise,</li>
-                    <li>rescales the signal back toward unit variance,</li>
-                    <li>adds a small amount of fresh Gaussian randomness (the $\tilde{\beta}_t$ term).</li>
-                </ul>
-                <p>
-                    The fresh randomness is what keeps samples diverse — without it you would always
-                    converge to the same image from any starting noise. The process is a
-                    <em>gradual denoising</em> guided by learned noise estimation, with just enough
-                    stochasticity reinjected at each step to explore the data distribution:
-                </p>
-                $$x_T \;\rightarrow\; x_{T-1} \;\rightarrow\; \cdots \;\rightarrow\; x_1 \;\rightarrow\; x_0$$
-
                 <h2>Conclusion</h2>
                 <p>
                     Starting from Bayes' theorem and the Gaussian distributions established in Part 1,
                     we derived the complete posterior $q(x_{t-1} \mid x_t, x_0)$: a Gaussian with
-                    analytically tractable mean $\tilde{\mu}_t$ and variance $\tilde{\beta}_t$. After
-                    eliminating $x_0$ via the forward-process reparameterisation, the mean reduces to
-                    a simple function of $x_t$ and the predicted noise — exactly what a neural network
-                    can be trained to supply. The next part will look at the training objective and
-                    how the ELBO simplifies to a mean-squared noise-prediction loss.
+                    analytically tractable mean $\tilde{\mu}_t$ and variance $\tilde{\beta}_t$. 
                 </p>
 
                 <div class="article-tags">
