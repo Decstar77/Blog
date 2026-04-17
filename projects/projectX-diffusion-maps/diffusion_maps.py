@@ -149,6 +149,7 @@ if __name__ == "__main__":
     loss_func   = nn.MSELoss()
     optimizer   = optim.Adam( model.parameters(), lr=0.001 )
 
+    beta_tensor         = torch.tensor([ f_beta( i ) for i in range(t_max) ], dtype=float )
     alpha_tensor        = torch.tensor([ f_alpha( i ) for i in range(t_max) ], dtype=float )
     alpha_bar_tensor    = torch.cumprod( alpha_tensor, dim=0 )
 
@@ -159,6 +160,36 @@ if __name__ == "__main__":
         xt = torch.sqrt( alpha_bar_t ) * x0  + torch.sqrt( 1 - alpha_bar_t ) * epsilon
         return xt.float(), t, epsilon
     
+    @torch.no_grad()
+    def sample_reverse(num_samples):
+        model.eval()
+        x_t = torch.randn(num_samples, 5, 32, 32)
+
+        for t in reversed(range(t_max)):
+            t_en = torch.full((num_samples,), t, dtype=torch.long)
+            eps_hat = model( (x_t, t_en) )
+
+            alpha_t = alpha_tensor[t]
+            alpha_bar_t = alpha_bar_tensor[t]
+            beta_t = beta_tensor[t]
+
+            # DDPM reverse mean: mu_theta(x_t, t)
+            term1 = (1.0 / torch.sqrt(alpha_t))
+            term2 =( 1.0 - alpha_t) / torch.sqrt(1.0 - alpha_bar_t)
+            mu_t = term1 * ( x_t - term2 * eps_hat )
+
+            if t > 0:
+                z = torch.randn_like(x_t)
+                x_t = mu_t + torch.sqrt(beta_t) * z
+            else:
+                x_t = mu_t
+
+        return x_t
+
+    grid = decode_map(sample_reverse(1))
+    print(grid.shape)
+    display_map(grid)
+
     for epoch in range(1):
         print(f"============Epoch={epoch}============")
 
