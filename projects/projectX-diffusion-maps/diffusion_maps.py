@@ -186,11 +186,7 @@ if __name__ == "__main__":
 
         return x_t
 
-    grid = decode_map(sample_reverse(1))
-    print(grid.shape)
-    display_map(grid)
-
-    for epoch in range(1):
+    for epoch in range(4):
         print(f"============Epoch={epoch}============")
 
         training_loss = 0
@@ -222,3 +218,7 @@ if __name__ == "__main__":
             validation_count += 1
             loss_str = f"{(validation_loss / validation_count):.4f}"
             pbar.set_postfix({"Loss" : loss_str})
+    
+    for _ in range(10):
+        grid = decode_map( sample_reverse(1).reshape(5, 32, 32) )
+        display_map(grid)

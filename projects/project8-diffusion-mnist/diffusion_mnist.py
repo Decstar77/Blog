@@ -4,7 +4,6 @@ import torch.optim as optim
 import random
 import math
 from torch.utils.data import DataLoader
-import torch.optim as optim
 import torchvision
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -15,8 +14,8 @@ transform = torchvision.transforms.Compose(
         torchvision.transforms.Normalize((0.5,), (0.5,)),
     ])
 
-mnist_train = torchvision.datasets.MNIST(root='./learning/project2/mnistdata', train=True, download=True, transform=transform)
-mnist_validation  = torchvision.datasets.MNIST(root='./learning/project2/mnistdata', train=False, download=True, transform=transform)
+mnist_train = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+mnist_validation  = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 batch_size = 64
 
 beta_start = 1e-4
@@ -34,48 +33,101 @@ def f_alpha(i):
 class TinyDiffusion(nn.Module):
     def __init__( self ):
         super(TinyDiffusion, self).__init__()
-        self.t_embed   = nn.Embedding(t_max_steps, 32)  # updated to match t_max_steps
-        self.l_embed   = nn.Embedding(10, 32)
+        
+        chanels = [64, 128, 256]
 
-        self.ecn1    = nn.Conv2d( in_channels=1, out_channels=32, kernel_size=3, padding=1 )
-        self.ecn1p   = nn.Linear(32, 32)
+        self.t_embed = nn.Sequential(
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32)
+        )
+        self.l_embed = nn.Embedding(10, 32)
+
+        self.ecn1    = nn.Conv2d( in_channels=1, out_channels=chanels[0], kernel_size=3, padding=1 )
+        self.ecn1p   = nn.Linear(32, chanels[0])
+        self.enc1n   = nn.GroupNorm(8, chanels[0])
         self.enc1a   = nn.ReLU()
         self.ecn1max = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.ecn2    = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1 )
-        self.ecn2p   = nn.Linear(32, 64)
+        self.ecn2    = nn.Conv2d(in_channels=chanels[0], out_channels=chanels[1], kernel_size=3, padding=1 )
+        self.ecn2p   = nn.Linear(32, chanels[1])
+        self.enc2n   = nn.GroupNorm(8, chanels[1])
         self.enc2a   = nn.ReLU()
         self.ecn2max = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.up1     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
-        #self.dcn1p   = nn.Linear(32, 64)
-        self.dcn1    = nn.Conv2d( in_channels=128, out_channels=32, kernel_size=3, padding=1 )
-        self.dcn1a   = nn.ReLU()
+        self.ecn3    = nn.Conv2d(in_channels=chanels[1], out_channels=chanels[2], kernel_size=3, padding=1 )
+        self.ecn3p   = nn.Linear(32, chanels[2])
+        self.enc3n   = nn.GroupNorm(8, chanels[2])
+        self.enc3a   = nn.ReLU()
+        self.ecn3max = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.botcv  = nn.Conv2d(in_channels=chanels[2], out_channels=chanels[2], kernel_size=3, padding=1)
+        self.botav  = nn.ReLU()
+
+        self.up3     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
+        self.dcn3p   = nn.Linear(32, chanels[2] * 2 )
+        self.dcn3    = nn.Conv2d( in_channels=chanels[2] * 2, out_channels=chanels[1], kernel_size=3, padding=1 )
+        self.dcn3n   = nn.GroupNorm(8, chanels[1])
+        self.dcn3a   = nn.ReLU()
 
         self.up2     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
-        #self.dcn2p   = nn.Linear(32, 32)
-        self.dcn2    = nn.Conv2d( in_channels=64, out_channels=1, kernel_size=3, padding=1 )
+        self.dcn2p   = nn.Linear(32, chanels[1] * 2 )
+        self.dcn2    = nn.Conv2d( in_channels=chanels[1] * 2, out_channels=chanels[0], kernel_size=3, padding=1 )
+        self.dcn2n   = nn.GroupNorm(8, chanels[0])
+        self.dcn2a   = nn.ReLU()
+
+        self.up1     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
+        self.dcn1p   = nn.Linear(32, chanels[0] * 2 )
+        self.dcn1    = nn.Conv2d( in_channels=chanels[0] * 2, out_channels=1, kernel_size=3, padding=1 )
+
+    def sinusoidal(self, t, d_model ):
+        N = 10_000
+        D = d_model
+        K = torch.arange(0, D//2)
+
+        positions = t.unsqueeze(1).float()
+        embeddings = torch.zeros(t.shape[0], D)
+        denominators = torch.pow( N, 2 * K / D ) 
+        embeddings[:, 0::2] = torch.sin(positions/denominators)
+        embeddings[:, 1::2] = torch.cos(positions/denominators)
+        return embeddings
 
     def forward( self, x ):
         x, t, l = x
-
-        cond = self.t_embed(t) + self.l_embed(l)
+        t_embed = self.t_embed( self.sinusoidal(t, 32) )
+        l_embed = self.l_embed(l)
+        cond = t_embed + l_embed
 
         r = self.ecn1(x)
         s1 = self.enc1a( r + self.ecn1p(cond).unsqueeze(-1).unsqueeze(-1) )
-        r = self.ecn1max(s1)
+        r = self.enc1n(s1)
+        r = self.ecn1max(r)
 
         r = self.ecn2(r)
         s2 = self.enc2a( r + self.ecn2p(cond).unsqueeze(-1).unsqueeze(-1) )
-        r = self.ecn2max(s2)
+        r = self.enc2n(s2)
+        r = self.ecn2max(r)
+        
+        r = self.ecn3(r)
+        s3 = self.enc3a( r + self.ecn3p(cond).unsqueeze(-1).unsqueeze(-1) )
+        r = self.enc3n(s3)
+        r = self.ecn3max(r)
+
+        r = self.botav( self.botcv( r ) )
+
+        r = self.up3(r)
+        if r.shape[-2:] != s3.shape[-2:]:
+            r = torch.nn.functional.interpolate(r, size=s3.shape[-2:], mode='bilinear', align_corners=False)
+        r = torch.cat([r, s3], dim=1)
+        r = self.dcn3a( self.dcn3n( self.dcn3(r + self.dcn3p( cond ).unsqueeze(-1).unsqueeze(-1) ) ) )
+        
+        r = self.up2(r)
+        r = torch.cat([r, s2], dim=1)
+        r = self.dcn2a( self.dcn2n( self.dcn2(r + self.dcn2p( cond ).unsqueeze(-1).unsqueeze(-1) ) ) )
 
         r = self.up1(r)
-        r = torch.cat([r, s2], dim=1)
-        r = self.dcn1a( self.dcn1(r) )
-
-        r = self.up2(r)
         r = torch.cat([r, s1], dim=1)
-        r = self.dcn2(r)
+        r = self.dcn1(r + self.dcn1p( cond ).unsqueeze(-1).unsqueeze(-1) )
 
         return r
 
@@ -87,13 +139,13 @@ alpha_prod_tensor   = torch.cumprod( alpha_tensor, dim=0 )
 
 model           = TinyDiffusion()
 loss_function   = nn.MSELoss()
-optimizer       = optim.Adam(model.parameters(), lr=0.001)
+optimizer       = optim.Adam(model.parameters(), lr=1e-4)
 scheduler       = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20)
 
-#state_dict = torch.load("learning/project6-diffusion-mnist/checkpoints/checkpoint_99", weights_only=True)
-#model.load_state_dict(state_dict)
+state_dict = torch.load("./projects/project8-diffusion-mnist/model.pt", weights_only=True)
+model.load_state_dict(state_dict)
 
-for epoch in range(20):
+for epoch in range(0):
     model.train()
     training_loss = 0
     training_count = 0
@@ -109,13 +161,14 @@ for epoch in range(20):
         preds = model((x_t, t_en, y))
         loss = loss_function(preds, e_noise)
         loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
-        scheduler.step()
         training_loss+= loss
         training_count+=1
         loss_str = f"{(training_loss / training_count):.5f}"
         pbar.set_postfix({"loss":loss_str})
 
+    scheduler.step()
     model.eval()
     validation_loss = 0
     validation_count = 0
@@ -134,7 +187,7 @@ for epoch in range(20):
             loss_str = f"{(validation_loss / validation_count):.5f}"
             pbar.set_postfix({"loss":loss_str})
 
-    torch.save(model.state_dict(), f"learning/project6-diffusion-mnist/checkpoints2/checkpoint_{epoch}")
+    torch.save(model.state_dict(), "./projects/project8-diffusion-mnist/model.pt")
 
 @torch.no_grad()
 def sample_reverse(num_samples, value):
@@ -163,11 +216,16 @@ def sample_reverse(num_samples, value):
 
     return x_t
 
+num_images = 9
+fig, axes = plt.subplots(1, num_images, figsize=(num_images * 2, 2))
 
-for _ in range(1):
-    image = sample_reverse(1, 7).reshape(28, 28)
-    image = (image + torch.ones(28, 28)) / torch.full((28 ,28), 2)
-    # Plot the image
-    plt.imshow(image, cmap='gray')
-    plt.axis('off')  # Optional: hides the x and y axis numbers
-    plt.show()
+for i in tqdm(range(num_images), desc="Generating samples"):
+    image = sample_reverse(1, i).reshape(28, 28)
+    image = (image + torch.ones(28, 28)) / 2
+
+    axes[i].imshow(image, cmap='gray')
+    axes[i].axis('off')
+
+plt.tight_layout()
+print("saving image")
+plt.savefig('./projects/project8-diffusion-mnist/sample.png')
