@@ -216,15 +216,17 @@ def sample_reverse(num_samples, value):
 
     return x_t
 
-num_images = 9
-fig, axes = plt.subplots(1, num_images, figsize=(num_images * 2, 2))
+num_digits = 10
+num_per_digit = 10
+fig, axes = plt.subplots(num_per_digit, num_digits, figsize=(num_digits * 2, num_per_digit * 2))
 
-for i in tqdm(range(num_images), desc="Generating samples"):
-    image = sample_reverse(1, i).reshape(28, 28)
-    image = (image + torch.ones(28, 28)) / 2
-
-    axes[i].imshow(image, cmap='gray')
-    axes[i].axis('off')
+for d in tqdm(range(num_digits), desc="Generating samples"):
+    samples = sample_reverse(num_per_digit, d)
+    for r in range(num_per_digit):
+        image = samples[r].reshape(28, 28)
+        image = (image + torch.ones(28, 28)) / 2
+        axes[r][d].imshow(image, cmap='gray')
+        axes[r][d].axis('off')
 
 plt.tight_layout()
 print("saving image")
