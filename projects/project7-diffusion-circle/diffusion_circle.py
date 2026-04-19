@@ -1,9 +1,8 @@
-import torch 
+import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
 import math
-import matplotlib.pyplot as plt
 import numpy as np
 
 from sklearn.datasets import make_circles
@@ -84,14 +83,18 @@ loss_function       = nn.MSELoss()
 batch_size = 500
 assert circle_tensor.shape[0] % batch_size == 0
 
+# Convention: the runner looks for a class named `Model` in each project file.
+Model = TinyDiffusionAutocoder
+
 @torch.no_grad()
-def sample_reverse(num_samples):
-    model.eval()
+def sample_reverse(net, num_samples, return_frames=False):
+    net.eval()
     x_t = torch.randn(num_samples, 2)
+    frames = [x_t.tolist()] if return_frames else None
 
     for t in reversed(range(t_max_steps)):
         t_en = torch.full((num_samples,), t, dtype=torch.long)
-        eps_hat = model( (x_t, t_en) )
+        eps_hat = net( (x_t, t_en) )
 
         alpha_t = alpha_tensor[t]
         alpha_bar_t = alpha_prod_tensor[t]
@@ -108,41 +111,53 @@ def sample_reverse(num_samples):
         else:
             x_t = mu_t
 
+        if return_frames:
+            frames.append(x_t.tolist())
+
+    if return_frames:
+        return frames
     return x_t
 
-for epoch in range(1000):
-    model.train()
-    training_loss = 0
-    training_count = 0
-    for batch_index in range( 0, circle_tensor.shape[0], batch_size ):
-        optimizer.zero_grad()
-        circles = circle_tensor[batch_index:batch_index+batch_size]
-        e_noise = torch.randn(batch_size, 2)
-        t_en = torch.randint( low=0,high=t_max_steps,size=(batch_size,), dtype=torch.long)
-        alpha_bar_t = alpha_prod_tensor[t_en]          # shape: (B,)
-        alpha_bar_t = alpha_bar_t.unsqueeze(-1) # shape: (B, 1) for broadcasting
-        term1 = torch.sqrt( alpha_bar_t ) * circles
-        term2 = torch.sqrt( 1 - alpha_bar_t ) * e_noise
-        x_t = (term1 + term2).float()
-        input = ( x_t, t_en ) 
-        preds = model( input )
-        loss = loss_function(preds, e_noise)
-        loss.backward()
-        optimizer.step()
-        training_loss += loss.item()
-        training_count += 1
 
-    print(f"Epoch={epoch} | Loss={training_loss / ( training_count )}")
+if __name__ == "__main__":
+    import os
+    import matplotlib.pyplot as plt
 
-generated = sample_reverse(samples).numpy()
+    for epoch in range(1000):
+        model.train()
+        training_loss = 0
+        training_count = 0
+        for batch_index in range( 0, circle_tensor.shape[0], batch_size ):
+            optimizer.zero_grad()
+            circles = circle_tensor[batch_index:batch_index+batch_size]
+            e_noise = torch.randn(batch_size, 2)
+            t_en = torch.randint( low=0,high=t_max_steps,size=(batch_size,), dtype=torch.long)
+            alpha_bar_t = alpha_prod_tensor[t_en]          # shape: (B,)
+            alpha_bar_t = alpha_bar_t.unsqueeze(-1) # shape: (B, 1) for broadcasting
+            term1 = torch.sqrt( alpha_bar_t ) * circles
+            term2 = torch.sqrt( 1 - alpha_bar_t ) * e_noise
+            x_t = (term1 + term2).float()
+            input = ( x_t, t_en )
+            preds = model( input )
+            loss = loss_function(preds, e_noise)
+            loss.backward()
+            optimizer.step()
+            training_loss += loss.item()
+            training_count += 1
 
-plt.figure(figsize=(7, 7))
-plt.scatter(scaled_circles_x[:, 0], scaled_circles_x[:, 1], c='green', alpha=0.4, label='Real Data')
-plt.scatter(generated[:, 0], generated[:, 1], c='blue', alpha=0.6, label='Generated (Reverse Diffusion)')
-plt.title("Real vs Generated Points")
-plt.xlabel("Feature 1 (X coordinate)")
-plt.ylabel("Feature 2 (Y coordinate)")
-plt.legend(loc='best')
-plt.grid(True, linestyle='--', alpha=0.5)
-plt.axis('equal')
-plt.show()
+        print(f"Epoch={epoch} | Loss={training_loss / ( training_count )}")
+
+    torch.save(model.state_dict(), os.path.join(os.path.dirname(__file__), "model.pt"))
+
+    generated = sample_reverse(model, samples).numpy()
+
+    plt.figure(figsize=(7, 7))
+    plt.scatter(scaled_circles_x[:, 0], scaled_circles_x[:, 1], c='green', alpha=0.4, label='Real Data')
+    plt.scatter(generated[:, 0], generated[:, 1], c='blue', alpha=0.6, label='Generated (Reverse Diffusion)')
+    plt.title("Real vs Generated Points")
+    plt.xlabel("Feature 1 (X coordinate)")
+    plt.ylabel("Feature 2 (Y coordinate)")
+    plt.legend(loc='best')
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.axis('equal')
+    plt.show()

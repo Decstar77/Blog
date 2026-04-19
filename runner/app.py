@@ -21,7 +21,7 @@ app.add_middleware(
 # `model.pt` state dict next to it.  The runner imports the file
 # without executing anything (training lives behind __main__ guard).
 
-def load_project(py_path: str, weights_path: str):
+def load_project(py_path: str, weights_path: str, return_module: bool = False):
     if not os.path.exists(py_path):
         raise FileNotFoundError(f"Project file not found: {py_path}")
     if not os.path.exists(weights_path):
@@ -39,6 +39,8 @@ def load_project(py_path: str, weights_path: str):
     model = module.Model()
     model.load_state_dict(torch.load(weights_path, weights_only=True))
     model.eval()
+    if return_module:
+        return model, module
     return model
 
 
@@ -70,11 +72,25 @@ mnist_conv_model = load_project(
 )
 print("MNIST CNN loaded.")
 
+diffusion_model, diffusion_module = load_project(
+    py_path       = os.path.join(BASE, "projects/project7-diffusion-circle/diffusion_circle.py"),
+    weights_path  = os.path.join(BASE, "projects/project7-diffusion-circle/model.pt"),
+    return_module = True,
+)
+print("Diffusion (circle) loaded.")
+
 # Pre-generate the circle dataset (deterministic — random_state=6)
 _circle_xs, _circle_ys = make_circles(n_samples=2000, noise=0.1, random_state=6)
 circle_dataset = {
     "points": [{"x": float(p[0]), "y": float(p[1]), "label": int(l)}
                for p, l in zip(_circle_xs, _circle_ys)]
+}
+
+# Pre-extract the standardised circles dataset used by the diffusion project
+diffusion_dataset = {
+    "points": [{"x": float(p[0]), "y": float(p[1]), "label": int(l)}
+               for p, l in zip(diffusion_module.scaled_circles_x.tolist(),
+                               diffusion_module.noisy_circles_y.tolist())]
 }
 
 
@@ -176,6 +192,24 @@ def run_mnist(req: MnistRequest):
             "probabilities": [round(p, 4) for p in cnn_probs],
         },
     }
+
+
+# ── Diffusion (circles) ───────────────────────────────────────────
+
+class DiffusionRequest(BaseModel):
+    num_samples: int = 600
+
+
+@app.post("/run/diffusion-circle")
+def run_diffusion_circle(req: DiffusionRequest):
+    n = max(1, min(req.num_samples, 2000))
+    frames = diffusion_module.sample_reverse(diffusion_model, n, return_frames=True)
+    return {"frames": frames}
+
+
+@app.get("/data/diffusion-circle")
+def diffusion_data():
+    return diffusion_dataset
 
 
 # ── Health ────────────────────────────────────────────────────────
