@@ -23,7 +23,6 @@ COLORS = [
     '#ff1744',  # 4 enemy spawn  - vivid red
 ]
 
-
 LABELS = ['Empty', 'Wall', 'Floor', 'Player', 'Enemy']
 def display_map(grid):
     cmap = ListedColormap(COLORS)
