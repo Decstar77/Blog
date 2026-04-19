@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diffusion on Circles — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Machine Learning</span>
+            <h1 style="text-align: center;">Diffusion on Circles</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-calendar-alt"></i> April 2025</span>
+                <span><i class="fas fa-tag"></i> Python · PyTorch · scikit-learn</span>
+                <span><i class="fas fa-hashtag"></i> Project 7</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                A tiny DDPM trained on sklearn's two concentric circles. The forward process slowly
+                turns the data into pure Gaussian noise; the model learns to invert it, sampling new
+                points by walking the noise back toward the rings.
+            </p>
+
+            <h2>Live demo</h2>
+            <p style="color: var(--text-muted); font-size: 0.92rem; margin-top: -0.5rem;">
+                Press <em>Generate</em> to draw fresh samples from random noise. The animation plays
+                the 100 reverse-diffusion steps in order — chaos at the top, clean rings at the bottom.
+            </p>
+        </div>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <div class="classifier-canvas-wrap">
+                <canvas id="diffusionCanvas" width="400" height="400"></canvas>
+                <p class="demo-canvas-hint">Generated samples (blue) overlaid on real data (green)</p>
+            </div>
+
+            <div class="demo-controls">
+                <button id="generateBtn" class="mnist-clear-btn">Generate</button>
+                <label class="demo-label" for="stepSlider">
+                    step = <span id="stepDisplay">100 / 100</span>
+                </label>
+                <input
+                    id="stepSlider"
+                    class="demo-slider"
+                    type="range"
+                    min="0" max="100" step="1"
+                    value="100"
+                    disabled
+                >
+            </div>
+
+            <div class="demo-results" id="demoResults">
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Samples</span>
+                    <span class="demo-result-value" id="resultSamples">—</span>
+                </div>
+                <div class="demo-result-divider"></div>
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Diffusion step</span>
+                    <span class="demo-result-value demo-result-actual" id="resultStep">—</span>
+                </div>
+                <div class="demo-result-divider"></div>
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Status</span>
+                    <span class="demo-result-value demo-result-error" id="resultPhase" style="font-size:0.9rem;">idle</span>
+                </div>
+            </div>
+
+            <p class="demo-status" id="demoStatus">Press Generate to sample from the model.</p>
+        </div>
+
+        <!-- ── Code ─────────────────────────────────────────────── -->
+        <div class="article-body">
+            <h2 style="text-align: center;">Code</h2>
+            <pre><code>import torch
+import torch.nn as nn
+import torch.optim as optim
+import math
+import numpy as np
+
+from sklearn.datasets import make_circles
+
+samples = 2000
+noisy_circles_x, noisy_circles_y = make_circles(n_samples=samples, noise=0.05, random_state=6)
+scaled_circles_x = (noisy_circles_x - np.mean(noisy_circles_x, axis=0)) / np.std(noisy_circles_x, axis=0)
+
+beta_start    = 1e-4
+beta_end      = 0.02
+t_max_steps   = 100
+
+def f_beta(i):
+    return beta_start + (beta_end - beta_start) * (i / (t_max_steps - 1))
+
+def f_alpha(i):
+    return 1 - f_beta(i)
+
+class TinyDiffusionAutocoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embed  = nn.Embedding(t_max_steps, 8)
+        self.ln1    = nn.Linear(2 + 8, 64)
+        self.ln12_a = nn.ReLU()
+        self.ln2    = nn.Linear(64, 64)
+        self.ln23_a = nn.ReLU()
+        self.ln3    = nn.Linear(64, 2)
+
+    def forward(self, x):
+        r, t = x
+        em = self.embed(t)
+        r = torch.cat([r, em], dim=-1)
+        r = self.ln12_a(self.ln1(r))
+        r = self.ln23_a(self.ln2(r))
+        r = self.ln3(r)
+        return r
+
+
+model             = TinyDiffusionAutocoder()
+circle_tensor     = torch.from_numpy(scaled_circles_x).float()
+beta_tensor       = torch.tensor([f_beta(i)  for i in range(t_max_steps)], dtype=torch.float32)
+alpha_tensor      = torch.tensor([f_alpha(i) for i in range(t_max_steps)], dtype=torch.float32)
+alpha_prod_tensor = torch.cumprod(alpha_tensor, dim=0, dtype=float)
+
+optimizer         = optim.Adam(model.parameters(), lr=0.001)
+loss_function     = nn.MSELoss()
+
+batch_size = 500
+assert circle_tensor.shape[0] % batch_size == 0
+
+
+@torch.no_grad()
+def sample_reverse(num_samples):
+    model.eval()
+    x_t = torch.randn(num_samples, 2)
+    for t in reversed(range(t_max_steps)):
+        t_en        = torch.full((num_samples,), t, dtype=torch.long)
+        eps_hat     = model((x_t, t_en))
+        alpha_t     = alpha_tensor[t]
+        alpha_bar_t = alpha_prod_tensor[t]
+        beta_t      = beta_tensor[t]
+
+        # DDPM reverse mean
+        term1 = 1.0 / torch.sqrt(alpha_t)
+        term2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_bar_t)
+        mu_t  = term1 * (x_t - term2 * eps_hat)
+
+        if t > 0:
+            z   = torch.randn_like(x_t)
+            x_t = mu_t + torch.sqrt(beta_t) * z
+        else:
+            x_t = mu_t
+    return x_t
+
+
+for epoch in range(1000):
+    model.train()
+    training_loss, training_count = 0, 0
+    for batch_index in range(0, circle_tensor.shape[0], batch_size):
+        optimizer.zero_grad()
+        circles     = circle_tensor[batch_index:batch_index + batch_size]
+        e_noise     = torch.randn(batch_size, 2)
+        t_en        = torch.randint(low=0, high=t_max_steps, size=(batch_size,), dtype=torch.long)
+        alpha_bar_t = alpha_prod_tensor[t_en].unsqueeze(-1)
+        x_t         = (torch.sqrt(alpha_bar_t) * circles +
+                       torch.sqrt(1 - alpha_bar_t) * e_noise).float()
+
+        preds = model((x_t, t_en))
+        loss  = loss_function(preds, e_noise)
+        loss.backward()
+        optimizer.step()
+        training_loss  += loss.item()
+        training_count += 1
+
+    print(f"Epoch={epoch} | Loss={training_loss / training_count}")</code></pre>
+        </div>
+
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+<script>
+const RUNNER = '/api';
+
+const canvas = document.getElementById('diffusionCanvas');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const RANGE = 3.0; // model coords roughly in [-3, 3] after standardisation + noise
+
+function mx(x) { return (x + RANGE) / (2 * RANGE) * W; }
+function my(y) { return (RANGE - y) / (2 * RANGE) * H; }
+
+// ── State ─────────────────────────────────────────────────────────
+
+let realPoints   = null;     // [{x,y,label}]
+let frames       = null;     // [[[x,y], ...], ...]  (T+1 frames, frames[0] = noise)
+let currentStep  = null;     // index into frames
+let animTimer    = null;
+
+const status     = document.getElementById('demoStatus');
+const phaseEl    = document.getElementById('resultPhase');
+const stepEl     = document.getElementById('resultStep');
+const samplesEl  = document.getElementById('resultSamples');
+const stepDisp   = document.getElementById('stepDisplay');
+const slider     = document.getElementById('stepSlider');
+const btn        = document.getElementById('generateBtn');
+
+// ── Draw ──────────────────────────────────────────────────────────
+
+function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = '#f5fbf5';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = 1;
+    [-2, -1, 0, 1, 2].forEach(v => {
+        ctx.beginPath(); ctx.moveTo(mx(v), 0); ctx.lineTo(mx(v), H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, my(v)); ctx.lineTo(W, my(v)); ctx.stroke();
+    });
+
+    // Axis labels
+    ctx.font = '10px monospace';
+    ctx.fillStyle = 'rgba(90,110,90,0.7)';
+    ctx.textAlign = 'center';
+    [-2, 0, 2].forEach(v => ctx.fillText(v, mx(v), H - 4));
+    ctx.textAlign = 'right';
+    [-2, 0, 2].forEach(v => ctx.fillText(v, 22, my(v) + 3));
+
+    // Real data underneath
+    if (realPoints) {
+        realPoints.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(mx(p.x), my(p.y), 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(31, 122, 31, 0.45)';
+            ctx.fill();
+        });
+    }
+
+    // Generated samples on top
+    if (frames && currentStep !== null) {
+        const pts = frames[currentStep];
+        ctx.fillStyle = 'rgba(50, 90, 200, 0.75)';
+        ctx.strokeStyle = 'rgba(20, 50, 140, 0.6)';
+        ctx.lineWidth = 0.5;
+        pts.forEach(p => {
+            const px = mx(p[0]);
+            const py = my(p[1]);
+            if (px < -10 || px > W + 10 || py < -10 || py > H + 10) return;
+            ctx.beginPath();
+            ctx.arc(px, py, 2.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        });
+    }
+}
+
+// ── Slider scrubbing ──────────────────────────────────────────────
+
+slider.addEventListener('input', () => {
+    if (!frames) return;
+    stopAnimation();
+    currentStep = parseInt(slider.value, 10);
+    updateStepReadout();
+    draw();
+});
+
+function updateStepReadout() {
+    const total = frames ? frames.length - 1 : 100;
+    stepDisp.textContent = `${currentStep} / ${total}`;
+    stepEl.textContent   = `${currentStep}`;
+}
+
+// ── Animation ─────────────────────────────────────────────────────
+
+function stopAnimation() {
+    if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+    }
+}
+
+function playAnimation() {
+    stopAnimation();
+    if (!frames) return;
+    currentStep = 0;
+    slider.disabled = false;
+    phaseEl.textContent = 'denoising';
+
+    animTimer = setInterval(() => {
+        if (currentStep >= frames.length - 1) {
+            stopAnimation();
+            phaseEl.textContent = 'done';
+            status.textContent  = 'Sampling complete. Drag the slider to scrub through steps.';
+            return;
+        }
+        currentStep += 1;
+        slider.value = currentStep;
+        updateStepReadout();
+        draw();
+    }, 30);
+}
+
+// ── Data + sampling fetch ─────────────────────────────────────────
+
+async function loadRealData() {
+    try {
+        const res  = await fetch(`${RUNNER}/data/diffusion-circle`);
+        if (!res.ok) throw new Error('no data');
+        const data = await res.json();
+        realPoints = data.points;
+        draw();
+    } catch {
+        // Fall back to drawing without real data overlay — demo still works
+    }
+}
+
+async function generate() {
+    stopAnimation();
+    btn.disabled = true;
+    slider.disabled = true;
+    phaseEl.textContent = 'sampling';
+    status.textContent  = 'Querying model…';
+    status.style.color  = 'var(--text-muted)';
+
+    try {
+        const res  = await fetch(`${RUNNER}/run/diffusion-circle`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ num_samples: 600 }),
+        });
+        if (!res.ok) throw new Error('bad response');
+        const data = await res.json();
+
+        frames = data.frames; // [[[x,y]...], ...] with frames[0] = pure noise
+        slider.max  = frames.length - 1;
+        samplesEl.textContent = frames[0].length;
+        status.textContent    = '';
+        playAnimation();
+
+    } catch {
+        status.textContent = 'Runner unavailable — start the Docker services to enable live queries.';
+        status.style.color = '#b05050';
+        phaseEl.textContent = 'offline';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+btn.addEventListener('click', generate);
+
+loadRealData();
+draw();
+</script>
+</body>
+</html>
