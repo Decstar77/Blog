@@ -44,19 +44,19 @@ class TinyDiffusion(nn.Module):
         self.l_embed = nn.Embedding(10, 32)
 
         self.ecn1    = nn.Conv2d( in_channels=1, out_channels=chanels[0], kernel_size=3, padding=1 )
-        self.ecn1p   = nn.Linear(32, chanels[0])
+        self.ecn1p   = nn.Linear(32, chanels[0] * 2)
         self.enc1n   = nn.GroupNorm(8, chanels[0])
         self.enc1a   = nn.ReLU()
         self.ecn1max = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.ecn2    = nn.Conv2d(in_channels=chanels[0], out_channels=chanels[1], kernel_size=3, padding=1 )
-        self.ecn2p   = nn.Linear(32, chanels[1])
+        self.ecn2p   = nn.Linear(32, chanels[1] * 2)
         self.enc2n   = nn.GroupNorm(8, chanels[1])
         self.enc2a   = nn.ReLU()
         self.ecn2max = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.ecn3    = nn.Conv2d(in_channels=chanels[1], out_channels=chanels[2], kernel_size=3, padding=1 )
-        self.ecn3p   = nn.Linear(32, chanels[2])
+        self.ecn3p   = nn.Linear(32, chanels[2] * 2)
         self.enc3n   = nn.GroupNorm(8, chanels[2])
         self.enc3a   = nn.ReLU()
         self.ecn3max = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -65,19 +65,18 @@ class TinyDiffusion(nn.Module):
         self.botav  = nn.ReLU()
 
         self.up3     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
-        self.dcn3p   = nn.Linear(32, chanels[2] * 2 )
+        self.dcn3p   = nn.Linear(32, chanels[1] * 2 )
         self.dcn3    = nn.Conv2d( in_channels=chanels[2] * 2, out_channels=chanels[1], kernel_size=3, padding=1 )
         self.dcn3n   = nn.GroupNorm(8, chanels[1])
         self.dcn3a   = nn.ReLU()
 
         self.up2     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
-        self.dcn2p   = nn.Linear(32, chanels[1] * 2 )
+        self.dcn2p   = nn.Linear(32, chanels[0] * 2 )
         self.dcn2    = nn.Conv2d( in_channels=chanels[1] * 2, out_channels=chanels[0], kernel_size=3, padding=1 )
         self.dcn2n   = nn.GroupNorm(8, chanels[0])
         self.dcn2a   = nn.ReLU()
 
         self.up1     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
-        self.dcn1p   = nn.Linear(32, chanels[0] * 2 )
         self.dcn1    = nn.Conv2d( in_channels=chanels[0] * 2, out_channels=1, kernel_size=3, padding=1 )
 
     def sinusoidal(self, t, d_model ):
@@ -92,6 +91,13 @@ class TinyDiffusion(nn.Module):
         embeddings[:, 1::2] = torch.cos(positions/denominators)
         return embeddings
 
+    # feature-wise linear modulation
+    def film(self, linear, cond):
+        gamma, beta = linear(cond).chunk(2, dim=1)
+        gamma = gamma.unsqueeze(-1).unsqueeze(-1)
+        beta = beta.unsqueeze(-1).unsqueeze(-1)
+        return gamma, beta
+
     def forward( self, x ):
         x, t, l = x
         t_embed = self.t_embed( self.sinusoidal(t, 32) )
@@ -99,37 +105,54 @@ class TinyDiffusion(nn.Module):
         cond = t_embed + l_embed
 
         r = self.ecn1(x)
-        s1 = self.enc1a( r + self.ecn1p(cond).unsqueeze(-1).unsqueeze(-1) )
-        r = self.enc1n(s1)
-        r = self.ecn1max(r)
+        r = self.enc1n(r)
+        gamma, beta = self.film(self.ecn1p, cond)
+        s1 = self.enc1a( gamma * r + beta )
+        r = self.ecn1max(s1)
 
         r = self.ecn2(r)
-        s2 = self.enc2a( r + self.ecn2p(cond).unsqueeze(-1).unsqueeze(-1) )
-        r = self.enc2n(s2)
-        r = self.ecn2max(r)
+        r = self.enc2n(r)
+        gamma, beta = self.film(self.ecn2p, cond)
+        s2 = self.enc2a( gamma * r + beta )
+        r = self.ecn2max(s2)
         
         r = self.ecn3(r)
-        s3 = self.enc3a( r + self.ecn3p(cond).unsqueeze(-1).unsqueeze(-1) )
-        r = self.enc3n(s3)
-        r = self.ecn3max(r)
+        r = self.enc3n(r)
+        gamma, beta = self.film(self.ecn3p, cond)
+        s3 = self.enc3a( gamma * r + beta )
+        r = self.ecn3max(s3)
 
         r = self.botav( self.botcv( r ) )
 
         r = self.up3(r)
         if r.shape[-2:] != s3.shape[-2:]:
             r = torch.nn.functional.interpolate(r, size=s3.shape[-2:], mode='bilinear', align_corners=False)
+
         r = torch.cat([r, s3], dim=1)
-        r = self.dcn3a( self.dcn3n( self.dcn3(r + self.dcn3p( cond ).unsqueeze(-1).unsqueeze(-1) ) ) )
+        r = self.dcn3( r )
+        r = self.dcn3n( r )
+        gamma, beta = self.film(self.dcn3p, cond)
+        r = self.dcn3a( gamma * r + beta )
         
         r = self.up2(r)
         r = torch.cat([r, s2], dim=1)
-        r = self.dcn2a( self.dcn2n( self.dcn2(r + self.dcn2p( cond ).unsqueeze(-1).unsqueeze(-1) ) ) )
+        r = self.dcn2( r )
+        r = self.dcn2n( r )
+        gamma, beta = self.film(self.dcn2p, cond)
+        r = self.dcn2a( gamma * r + beta )
 
         r = self.up1(r)
         r = torch.cat([r, s1], dim=1)
-        r = self.dcn1(r + self.dcn1p( cond ).unsqueeze(-1).unsqueeze(-1) )
+        r = self.dcn1( r )
 
         return r
+
+if torch.cuda.is_available():
+    print(torch.cuda.get_device_name(0))
+else:
+    print("No cuda using CPU")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 training_loader     = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
 validation_loader   = DataLoader(mnist_validation, batch_size=batch_size, shuffle=True)
@@ -137,15 +160,16 @@ beta_tensor         = torch.tensor( [ f_beta( i ) for i in range( t_max_steps ) 
 alpha_tensor        = torch.tensor( [ f_alpha( i ) for i in range( t_max_steps ) ], dtype=torch.float32 )
 alpha_prod_tensor   = torch.cumprod( alpha_tensor, dim=0 )
 
-model           = TinyDiffusion()
+model           = TinyDiffusion().to(device)
 loss_function   = nn.MSELoss()
 optimizer       = optim.Adam(model.parameters(), lr=1e-4)
 scheduler       = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20)
 
-state_dict = torch.load("./projects/project8-diffusion-mnist/model.pt", weights_only=True)
-model.load_state_dict(state_dict)
+#state_dict = torch.load("./projects/project8-diffusion-mnist/model.pt", weights_only=True)
+#model.load_state_dict(state_dict)
 
-for epoch in range(0):
+for epoch in range(20):
+    print(f"==================={epoch}===================")
     model.train()
     training_loss = 0
     training_count = 0

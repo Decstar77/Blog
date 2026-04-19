@@ -55,6 +55,29 @@ class Cellular:
         grid[:, 0] = WALL
         grid[:, -1] = WALL
 
+    def thin_walls_to_border(self, grid):
+        """Walls not touching a floor (8-dir) become empty, leaving a 1-tile wall ring."""
+        height, width = grid.shape
+        new_grid = grid.copy()
+        for y in range(height):
+            for x in range(width):
+                if grid[y, x] != WALL:
+                    continue
+                keep = False
+                for dy in range(-1, 2):
+                    for dx in range(-1, 2):
+                        if dx == 0 and dy == 0:
+                            continue
+                        ny, nx = y + dy, x + dx
+                        if 0 <= ny < height and 0 <= nx < width and grid[ny, nx] == FLOOR:
+                            keep = True
+                            break
+                    if keep:
+                        break
+                if not keep:
+                    new_grid[y, x] = EMPTY
+        return new_grid
+
     def flood_fill(self, grid, start_x, start_y):
         """Return the set of (x, y) floor positions reachable from start (4-directional)."""
         height, width = grid.shape
@@ -134,6 +157,7 @@ class Cellular:
         self.fill_borders(grid)
         self.remove_disconnected_floors(grid)
         self.remove_wall_islands(grid)
+        grid = self.thin_walls_to_border(grid)
         self.place_spawns(grid)
         return grid
 
