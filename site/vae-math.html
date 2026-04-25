@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Math Behind Variational Autoencoders - Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        })"></script>
+    <style>
+        .katex-display {
+            margin: 1.6rem 0;
+            padding: 0 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .katex {
+            font-size: 1.05em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <main class="wrapper article-page">
+
+        <nav class="inner-nav">
+            <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+            <ul class="inner-nav-links">
+                <li><a href="articles.html" class="active">Articles</a></li>
+                <li><a href="index.html#about">About</a></li>
+            </ul>
+        </nav>
+
+        <article class="article-content">
+            <div class="container">
+                <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
+                <div class="article-header">
+                    <span class="article-category">Machine Learning</span>
+                    <h1>The Math Behind Variational Autoencoders</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>April 24, 2026</span>
+                        </div>
+                        <div class="read-time">
+                            <i class="far fa-clock"></i>
+                            <span>18 min read</span>
+                        </div>
+                        <div class="article-author">
+                            <i class="far fa-user"></i>
+                            <span>By Declan Porter</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        Having spent a while on diffusion models, I circled back to an older
+                        idea I had skipped over: the Variational Autoencoder. The architecture
+                        is easy. The math behind why that architecture is the right one is not.
+                        This article is my attempt to walk through that derivation the way I
+                        wish someone had walked me through it.
+                    </p>
+
+                    <h2>The High-Level Idea</h2>
+                    <p>
+                        A VAE is a generative model with two networks: an <strong>encoder</strong>
+                        that compresses an input $x$ (say, a 28×28 MNIST digit) into a small
+                        latent vector $z$, and a <strong>decoder</strong> that reconstructs $x$
+                        from $z$. The twist that distinguishes a VAE from a plain autoencoder is
+                        that the encoder does not output a single point — it outputs the
+                        <em>parameters of a probability distribution</em> over $z$. This matters
+                        because it forces the latent space to be smooth and continuous, which is
+                        what makes it possible to sample new $z$ values and actually get
+                        coherent images back from the decoder.
+                    </p>
+
+                    <h2>What We Actually Want</h2>
+                    <p>
+                        The real goal is to model the distribution of our data, $p(x)$. If we
+                        knew $p(x)$, we could sample from it and generate new digits. The trick
+                        is to introduce a latent variable $z$ and assume each $x$ was produced
+                        by first drawing some hidden $z$ and then generating $x$ from it. This 
+                        is comes from the Law of total probability.
+                    </p>
+                    $$p(x) = \int p(x \mid z)\, p(z)\, dz$$
+                    <p>
+                        We fix the prior $p(z) = \mathcal{N}(0, I)$ and
+                        let the decoder network learn $p(x \mid z)$. Conceptually clean, but
+                        the integral is intractable: there is no way to integrate over every
+                        possible $z$ in a high-dimensional latent space.
+                    </p>
+
+                    <h2>Introducing the Encoder</h2>
+                    <p>
+                        The true posterior $p(z \mid x)$,"given this image, which $z$
+                        produced it?", is also intractable. So we approximate it with a
+                        learned Gaussian produced by the encoder:
+                    </p>
+                    $$q_\phi(z \mid x) = \mathcal{N}\!\left(\mu_\phi(x),\;\sigma^2_\phi(x)\right)$$
+                    <p>
+                        The subscript $\phi$ just means these parameters come out of the
+                        encoder network's weights. Given an input $x$, the encoder spits out a
+                        mean vector $\mu$ and a (log-)variance vector $\log \sigma^2$, and
+                        those two together define a distribution in latentspace.
+                    </p>
+
+                    <h2>The ELBO: A Tractable Lower Bound</h2>
+                    <p>
+                        We cannot maximise $\log p(x)$ directly, but we can derive a lower
+                        bound on it that we <em>can</em> maximise. Start from the definition:
+                    </p>
+                    $$\log p(x) = \log \int p(x, z)\, dz$$
+                    <p>
+                        Multiply and divide by the encoder distribution $q_\phi(z \mid x)$:
+                    </p>
+                    $$\log p(x) = \log \int \frac{p(x, z)}{q_\phi(z \mid x)}\, q_\phi(z \mid x)\, dz
+                    = \log\, \mathbb{E}_{q_\phi(z \mid x)}\!\left[\frac{p(x, z)}{q_\phi(z \mid x)}\right]$$
+                    <p>
+                        Now apply <strong>Jensen's inequality</strong>. Since $\log$ is
+                        concave, $\log \mathbb{E}[X] \geq \mathbb{E}[\log X]$:
+                    </p>
+                    $$\log p(x) \;\geq\; \mathbb{E}_{q_\phi(z \mid x)}\!\left[\log \frac{p(x, z)}{q_\phi(z \mid
+                    x)}\right]$$
+                    <p>
+                        This lower bound is called the <strong>ELBO</strong> (Evidence Lower
+                        BOund). Maximising the ELBO pushes up $\log p(x)$ — which is exactly
+                        what we want.
+                    </p>
+
+                    <h2>Splitting the ELBO Into Two Terms</h2>
+                    <p>
+                        Using $p(x, z) = p(x \mid z)\, p(z)$ and splitting the log:
+                    </p>
+                    $$\text{ELBO} = \mathbb{E}_{q_\phi(z \mid x)}[\log p(x\mid z)]
+                    + \mathbb{E}_{q_\phi(z \mid x)}\!\left[\log \frac{p(z)}{q_\phi(z \mid x)}\right]$$
+                    <p>
+                        The second expectation is the negative KL divergence from $q_\phi$ to
+                        the prior:
+                    </p>
+                    $$\text{ELBO} = \underbrace{\mathbb{E}_{q_\phi(z \mid x)}[\log p(x \mid z)]}_{\text{reconstruction}}
+                    \;-\; \underbrace{D_{KL}\!\left(q_\phi(z \mid x) \,\|\, p(z)\right)}_{\text{regulariser}}$$
+                    <p>
+                        Two very interpretable pieces. The reconstruction term rewards the
+                        decoder for rebuilding $x$ from samples of the encoder's distribution. 
+                        The KL term pulls the encoder's distribution ( the latent space ) toward the standard
+                        normal, which is what makes the latent space usable for sampling at generation time.
+                    </p>
+
+                    <h2>The Reconstruction Term</h2>
+                    <p>
+                        If we model $p(x \mid z)$ as a Gaussian with fixed variance, then
+                        maximising $\log p(x \mid z)$ reduces to minimising MSE between the
+                        input and the decoder's output:
+                    </p>
+                    $$\log p(x \mid z) \;\propto\; -\|x - \hat{x}\|^2$$
+                    <p>
+                        If we instead model the pixels as Bernoulli probabilities, it becomes
+                        binary cross-entropy. Either way, this term is the familiar
+                        reconstruction loss.
+                    </p>
+
+                    <h2>The KL Divergence — Deriving the Closed Form</h2>
+                    <p>
+                        This is the part that took me the longest to internalise. KL
+                        divergence between two distributions is defined as:
+                    </p>
+                    $$D_{KL}(q \| p) = \int q(z)\, \log \frac{q(z)}{p(z)}\, dz$$
+                    <p>
+                        For one latent dimension with $q(z) = \mathcal{N}(\mu, \sigma^2)$ and
+                        $p(z) = \mathcal{N}(0, 1)$, the Gaussian PDFs are:
+                    </p>
+                    $$q(z) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\!\left(-\frac{(z-\mu)^2}{2\sigma^2}\right)
+                    \qquad
+                    p(z) = \frac{1}{\sqrt{2\pi}} \exp\!\left(-\frac{z^2}{2}\right)$$
+                    <p>
+                        Taking logs and subtracting, the $-\tfrac{1}{2}\log(2\pi)$ constants
+                        cancel and we are left with:
+                    </p>
+                    $$\log \frac{q(z)}{p(z)} = -\frac{1}{2}\log \sigma^2
+                    - \frac{(z - \mu)^2}{2\sigma^2}
+                    + \frac{z^2}{2}$$
+                    <p>
+                        Now take the expectation under $q(z)$ term by term.
+                    </p>
+
+                    <h3>Term A</h3>
+                    <p>
+                        $\mathbb{E}_q\!\left[-\tfrac{1}{2}\log \sigma^2\right]$ is a constant
+                        with respect to $z$ — it only depends on the encoder's output — so it
+                        passes straight through:
+                    </p>
+                    $$\mathbb{E}_q\!\left[-\tfrac{1}{2}\log \sigma^2\right] = -\tfrac{1}{2}\log \sigma^2$$
+
+                    <h3>Term B</h3>
+                    <p>
+                        $\mathbb{E}_q\!\left[-\tfrac{(z - \mu)^2}{2\sigma^2}\right]$. Since
+                        $z \sim \mathcal{N}(\mu, \sigma^2)$, the quantity $(z - \mu)^2$ is the
+                        squared deviation of $z$ from its own mean, and the expectation of
+                        that is, by definition, the variance:
+                    </p>
+                    $$\mathbb{E}_q[(z - \mu)^2] = \sigma^2
+                    \quad\Longrightarrow\quad
+                    \mathbb{E}_q\!\left[-\frac{(z - \mu)^2}{2\sigma^2}\right] = -\frac{\sigma^2}{2\sigma^2} =
+                    -\frac{1}{2}$$
+
+                    <h3>Term C (and a short detour on an identity)</h3>
+                    <p>
+                        $\mathbb{E}_q\!\left[\tfrac{z^2}{2}\right]$ needs $\mathbb{E}_q[z^2]$.
+                        This is where I initially got stuck, because the usual derivation
+                        jumps straight to the identity
+                        $\mathbb{E}[z^2] = \operatorname{Var}(z) + (\mathbb{E}[z])^2$
+                        without saying where it comes from. It is worth pausing on, because
+                        it is not a trick — it is just the definition of variance rearranged.
+                    </p>
+                    <p>
+                        Start from the definition of variance and let $\mu= \mathbb{E}[z]$:
+                    </p>
+                    $$\operatorname{Var}(z) = \mathbb{E}\!\left[(z - \mu)^2\right]
+                    = \mathbb{E}\!\left[z^2 - 2z\mu + \mu^2\right]$$
+                    <p>
+                        Expectation is linear, and $\mu$ is a constant (just a number — the
+                        mean), so it pulls out of any expectation it appears in:
+                    </p>
+                    $$\operatorname{Var}(z) = \mathbb{E}[z^2] - 2\mu\, \mathbb{E}[z] + \mu^2$$
+                    <p>
+                        And $\mathbb{E}[z] = \mu$ by definition, so:
+                    </p>
+                    $$\operatorname{Var}(z) = \mathbb{E}[z^2] - 2\mu^2 + \mu^2 = \mathbb{E}[z^2] - \mu^2$$
+                    <p>
+                        Rearranging gives the identity we need:
+                    </p>
+                    $$\mathbb{E}[z^2] = \operatorname{Var}(z) + (\mathbb{E}[z])^2$$
+                    <p>
+                        That is all it is — the definition of variance, expanded, solved for
+                        $\mathbb{E}[z^2]$. With this in hand, and since $z\sim q$ has
+                        $\operatorname{Var}(z) = \sigma^2$ and $\mathbb{E}[z] = \mu$:
+                    </p>
+                    $$\mathbb{E}_q[z^2] = \sigma^2 + \mu^2
+                    \quad\Longrightarrow\quad
+                    \mathbb{E}_q\!\left[\frac{z^2}{2}\right] = \frac{\sigma^2 + \mu^2}{2}$$
+
+                    <h3>Combining the Three Terms</h3>
+                    <p>
+                        Adding Terms A, B, and C:
+                    </p>
+                    $$D_{KL} = -\frac{1}{2}\log \sigma^2 - \frac{1}{2} + \frac{\sigma^2 + \mu^2}{2}
+                    = \frac{1}{2}\!\left(-\log \sigma^2 - 1 + \sigma^2 +\mu^2\right)$$
+                    <p>
+                        Or, in the form you will see quoted in most papers:
+                    </p>
+                    $$\boxed{D_{KL} = -\frac{1}{2}\left(1 + \log \sigma^2 - \mu^2 - \sigma^2\right)}$$
+                    <p>
+                        And for a $d$-dimensional latent with a diagonal covariance, each
+                        dimension contributes independently, so we just sum:
+                    </p>
+                    $$D_{KL} = -\frac{1}{2}\sum_{j=1}^{d}\left(1 + \log \sigma_j^2 - \mu_j^2 - \sigma_j^2\right)$$
+                    <p>
+                        Sanity check the intuition: if the encoder outputs$\mu = 0$ and
+                        $\sigma^2 = 1$ (i.e. it matches the prior exactly), the penalty is
+                        $-\tfrac{1}{2}(1 + 0 - 0 - 1) = 0$. Any drift awayfrom a standard
+                        normal — in either the mean or the variance — makes the penalty grow.
+                    </p>
+
+                    <h2>The Reparameterisation Trick</h2>
+                    <p>
+                        One more obstacle: during training, we need to sample
+                        $z \sim q_\phi(z \mid x) = \mathcal{N}(\mu, \sigma^2)$ and then
+                        backpropagate through that sampling step to updatethe encoder. But
+                        sampling is a stochastic operation — you cannot compute
+                        $\partial z / \partial \mu$ if $z$ was just drawn at random.
+                    </p>
+                    <p>
+                        The fix is to push the randomness outside the learnable parameters.
+                        Rewrite the sample as a deterministic function of $\mu$, $\sigma$, and
+                        an external noise variable:
+                    </p>
+                    $$z = \mu + \sigma \odot \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, I)$$
+                    <p>
+                        Now gradients flow cleanly:
+                        $\partial z / \partial \mu = 1$ and $\partial z / \partial \sigma = \varepsilon$.
+                        The randomness $\varepsilon$ is treated as a constant input, like the
+                        data itself. This is the same change-of-variables logic that underpins
+                        the sampling form of the Gaussian — here it just gets used for
+                        gradient flow rather than for deriving a PDF.
+                    </p>
+
+                    <h2>The Final Loss</h2>
+                    <p>
+                        Putting it all together, for a single data point we minimise:
+                    </p>
+                    $$\mathcal{L} = \underbrace{\|x - \hat{x}\|^2}_{\text{reconstruction}}
+                    \;+\; \underbrace{-\frac{1}{2}\sum_{j=1}^{d}\left(1 + \log \sigma_j^2 - \mu_j^2 -
+                    \sigma_j^2\right)}_{\text{KL divergence}}$$
+                    <p>
+                        In practice you often weight the KL term — this isthe $\beta$-VAE
+                        variant:
+                    </p>
+                    $$\mathcal{L} = \text{Reconstruction} + \beta \cdot D_{KL}$$
+                    <p>
+                        With $\beta < 1$ you get sharper reconstructions but a messier latent space; with $\beta> 1$ the
+                            latent space becomes more disentangled but
+                            the outputs tend to blur. It is a direct lever on the
+                            reconstruction-vs-regularity tradeoff.
+                    </p>
+                    <p>
+                        A practical note: the encoder outputs $\log \sigma^2$ rather than
+                        $\sigma^2$ directly. It is numerically more stable(no risk of
+                        predicting a negative variance), and it drops straight into the KL
+                        formula as written.
+                    </p>
+
+                    <h2>Training vs Generation</h2>
+                    <p>
+                        During <strong>training</strong> both networks areactive:
+                    </p>
+                    $$x \xrightarrow{\text{encoder}} (\mu, \log \sigma^2)
+                    \xrightarrow{\text{reparam}} z
+                    \xrightarrow{\text{decoder}} \hat{x}$$
+                    <p>
+                        At <strong>generation</strong> time, the encoder is gone entirely —
+                        we just sample from the prior and decode:
+                    </p>
+                    $$z \sim \mathcal{N}(0, I) \xrightarrow{\text{decoder}} \text{new image}$$
+                    <p>
+                        The KL term is what makes this second step work. By pulling every
+                        per-input encoder distribution toward $\mathcal{N}(0, I)$ during
+                        training, it ensures that random samples from the prior land in
+                        regions the decoder actually knows how to decode.
+                    </p>
+
+                    <h2>Conclusion</h2>
+                    <p>
+                        What I like about the VAE derivation is how much it hinges on
+                        elementary identities — the definition of variance, Jensen's
+                        inequality, basic properties of Gaussians. There is no single
+                        breathtaking insight; it is a chain of small, honest algebraic moves
+                        that ends somewhere genuinely useful. Next up I want to try coupling a
+                        VAE to a diffusion prior, the way Stable Diffusiondoes — which would
+                        tie this article back to the diffusion posts from earlier.
+                    </p>
+
+                    <div class="article-tags">
+                        <span class="tag">VAE</span>
+                        <span class="tag">Machine Learning</span>
+                        <span class="tag">Math</span>
+                        <span class="tag">Gaussian</span>
+                        <span class="tag">Generative Models</span>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <span>&copy; 2026 Decstar</span>
+            <a href="articles.html">&larr; All Articles</a>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
