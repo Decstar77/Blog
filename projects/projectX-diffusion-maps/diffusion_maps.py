@@ -43,7 +43,7 @@ COLORS = [
 ]
 
 LABELS = ['Empty', 'Wall', 'Floor', 'Player', 'Enemy']
-def display_map(grid):
+def display_map(grid, i):
     cmap = ListedColormap(COLORS)
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.imshow(grid, cmap=cmap, vmin=0, vmax=len(COLORS) - 1,
@@ -58,7 +58,8 @@ def display_map(grid):
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f"projects/projectX-diffusion-maps/samples/sample{i}.png")
+    #plt.show()
 
 class GridDataset(Dataset):
     def __init__(self, data):
@@ -70,56 +71,104 @@ class GridDataset(Dataset):
     def __getitem__(self, index):
         return encode_map( self.data[index] )
 
+def sinusoidal( t, d_model ):
+        N = 10_000
+        D = d_model
+        K = torch.arange(0, D//2)
+
+        positions = t.unsqueeze(1).float()
+        embeddings = torch.zeros(t.shape[0], D, device=t.device)
+        K = K.to(t.device)
+        denominators = torch.pow( N, 2 * K / D )
+        embeddings[:, 0::2] = torch.sin(positions/denominators)
+        embeddings[:, 1::2] = torch.cos(positions/denominators)
+        return embeddings
+
 class EncoderBlock(nn.Module):
     def __init__(self, embed_vec, in_channels, out_channels):
         super(EncoderBlock, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.linn = nn.Linear(embed_vec, out_channels)
+        self.norm = nn.GroupNorm(num_groups=8, num_channels=out_channels)
         self.lina = nn.ReLU()
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, x):
         r, embed = x
         r = self.conv(r)
-        self.residual = self.lina( r + self.linn( embed ).unsqueeze(-1).unsqueeze(-1))
-        r = self.pool(self.residual)
-        return r
+        r = r + self.linn( embed ).unsqueeze(-1).unsqueeze(-1)
+        r = self.norm(r)
+        s = self.lina(r)
+        r = self.pool(s)
+        return r, s
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, relu = True):
+    def __init__(self, embed_vec, in_channels, out_channels ):
         super(DecoderBlock, self).__init__()
-        self.relu = relu
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.conv = nn.Conv2d(in_channels=in_channels,out_channels=out_channels, kernel_size=3, padding=1)
-        if ( relu ):
-            self.lina = nn.ReLU()
+        self.up     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
+        self.conv   = nn.Conv2d( in_channels=in_channels * 2, out_channels=out_channels, kernel_size=3, padding=1 )
+        self.norm   = nn.GroupNorm(8, out_channels)
+        self.proj   = nn.Linear( embed_vec, out_channels )
+        self.act    = nn.ReLU()
 
     def forward(self, x):
-        r, residual = x 
+        r, embed, s = x 
         r = self.up(r)
-        r = torch.cat( [r, residual], dim=1 )
-        r = self.conv(r)
-        if self.relu:
-            r = self.lina(r)
+        r = torch.cat([r, s], dim=1)
+        r = self.conv( r )
+        r = self.norm( r )
+        r = r + self.proj( embed ).unsqueeze(-1).unsqueeze(-1)
+        r = self.act(r)
+
+        return r
+
+class FinalBlock(nn.Module):
+    def __init__(self, in_channels, out_channels ):
+        super(FinalBlock, self).__init__()
+        self.up      = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
+        self.conv    = nn.Conv2d( in_channels=in_channels * 2, out_channels=out_channels, kernel_size=3, padding=1 )
+
+    def forward(self, x):
+        r, s = x
+        r = self.up(r)
+        r = torch.cat([r, s], dim=1)
+        r = self.conv( r )
         return r
 
 class Model(nn.Module):
-    def __init__(self):
+    def __init__(self, d_model = 64):
         super(Model, self).__init__()
-        self.embed = nn.Embedding(t_max, 32)
-        self.e1 = EncoderBlock(embed_vec=32, in_channels=5,  out_channels=32)
-        self.e2 = EncoderBlock(embed_vec=32, in_channels=32, out_channels=64)
-        self.d1 = DecoderBlock(in_channels=64 * 2, out_channels=32)
-        self.d2 = DecoderBlock(in_channels=32 * 2, out_channels=5, relu=False)
+        self.d_model= d_model
+
+        self.time_mlp = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.SiLU(),
+            nn.Linear(d_model, d_model),
+        )
+        
+        self.e1 = EncoderBlock(embed_vec=d_model, in_channels=5,  out_channels=64)
+        self.e2 = EncoderBlock(embed_vec=d_model, in_channels=64, out_channels=128)
+        self.e3 = EncoderBlock(embed_vec=d_model, in_channels=128, out_channels=256)
+
+        self.botl = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.bota = nn.ReLU()
+
+        self.d3 = DecoderBlock(embed_vec=d_model, in_channels=256, out_channels=128)
+        self.d2 = DecoderBlock(embed_vec=d_model, in_channels=128, out_channels=64)
+        self.d1 = FinalBlock(in_channels=64, out_channels=5)
 
     def forward(self, x):
         r, t = x
-        embed = self.embed( t )
-
-        r = self.e1( ( r, embed ) )
-        r = self.e2( ( r, embed ) )
-        r = self.d1( ( r, self.e2.residual ) )
-        r = self.d2( ( r, self.e1.residual ) )
+        embed = self.time_mlp( sinusoidal(t, self.d_model) )
+        r, s1 = self.e1((r, embed))
+        r, s2 = self.e2((r, embed))
+        r, s3 = self.e3((r, embed))
+        
+        r = self.bota(self.botl(r))
+        
+        r = self.d3((r, embed, s3))
+        r = self.d2((r, embed, s2))
+        r = self.d1((r, s1))
 
         return r
 
@@ -145,9 +194,12 @@ if __name__ == "__main__":
     validation_dataset      = GridDataset(map_grids[int(0.9 * len(map_grids)):])
     validation_dataloader   = DataLoader(dataset=validation_dataset,   batch_size=32)
 
+    epochs = 20
+
     model       = Model()
     loss_func   = nn.MSELoss()
     optimizer   = optim.Adam( model.parameters(), lr=0.001 )
+    scheduler       = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     beta_tensor         = torch.tensor([ f_beta( i ) for i in range(t_max) ], dtype=float )
     alpha_tensor        = torch.tensor([ f_alpha( i ) for i in range(t_max) ], dtype=float )
@@ -186,7 +238,7 @@ if __name__ == "__main__":
 
         return x_t
 
-    for epoch in range(4):
+    for epoch in range(epochs):
         print(f"============Epoch={epoch}============")
 
         training_loss = 0
@@ -206,6 +258,10 @@ if __name__ == "__main__":
             loss_str = f"{(training_loss / training_count):.4f}"
             pbar.set_postfix({"Loss" : loss_str})
 
+        scheduler.step()
+        
+        torch.save(model.state_dict(), "./projects/projectX-diffusion-maps/model.pt")
+
         validation_loss = 0
         validation_count = 0
         model.eval()
@@ -219,6 +275,6 @@ if __name__ == "__main__":
             loss_str = f"{(validation_loss / validation_count):.4f}"
             pbar.set_postfix({"Loss" : loss_str})
     
-    for _ in range(10):
+    for i in range(10):
         grid = decode_map( sample_reverse(1).reshape(5, 32, 32) )
-        display_map(grid)
+        display_map(grid, i)
