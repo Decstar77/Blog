@@ -1,6 +1,14 @@
 // All articles, newest first
 const articles = [
     {
+        title: "The Math Behind Variational Autoencoders",
+        summary: "From the intractable evidence integral to the ELBO — deriving the variational lower bound, the reparameterisation trick, and the closed-form KL between two Gaussians that turns a VAE into something you can actually train with backprop.",
+        category: "Machine Learning",
+        date: "2026-04-22",
+        readTime: "25 min read",
+        url: "vae-math.html"
+    },
+    {
         title: "Diffusion #2: The Math Of The Gaussian Backward Pass",
         summary: "Deriving the reverse diffusion posterior from Bayes' theorem — working through log-space algebra to obtain the closed-form mean and variance, then eliminating x₀ via the reparameterisation trick to arrive at the noise-prediction form used during sampling.",
         category: "Machine Learning",

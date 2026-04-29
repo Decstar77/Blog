@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diffusion on MNIST — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Machine Learning</span>
+            <h1 style="text-align: center;">Diffusion on MNIST</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-calendar-alt"></i> April 2025</span>
+                <span><i class="fas fa-tag"></i> Python · PyTorch · torchvision</span>
+                <span><i class="fas fa-hashtag"></i> Project 8</span>
+            </div>
+        </header>
+        
+        <div class="article-body">
+            <p class="lead">
+                    A class-conditional DDPM trained on MNIST. A small U-Net with FiLM-modulated
+                    ResNet-style blocks predicts the noise at each diffusion step, conditioned on
+                    a sinusoidal time embedding plus a learned class-label embedding. Pick a digit
+                    below and the model will denoise pure Gaussian noise into a handwritten sample.
+            </p>
+        </div>
+        <br/>
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <div class="demo-controls" style="flex-wrap: wrap; justify-content: center;">
+                <div id="digitPicker" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;">
+                    <button class="mnist-clear-btn digit-btn" data-digit="0">0</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="1">1</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="2">2</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="3">3</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="4">4</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="5">5</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="6">6</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="7">7</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="8">8</button>
+                    <button class="mnist-clear-btn digit-btn" data-digit="9">9</button>
+                </div>
+            </div>
+
+            <div class="classifier-canvas-wrap" style="margin-top: 16px;">
+                <canvas id="mnistCanvas" width="280" height="280" style="image-rendering: pixelated; background: #000; border: 1px solid var(--border);"></canvas>
+                <p class="demo-canvas-hint">Generated 28×28 sample (upscaled)</p>
+            </div>
+
+            <div class="demo-controls">
+                <button id="generateBtn" class="mnist-clear-btn">Generate</button>
+            </div>
+
+            <div class="demo-results" id="demoResults">
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Selected digit</span>
+                    <span class="demo-result-value" id="resultDigit">—</span>
+                </div>
+                <div class="demo-result-divider"></div>
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Status</span>
+                    <span class="demo-result-value demo-result-error" id="resultPhase" style="font-size: 0.9rem;">idle</span>
+                </div>
+            </div>
+
+            <p class="demo-status" id="demoStatus">Pick a digit, then press Generate.</p>
+        </div>
+
+        <div class="article-body">
+            <h2>Samples</h2>
+            <p style="color: var(--text-muted); font-size: 0.92rem; margin-top: -0.5rem;">
+                10 samples per digit (one column each, 0–9) drawn at the end of training.
+            </p>
+            <p style="text-align: center;">
+                <img src="diffusion-mnist-sample.png" alt="MNIST diffusion samples" style="width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px;">
+            </p>
+
+            <h2>Live demo</h2>
+            <p style="color: var(--text-muted); font-size: 0.92rem; margin-top: -0.5rem;">
+                Pick a digit and press <em>Generate</em>. The runner walks 1000 reverse-diffusion
+                steps on CPU, so expect a few seconds per sample.
+            </p>
+        </div>
+
+        <!-- ── Code ─────────────────────────────────────────────── -->
+        <div class="article-body">
+            <h2 style="text-align: center;">Code</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">
+                Full source on <a href="https://github.com/Decstar77">GitHub</a> — abridged here for readability.
+            </p>
+            <pre><code>import torch
+import torch.nn as nn
+
+beta_start  = 1e-4
+beta_end    = 0.02
+t_max_steps = 1000
+
+def f_beta(i):  return beta_start + (beta_end - beta_start) * (i / (t_max_steps - 1))
+def f_alpha(i): return 1 - f_beta(i)
+
+
+class TinyDiffusion(nn.Module):
+    """U-Net with FiLM-conditioned blocks. Conditioning = sinusoidal(t) + Embedding(label)."""
+    def __init__(self):
+        super().__init__()
+        chanels = [64, 128, 256]
+
+        self.t_embed = nn.Sequential(nn.Linear(32, 32), nn.ReLU(), nn.Linear(32, 32))
+        self.l_embed = nn.Embedding(10, 32)
+
+        # encoder, bottleneck, decoder — each conv block followed by GroupNorm
+        # and FiLM (gamma, beta) generated from `cond` via a tiny linear layer.
+        # See diffusion_mnist.py for the full architecture.
+
+    def film(self, linear, cond):
+        gamma, beta = linear(cond).chunk(2, dim=1)
+        return gamma.unsqueeze(-1).unsqueeze(-1), beta.unsqueeze(-1).unsqueeze(-1)
+
+
+beta_tensor       = torch.tensor([f_beta(i)  for i in range(t_max_steps)])
+alpha_tensor      = torch.tensor([f_alpha(i) for i in range(t_max_steps)])
+alpha_prod_tensor = torch.cumprod(alpha_tensor, dim=0)
+
+
+@torch.no_grad()
+def sample_reverse(net, num_samples, value):
+    net.eval()
+    x_t = torch.randn(num_samples, 1, 28, 28)
+    for t in reversed(range(t_max_steps)):
+        t_en  = torch.full((num_samples,), t, dtype=torch.long)
+        label = torch.full((num_samples,), value, dtype=torch.long)
+        eps_hat = net((x_t, t_en, label))
+
+        alpha_t     = alpha_tensor[t]
+        alpha_bar_t = alpha_prod_tensor[t]
+        beta_t      = beta_tensor[t]
+
+        mu_t = (1.0 / torch.sqrt(alpha_t)) * (
+            x_t - ((1.0 - alpha_t) / torch.sqrt(1.0 - alpha_bar_t)) * eps_hat
+        )
+
+        if t > 0:
+            x_t = mu_t + torch.sqrt(beta_t) * torch.randn_like(x_t)
+        else:
+            x_t = mu_t
+
+    return x_t
+
+
+# Training loop: standard DDPM — sample t uniformly, noise the input
+# with sqrt(alpha_bar_t) * x + sqrt(1 - alpha_bar_t) * eps, train MSE
+# between predicted and true epsilon. 20 epochs, Adam(1e-4), cosine LR.</code></pre>
+        </div>
+
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+<script>
+const RUNNER = '/api';
+
+const canvas    = document.getElementById('mnistCanvas');
+const ctx       = canvas.getContext('2d');
+const W         = canvas.width;
+const H         = canvas.height;
+const CELL      = W / 28;
+
+const btn       = document.getElementById('generateBtn');
+const status    = document.getElementById('demoStatus');
+const phaseEl   = document.getElementById('resultPhase');
+const digitEl   = document.getElementById('resultDigit');
+const digitBtns = document.querySelectorAll('.digit-btn');
+
+let selectedDigit = null;
+
+function drawNoise() {
+    const img = ctx.createImageData(W, H);
+    for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.floor(Math.random() * 255);
+        img.data[i] = v;
+        img.data[i + 1] = v;
+        img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+}
+
+function drawImage(grid) {
+    // grid: 28x28 floats in [0,1]
+    ctx.clearRect(0, 0, W, H);
+    for (let r = 0; r < 28; r++) {
+        for (let c = 0; c < 28; c++) {
+            const v = Math.max(0, Math.min(1, grid[r][c]));
+            const g = Math.floor(v * 255);
+            ctx.fillStyle = `rgb(${g}, ${g}, ${g})`;
+            ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
+        }
+    }
+}
+
+digitBtns.forEach(b => {
+    b.addEventListener('click', () => {
+        selectedDigit = parseInt(b.dataset.digit, 10);
+        digitEl.textContent = selectedDigit;
+        digitBtns.forEach(x => {
+            x.style.background = '';
+            x.style.color = '';
+            x.style.borderColor = '';
+        });
+        b.style.background = 'var(--accent)';
+        b.style.color = '#fff';
+        b.style.borderColor = 'var(--accent)';
+    });
+});
+
+async function generate() {
+    if (selectedDigit === null) {
+        status.textContent = 'Pick a digit first.';
+        status.style.color = '#b05050';
+        return;
+    }
+
+    btn.disabled = true;
+    digitBtns.forEach(b => b.disabled = true);
+    phaseEl.textContent = 'sampling';
+    status.textContent  = 'Querying model… (~5–15 seconds)';
+    status.style.color  = 'var(--text-muted)';
+    drawNoise();
+
+    try {
+        const res = await fetch(`${RUNNER}/run/diffusion-mnist`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ digit: selectedDigit }),
+        });
+        if (!res.ok) throw new Error('bad response');
+        const data = await res.json();
+
+        drawImage(data.image);
+        phaseEl.textContent = 'done';
+        status.textContent  = `Generated a ${data.digit}.`;
+    } catch {
+        status.textContent  = 'Runner unavailable — start the Docker services to enable live queries.';
+        status.style.color  = '#b05050';
+        phaseEl.textContent = 'offline';
+    } finally {
+        btn.disabled = false;
+        digitBtns.forEach(b => b.disabled = false);
+    }
+}
+
+btn.addEventListener('click', generate);
+
+// Initial canvas state — show noise
+drawNoise();
+</script>
+</body>
+</html>

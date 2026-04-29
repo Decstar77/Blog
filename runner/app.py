@@ -79,6 +79,13 @@ diffusion_model, diffusion_module = load_project(
 )
 print("Diffusion (circle) loaded.")
 
+mnist_diffusion_model, mnist_diffusion_module = load_project(
+    py_path       = os.path.join(BASE, "projects/project8-diffusion-mnist/diffusion_mnist.py"),
+    weights_path  = os.path.join(BASE, "projects/project8-diffusion-mnist/model.pt"),
+    return_module = True,
+)
+print("Diffusion (MNIST) loaded.")
+
 # Pre-generate the circle dataset (deterministic — random_state=6)
 _circle_xs, _circle_ys = make_circles(n_samples=2000, noise=0.1, random_state=6)
 circle_dataset = {
@@ -210,6 +217,25 @@ def run_diffusion_circle(req: DiffusionRequest):
 @app.get("/data/diffusion-circle")
 def diffusion_data():
     return diffusion_dataset
+
+
+# ── Diffusion (MNIST) ─────────────────────────────────────────────
+
+class MnistDiffusionRequest(BaseModel):
+    digit: int
+
+
+@app.post("/run/diffusion-mnist")
+def run_diffusion_mnist(req: MnistDiffusionRequest):
+    digit = max(0, min(9, int(req.digit)))
+    samples = mnist_diffusion_module.sample_reverse(mnist_diffusion_model, 1, digit)
+    image = samples[0, 0]
+    image = (image + 1.0) / 2.0
+    image = image.clamp(0.0, 1.0)
+    return {
+        "digit": digit,
+        "image": [[round(float(v), 4) for v in row] for row in image.tolist()],
+    }
 
 
 # ── Health ────────────────────────────────────────────────────────
