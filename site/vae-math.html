@@ -68,24 +68,12 @@
 
                 <div class="article-body">
                     <p class="lead">
-                        Having spent a while on diffusion models, I circled back to an older
-                        idea I had skipped over: the Variational Autoencoder. The architecture
-                        is easy. The math behind why that architecture is the right one is not.
-                        This article is my attempt to walk through that derivation the way I
-                        wish someone had walked me through it.
-                    </p>
-
-                    <h2>The High-Level Idea</h2>
-                    <p>
-                        A VAE is a generative model with two networks: an <strong>encoder</strong>
-                        that compresses an input $x$ (say, a 28×28 MNIST digit) into a small
-                        latent vector $z$, and a <strong>decoder</strong> that reconstructs $x$
-                        from $z$. The twist that distinguishes a VAE from a plain autoencoder is
-                        that the encoder does not output a single point — it outputs the
-                        <em>parameters of a probability distribution</em> over $z$. This matters
-                        because it forces the latent space to be smooth and continuous, which is
-                        what makes it possible to sample new $z$ values and actually get
-                        coherent images back from the decoder.
+                        Having spent a while on diffusion models I kept running into VAE's,
+                        Variational Autoencoders, in the literature. The main idea is to have a model compress down into some latent space, 
+                        then poof it back up again. A very basic example is my color space VAE, which you can find under projects.
+                        It compresses the 3 main color (Red green blue) hues down into a latent 2D space. The great thing about this latent space 
+                        is that you are able to sample within the latent space which results in entirely new outputs.
+                        This post however is my understanding and breakdown of the math.
                     </p>
 
                     <h2>What We Actually Want</h2>
