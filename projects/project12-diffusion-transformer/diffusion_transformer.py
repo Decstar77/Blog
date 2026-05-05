@@ -17,8 +17,8 @@ transform = torchvision.transforms.Compose(
         torchvision.transforms.Normalize((0.5,), (0.5,)),
     ])
 
-mnist_train = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-mnist_validation  = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+mnist_train         = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+mnist_validation    = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 batch_size = 64
 
 beta_start = 1e-4
