@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GeoMesh — Web</title>
+<style>
+    html, body { margin: 0; padding: 0; background: #0a0a10; color: #ddd; font-family: monospace; height: 100%; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+    canvas { background: #000; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+    <h1>GeoMesh</h1>
+    <canvas id="geomesh-canvas" width="1280" height="720"></canvas>
+    <script src="odin.js"></script>
+    <script>
+        // odin.js exposes window.odin.runWasm. Load our compiled module.
+        window.odin.runWasm("geomesh.wasm").catch(err => {
+            console.error(err);
+            document.body.append("Failed to load WASM: " + err);
+        });
+    </script>
+</body>
+</html>
