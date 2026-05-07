@@ -9,3 +9,5 @@ mapgen
 checkpoints
 checkpoints2
 *.npz
+*.exe
+*.wasm
