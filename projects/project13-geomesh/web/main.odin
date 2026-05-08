@@ -42,6 +42,11 @@ step :: proc(dt: f64, ctx: ^runtime.Context) -> bool {
         g_app.renderer.set_viewport(int(g_w), int(g_h))
     }
 
+    // Feed aspect into the logic input so the camera's projection stays in
+    // sync with the canvas. No input wiring on the web yet, so the camera
+    // simply holds its initial pose.
+    g_app.input = logic.Input{aspect = f32(g_w) / f32(max(g_h, 1))}
+
     logic.frame(&g_app, f32(dt))
     return true
 }

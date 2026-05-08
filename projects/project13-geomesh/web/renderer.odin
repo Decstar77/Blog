@@ -9,9 +9,11 @@ import logic "../logic"
 // WebGL2-flavored GLSL (ES 3.00). Same uniforms as the desktop shader.
 VS_SRC :: `#version 300 es
 layout(location = 0) in vec3 a_pos;
+uniform mat4 u_view_proj;
 uniform vec4 u_transform; // xyz = translate, w = scale
 void main() {
-    gl_Position = vec4(a_pos * u_transform.w + u_transform.xyz, 1.0);
+    vec3 p = a_pos * u_transform.w + u_transform.xyz;
+    gl_Position = u_view_proj * vec4(p, 1.0);
 }`
 
 FS_SRC :: `#version 300 es
@@ -31,13 +33,10 @@ GL_Mesh :: struct {
 g_program       : gl.Program
 g_u_color_loc   : i32
 g_u_xform_loc   : i32
+g_u_vp_loc      : i32
 g_meshes        : [dynamic]GL_Mesh
 g_line_vao      : gl.VertexArrayObject
 g_line_vbo      : gl.Buffer
-g_sphere_handle : logic.Mesh_Handle
-
-SPHERE_STACKS :: 24
-SPHERE_SLICES :: 32
 
 renderer_init :: proc() {
     program, ok := gl.CreateProgramFromStrings({VS_SRC}, {FS_SRC})
@@ -45,9 +44,12 @@ renderer_init :: proc() {
         fmt.eprintln("shader program failed to build")
         return
     }
-    g_program = program
+    g_program     = program
     g_u_color_loc = gl.GetUniformLocation(program, "u_color")
     g_u_xform_loc = gl.GetUniformLocation(program, "u_transform")
+    g_u_vp_loc    = gl.GetUniformLocation(program, "u_view_proj")
+
+    gl.Enable(gl.DEPTH_TEST)
 
     g_line_vao = gl.CreateVertexArray()
     g_line_vbo = gl.CreateBuffer()
@@ -57,21 +59,16 @@ renderer_init :: proc() {
     gl.EnableVertexAttribArray(0)
     gl.VertexAttribPointer(0, 3, gl.FLOAT, false, size_of([3]f32), 0)
     gl.BindVertexArray(0)
-
-    sphere_pos, sphere_idx := logic.generate_uv_sphere(SPHERE_STACKS, SPHERE_SLICES)
-    defer delete(sphere_pos)
-    defer delete(sphere_idx)
-    g_sphere_handle = gl_create_mesh(sphere_pos, sphere_idx)
 }
 
 make_renderer :: proc() -> logic.Renderer {
     return logic.Renderer{
-        create_mesh  = gl_create_mesh,
-        draw_mesh    = gl_draw_mesh,
-        draw_line    = gl_draw_line,
-        draw_sphere  = gl_draw_sphere,
-        clear        = gl_clear,
-        set_viewport = gl_set_viewport,
+        create_mesh         = gl_create_mesh,
+        draw_mesh           = gl_draw_mesh,
+        draw_line           = gl_draw_line,
+        clear               = gl_clear,
+        set_viewport        = gl_set_viewport,
+        set_view_projection = gl_set_view_projection,
     }
 }
 
@@ -134,18 +131,6 @@ gl_draw_line :: proc(a, b: logic.Vec3, color: logic.Color) {
 }
 
 @(private="file")
-gl_draw_sphere :: proc(center: logic.Vec3, radius: f32, color: logic.Color) {
-    idx := int(g_sphere_handle) - 1
-    if idx < 0 || idx >= len(g_meshes) do return
-    m := g_meshes[idx]
-
-    set_uniforms(color, center, radius)
-    gl.BindVertexArray(m.vao)
-    gl.DrawElements(gl.TRIANGLES, m.index_count, gl.UNSIGNED_INT, nil)
-    gl.BindVertexArray(0)
-}
-
-@(private="file")
 gl_clear :: proc(color: logic.Color) {
     gl.ClearColor(color.r, color.g, color.b, color.a)
     gl.Clear(u32(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT))
@@ -154,4 +139,10 @@ gl_clear :: proc(color: logic.Color) {
 @(private="file")
 gl_set_viewport :: proc(w, h: int) {
     gl.Viewport(0, 0, i32(w), i32(h))
+}
+
+@(private="file")
+gl_set_view_projection :: proc(vp: logic.Mat4) {
+    m := glm.mat4(vp)
+    gl.UniformMatrix4fv(g_u_vp_loc, m)
 }
