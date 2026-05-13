@@ -61,6 +61,8 @@ renderer_init :: proc() {
     gl.EnableVertexAttribArray(0)
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of([3]f32), 0)
     gl.BindVertexArray(0)
+
+    text_renderer_init()
 }
 
 make_renderer :: proc() -> logic.Renderer {
@@ -71,6 +73,8 @@ make_renderer :: proc() -> logic.Renderer {
         clear               = gl_clear,
         set_viewport        = gl_set_viewport,
         set_view_projection = gl_set_view_projection,
+        load_font           = gl_load_font,
+        draw_text_3d        = gl_draw_text_3d,
     }
 }
 
@@ -150,4 +154,5 @@ gl_set_view_projection :: proc(vp: logic.Mat4) {
     m := vp
     gl.UseProgram(g_program)
     gl.UniformMatrix4fv(g_u_vp_loc, 1, gl.FALSE, &m[0, 0])
+    text_set_view_projection(vp)
 }

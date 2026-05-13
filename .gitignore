@@ -11,3 +11,4 @@ checkpoints2
 *.npz
 *.exe
 *.wasm
+extern

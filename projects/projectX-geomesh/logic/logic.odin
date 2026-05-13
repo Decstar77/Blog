@@ -1,5 +1,6 @@
 package logic
 
+import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
@@ -16,6 +17,15 @@ Renderer :: struct {
     clear               : proc(color: Color),
     set_viewport        : proc(w, h: int),
     set_view_projection : proc(vp: Mat4),
+
+    // Text. `load_font` reads the MSDF atlas PNG + JSON produced by
+    // msdf-atlas-gen. `draw_text_3d` places `text` at `anchor` as a quad
+    // camera-billboarded using `cam_right` / `cam_up`; one em equals
+    // `em_size` world units (or pixels, depending on basis vectors).
+    load_font           : proc(png_path, json_path: string) -> Font_Handle,
+    draw_text_3d        : proc(font: Font_Handle, text: string, anchor: Vec3,
+                               em_size: f32, color: Color,
+                               cam_right, cam_up: Vec3),
 }
 
 // Per-frame input snapshot. Filled in by the platform layer (win32/web) and
@@ -47,6 +57,7 @@ App :: struct {
     renderer:   Renderer,
     plane:      HalfMesh,
     plane_mesh: Mesh_Handle,
+    font:       Font_Handle,
     camera:     Camera,
     input:      Input,
     time:       f32,
@@ -59,6 +70,9 @@ initialize :: proc(app: ^App) {
     defer delete(positions)
     defer delete(indices)
     app.plane_mesh = app.renderer.create_mesh(positions, indices)
+
+    app.font = app.renderer.load_font("res/fonts/FiraCode-Regular.png",
+                                      "res/fonts/FiraCode-Regular.json")
 
     app.camera = Camera{
         position   = {0, 3, 6},
@@ -153,4 +167,21 @@ frame :: proc(app: ^App, dt: f32) {
     app.renderer.draw_line({0,0,0}, {1,0,0}, {0.95, 0.30, 0.30, 1})
     app.renderer.draw_line({0,0,0}, {0,1,0}, {0.30, 0.95, 0.30, 1})
     app.renderer.draw_line({0,0,0}, {0,0,1}, {0.30, 0.55, 0.95, 1})
+
+    // Camera-facing basis for billboarded text. The view's "up" is world up
+    // projected onto the camera plane -- good enough for upright labels.
+    cam_fwd   := camera_forward(&app.camera)
+    cam_right := linalg.normalize(linalg.cross(cam_fwd, Vec3{0, 1, 0}))
+    cam_up    := linalg.normalize(linalg.cross(cam_right, cam_fwd))
+
+    // Label every plane vertex with its index. em_size in world units; MSDF
+    // keeps it crisp at any zoom -- shrink/grow freely.
+    label_color := Color{1, 1, 1, 1}
+    for v, i in app.plane.vertices {
+        buf: [16]u8
+        text := fmt.bprintf(buf[:], "v{}", i)
+        anchor := v.position + {0, 0.08, 0}
+        app.renderer.draw_text_3d(app.font, text, anchor, 0.2, label_color,
+                                  cam_right, cam_up)
+    }
 }
