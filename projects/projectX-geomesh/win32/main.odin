@@ -11,8 +11,8 @@ import gl   "vendor:OpenGL"
 
 import logic "../logic"
 
-GL_MAJOR :: 3
-GL_MINOR :: 3
+GL_MAJOR :: 4
+GL_MINOR :: 1
 MSAA_SAMPLES :: 8
 
 WIN_W :: 1280

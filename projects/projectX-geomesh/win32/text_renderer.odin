@@ -15,11 +15,13 @@ import stbi  "vendor:stb/image"
 
 import logic "../logic"
 
-TEXT_VS :: `#version 330 core
+TEXT_VS :: `#version 400 core
 layout(location = 0) in vec3 a_anchor;   // world-space anchor (em origin)
 layout(location = 1) in vec2 a_offset;   // em-space offset from anchor (x right, y up)
 layout(location = 2) in vec2 a_uv;
-out vec2 v_uv;
+// 'sample' makes v_uv per-sample-position; pairs with GL_SAMPLE_SHADING for
+// true SSAA of the alpha computation -- the only reliable fix for huge text.
+sample out vec2 v_uv;
 uniform mat4 u_view_proj;
 uniform vec3 u_cam_right;
 uniform vec3 u_cam_up;
@@ -29,8 +31,8 @@ void main() {
     v_uv = a_uv;
 }`
 
-TEXT_FS :: `#version 330 core
-in vec2 v_uv;
+TEXT_FS :: `#version 400 core
+sample in vec2 v_uv;
 out vec4 frag;
 uniform sampler2D u_msdf;
 uniform vec4  u_color;
@@ -291,10 +293,15 @@ gl_draw_text_3d :: proc(handle: logic.Font_Handle, text: string, anchor: logic.V
     gl.ActiveTexture(gl.TEXTURE0)
     gl.BindTexture(gl.TEXTURE_2D, font.texture)
 
-    // Blending on, depth write off: labels compose with the scene but don't
-    // occlude other transparent geometry.
+    // Blending on, depth write off: labels compose with the scene without
+    // occluding transparent geometry behind them. Per-sample shading runs
+    // the fragment shader once per MSAA sample (paired with the `sample`
+    // qualifier on v_uv), which is real 8x SSAA for the alpha and the only
+    // reliable cure for stair-stepping on extremely large on-screen text.
     gl.Enable(gl.BLEND)
     gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+    gl.Enable(gl.SAMPLE_SHADING)
+    gl.MinSampleShading(1.0)
     gl.DepthMask(gl.FALSE)
 
     gl.BindVertexArray(g_text_vao)
@@ -303,6 +310,7 @@ gl_draw_text_3d :: proc(handle: logic.Font_Handle, text: string, anchor: logic.V
     gl.DrawArrays(gl.TRIANGLES, 0, i32(quad_count * 6))
     gl.BindVertexArray(0)
 
+    gl.Disable(gl.SAMPLE_SHADING)
     gl.DepthMask(gl.TRUE)
 }
 

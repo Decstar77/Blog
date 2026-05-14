@@ -39,6 +39,13 @@ g_line_vao      : u32
 g_line_vbo      : u32
 
 renderer_init :: proc() {
+    // Report actual sample count -- the driver may grant fewer samples than
+    // we requested in the GLFW hint.
+    samples, sample_buffers: i32
+    gl.GetIntegerv(gl.SAMPLES, &samples)
+    gl.GetIntegerv(gl.SAMPLE_BUFFERS, &sample_buffers)
+    fmt.println("GL_SAMPLES=", samples, " GL_SAMPLE_BUFFERS=", sample_buffers)
+
     program, ok := gl.load_shaders_source(VS_SRC, FS_SRC)
     if !ok {
         msg, _, link_msg, _ := gl.get_last_error_messages()
