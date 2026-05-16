@@ -305,7 +305,7 @@ draw_normals :: proc(app: ^App) {
 		app.renderer.draw_line(centers[i], centers[i] + app.halfmesh.faces[i].normal * 0.1, col)
 	}
 
-	verts: = calculate_vertex_normal_weighted_angle(&app.halfmesh)
+	verts: = calculate_vertex_normal_weighted_face_area(&app.halfmesh)
 	for i in 0 ..< len(verts) {
 		col := Color{0.2, 0.2, 1.0, 1.0}
 		v := app.halfmesh.vertices[i].position
@@ -333,7 +333,7 @@ frame :: proc(app: ^App, dt: f32) {
 	app.renderer.draw_mesh(app.mesh_handle, {0.45, 0.55, 0.85, 1.0})
 	draw_normals(app)
 
-	//app.simplicial = star_vertex(&app.halfmesh, 7)
+	app.simplicial = star_vertex(&app.halfmesh, 7)
 	//app.simplicial = star_edge(&app.halfmesh, 3)
 	//app.simplicial = star_face(&app.halfmesh, 0)
 	//app.simplicial = closure_vertex(&app.halfmesh, 7)
@@ -342,7 +342,7 @@ frame :: proc(app: ^App, dt: f32) {
 	//app.simplicial = link_vertex(&app.halfmesh, 7)
 	//app.simplicial = link_edge(&app.halfmesh, 3)
 	//app.simplicial = link_face(&app.halfmesh, 0)
-	app.simplicial = outgoing_edges_set(&app.halfmesh, 7)
+	//app.simplicial = outgoing_edges_set(&app.halfmesh, 7)
 
 	draw_simplicial_set(
 		&app.renderer,

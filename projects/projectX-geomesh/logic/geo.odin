@@ -152,7 +152,10 @@ star_vertex :: proc(m: ^HalfMesh, vi: u32) -> SimplicialSet {
 		set_add(&res.edges, he.edge)
 		if he.face != NONE do set_add(&res.faces, he.face)
 
-		if he.twin == NONE do break
+		assert(
+			he.twin != NONE,
+			"star_vertex: halfedge missing twin — builder_finish should have stitched a boundary twin for every interior halfedge",
+		)
 		next := m.halfedges[he.twin].next
 		if next == NONE || next == vert.halfEdge do break
 		hei = next
@@ -310,30 +313,70 @@ angle_for_vertex_in_tri :: proc(m: ^HalfMesh, vi: u32, fi: u32) -> f32 {
 	return angle
 }
 
+area_for_tri :: proc(m: ^HalfMesh, fi: u32) -> f32 {
+	he1 := m.halfedges[m.faces[fi].halfEdge]
+	he2 := m.halfedges[he1.next]
+	he3 := m.halfedges[he2.next]
+
+	v1 := m.vertices[he1.vert].position
+	v2 := m.vertices[he2.vert].position
+	v3 := m.vertices[he3.vert].position
+
+	e1 := v1 - v2
+	e2 := v3 - v2
+
+	area := 0.5 * linalg.length(linalg.cross(e2, e1))
+	return area
+}
+
 calculate_vertex_normal_weighted_angle :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
 	results := make([dynamic]Vec3, context.temp_allocator)
 	for i in 0 ..< len(m.vertices) {
-		v := m.vertices[i]
 		starset := star_vertex(m, u32(i))
-		weights := make([dynamic]f32, context.temp_allocator)
+
 		total := f32(0)
 		for facei in starset.faces {
-			angle := angle_for_vertex_in_tri(m, u32(i), facei)
-			total += angle
-			append(&weights, angle)
+			total += angle_for_vertex_in_tri(m, u32(i), facei)
 		}
 
-		// Normalize
-		for &angle in weights do angle = angle / total
+		if total <= 0 {
+			append(&results, Vec3{0, 0, 0})
+			continue
+		}
 
 		normal := Vec3{0, 0, 0}
-		i := 0
 		for facei in starset.faces {
-			normal += m.faces[facei].normal * weights[i]
-			i += 1
+			angle := angle_for_vertex_in_tri(m, u32(i), facei)
+			normal += m.faces[facei].normal * (angle / total)
 		}
 
-		append(&results, normal)
+		append(&results, linalg.normalize(normal))
+	}
+	return results
+}
+
+calculate_vertex_normal_weighted_face_area :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
+	results := make([dynamic]Vec3, context.temp_allocator)
+	for i in 0 ..< len(m.vertices) {
+		starset := star_vertex(m, u32(i))
+
+		total := f32(0)
+		for facei in starset.faces {
+			total += area_for_tri(m, facei)
+		}
+
+		if total <= 0 {
+			append(&results, Vec3{0, 0, 0})
+			continue
+		}
+
+		normal := Vec3{0, 0, 0}
+		for facei in starset.faces {
+			area := area_for_tri(m, facei)
+			normal += m.faces[facei].normal * (area / total)
+		}
+
+		append(&results, linalg.normalize(normal))
 	}
 	return results
 }
