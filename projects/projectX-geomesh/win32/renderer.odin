@@ -5,16 +5,15 @@ import gl  "vendor:OpenGL"
 
 import logic "../logic"
 
-// Vertex shader applies the camera view-projection. The legacy translate/scale
-// uniform is kept (mostly identity) so transient drawables can still be biased
-// without touching their VBO.
+// Vertex shader applies a per-draw model matrix then the camera
+// view-projection. Most draws pass identity for u_model; mesh-instance draws
+// (sphere/cylinder primitives) pass a real transform.
 VS_SRC :: `#version 330 core
 layout(location = 0) in vec3 a_pos;
 uniform mat4 u_view_proj;
-uniform vec4 u_transform; // xyz = translate, w = scale
+uniform mat4 u_model;
 void main() {
-    vec3 p = a_pos * u_transform.w + u_transform.xyz;
-    gl_Position = u_view_proj * vec4(p, 1.0);
+    gl_Position = u_view_proj * u_model * vec4(a_pos, 1.0);
 }`
 
 FS_SRC :: `#version 330 core
@@ -32,11 +31,21 @@ GL_Mesh :: struct {
 
 g_program       : u32
 g_u_color_loc   : i32
-g_u_xform_loc   : i32
+g_u_model_loc   : i32
 g_u_vp_loc      : i32
 g_meshes        : [dynamic]GL_Mesh
 g_line_vao      : u32
 g_line_vbo      : u32
+g_tri_vao       : u32
+g_tri_vbo       : u32
+g_tri_ibo       : u32
+
+IDENTITY4 :: logic.Mat4{
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+}
 
 renderer_init :: proc() {
     // Report actual sample count -- the driver may grant fewer samples than
@@ -54,7 +63,7 @@ renderer_init :: proc() {
     }
     g_program     = program
     g_u_color_loc = gl.GetUniformLocation(program, "u_color")
-    g_u_xform_loc = gl.GetUniformLocation(program, "u_transform")
+    g_u_model_loc = gl.GetUniformLocation(program, "u_model")
     g_u_vp_loc    = gl.GetUniformLocation(program, "u_view_proj")
 
     gl.Enable(gl.DEPTH_TEST)
@@ -69,31 +78,44 @@ renderer_init :: proc() {
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of([3]f32), 0)
     gl.BindVertexArray(0)
 
+    // Dynamic VBO/IBO for transient triangle overlays.
+    gl.GenVertexArrays(1, &g_tri_vao)
+    gl.GenBuffers(1, &g_tri_vbo)
+    gl.GenBuffers(1, &g_tri_ibo)
+    gl.BindVertexArray(g_tri_vao)
+    gl.BindBuffer(gl.ARRAY_BUFFER, g_tri_vbo)
+    gl.EnableVertexAttribArray(0)
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of([3]f32), 0)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, g_tri_ibo)
+    gl.BindVertexArray(0)
+
     text_renderer_init()
 }
 
 make_renderer :: proc() -> logic.Renderer {
     return logic.Renderer{
-        create_mesh         = gl_create_mesh,
-        update_mesh         = gl_update_mesh,
-        draw_mesh           = gl_draw_mesh,
-        draw_line           = gl_draw_line,
-        draw_line_overlay   = gl_draw_line_overlay,
-        clear               = gl_clear,
-        set_viewport        = gl_set_viewport,
-        set_view_projection = gl_set_view_projection,
-        load_font           = gl_load_font,
-        draw_text_3d        = gl_draw_text_3d,
+        create_mesh             = gl_create_mesh,
+        update_mesh             = gl_update_mesh,
+        draw_mesh               = gl_draw_mesh,
+        draw_mesh_xform         = gl_draw_mesh_xform,
+        draw_triangles          = gl_draw_triangles,
+        draw_line               = gl_draw_line,
+        draw_line_overlay       = gl_draw_line_overlay,
+        clear                   = gl_clear,
+        set_viewport            = gl_set_viewport,
+        set_view_projection     = gl_set_view_projection,
+        load_font               = gl_load_font,
+        draw_text_3d            = gl_draw_text_3d,
     }
 }
 
 @(private="file")
-set_uniforms :: proc(color: logic.Color, translate: logic.Vec3, scale: f32) {
+set_uniforms :: proc(color: logic.Color, model: logic.Mat4) {
     gl.UseProgram(g_program)
     c := color
     gl.Uniform4fv(g_u_color_loc, 1, raw_data(c[:]))
-    xform := [4]f32{translate.x, translate.y, translate.z, scale}
-    gl.Uniform4fv(g_u_xform_loc, 1, raw_data(xform[:]))
+    m := model
+    gl.UniformMatrix4fv(g_u_model_loc, 1, gl.FALSE, &m[0, 0])
 }
 
 @(private="file")
@@ -125,13 +147,31 @@ gl_create_mesh :: proc(positions: []logic.Vec3, indices: []u32) -> logic.Mesh_Ha
 
 @(private="file")
 gl_draw_mesh :: proc(mesh: logic.Mesh_Handle, color: logic.Color) {
+    gl_draw_mesh_xform(mesh, IDENTITY4, color)
+}
+
+@(private="file")
+gl_draw_mesh_xform :: proc(mesh: logic.Mesh_Handle, model: logic.Mat4, color: logic.Color) {
     idx := int(mesh) - 1
     if idx < 0 || idx >= len(g_meshes) do return
     m := g_meshes[idx]
 
-    set_uniforms(color, {0, 0, 0}, 1)
+    set_uniforms(color, model)
     gl.BindVertexArray(m.vao)
     gl.DrawElements(m.primitive, m.index_count, gl.UNSIGNED_INT, nil)
+    gl.BindVertexArray(0)
+}
+
+@(private="file")
+gl_draw_triangles :: proc(positions: []logic.Vec3, indices: []u32, color: logic.Color) {
+    if len(positions) == 0 || len(indices) == 0 do return
+    set_uniforms(color, IDENTITY4)
+    gl.BindVertexArray(g_tri_vao)
+    gl.BindBuffer(gl.ARRAY_BUFFER, g_tri_vbo)
+    gl.BufferData(gl.ARRAY_BUFFER, len(positions) * size_of(logic.Vec3), raw_data(positions), gl.DYNAMIC_DRAW)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, g_tri_ibo)
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), raw_data(indices), gl.DYNAMIC_DRAW)
+    gl.DrawElements(gl.TRIANGLES, i32(len(indices)), gl.UNSIGNED_INT, nil)
     gl.BindVertexArray(0)
 }
 
@@ -147,7 +187,7 @@ gl_update_mesh :: proc(mesh: logic.Mesh_Handle, positions: []logic.Vec3) {
 @(private="file")
 gl_draw_line_overlay :: proc(a, b: logic.Vec3, color: logic.Color) {
     verts := [2]logic.Vec3{a, b}
-    set_uniforms(color, {0, 0, 0}, 1)
+    set_uniforms(color, IDENTITY4)
     gl.Disable(gl.DEPTH_TEST)
     gl.BindVertexArray(g_line_vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, g_line_vbo)
@@ -161,7 +201,7 @@ gl_draw_line_overlay :: proc(a, b: logic.Vec3, color: logic.Color) {
 gl_draw_line :: proc(a, b: logic.Vec3, color: logic.Color) {
     verts := [2]logic.Vec3{a, b}
 
-    set_uniforms(color, {0, 0, 0}, 1)
+    set_uniforms(color, IDENTITY4)
     gl.BindVertexArray(g_line_vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, g_line_vbo)
     gl.BufferSubData(gl.ARRAY_BUFFER, 0, size_of(verts), &verts)
