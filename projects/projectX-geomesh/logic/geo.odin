@@ -289,7 +289,7 @@ angle_for_vertex_in_tri :: proc(m: ^HalfMesh, vi: u32, fi: u32) -> f32 {
 	for {
 		he := m.halfedges[hei]
 		if he.vert == vi {
-			starti = m.faces[fi].halfEdge
+			starti = hei
 			break
 		}
 		hei = he.next
@@ -300,8 +300,10 @@ angle_for_vertex_in_tri :: proc(m: ^HalfMesh, vi: u32, fi: u32) -> f32 {
 		return 0
 	}
 
-	vi1 := m.halfedges[m.halfedges[starti].twin].vert
-	vi2 := m.halfedges[m.halfedges[m.halfedges[m.halfedges[starti].twin].next].twin].vert
+	he0 := m.halfedges[starti]
+	he1 := m.halfedges[he0.next]
+	vi1 := he1.vert
+	vi2 := m.halfedges[he1.next].vert
 	e1 := m.vertices[vi1].position - m.vertices[vi].position
 	e2 := m.vertices[vi2].position - m.vertices[vi].position
 	angle := linalg.angle_between(e1, e2)
@@ -312,14 +314,26 @@ calculate_vertex_normal_weighted_angle :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
 	results := make([dynamic]Vec3, context.temp_allocator)
 	for i in 0 ..< len(m.vertices) {
 		v := m.vertices[i]
-
-
-		edges := outgoing_edges(m, u32(i))
-		for edgei in edges {
-			//ev := m.vertices[m.halfedges[m.halfedges[m.edges[edgei].halfEdge].twin].vert]
-			//v.position
-			//ev.position
+		starset := star_vertex(m, u32(i))
+		weights := make([dynamic]f32, context.temp_allocator)
+		total := f32(0)
+		for facei in starset.faces {
+			angle := angle_for_vertex_in_tri(m, u32(i), facei)
+			total += angle
+			append(&weights, angle)
 		}
+
+		// Normalize
+		for &angle in weights do angle = angle / total
+
+		normal := Vec3{0, 0, 0}
+		i := 0
+		for facei in starset.faces {
+			normal += m.faces[facei].normal * weights[i]
+			i += 1
+		}
+
+		append(&results, normal)
 	}
 	return results
 }

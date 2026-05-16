@@ -302,7 +302,14 @@ draw_normals :: proc(app: ^App) {
 	centers := calculate_face_barycentric_centers(&app.halfmesh)
 	for i in 0 ..< len(centers) {
 		col := Color{0.2, 0.2, 1.0, 1.0}
-		app.renderer.draw_line(centers[i], centers[i] + app.halfmesh.faces[i].normal, col)
+		app.renderer.draw_line(centers[i], centers[i] + app.halfmesh.faces[i].normal * 0.1, col)
+	}
+
+	verts: = calculate_vertex_normal_weighted_angle(&app.halfmesh)
+	for i in 0 ..< len(verts) {
+		col := Color{0.2, 0.2, 1.0, 1.0}
+		v := app.halfmesh.vertices[i].position
+		app.renderer.draw_line(v, v + verts[i] * 0.5, col)
 	}
 }
 
