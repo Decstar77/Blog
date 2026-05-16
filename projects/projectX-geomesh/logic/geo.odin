@@ -115,18 +115,23 @@ simplicial_set_intersection :: proc(dst: ^SimplicialSet, src: SimplicialSet) -> 
 }
 
 star_vertex :: proc(m: ^HalfMesh, vi: u32) -> SimplicialSet {
-	vert := &m.vertices[vi]
 	res := create_simplicial_set()
+	set_add(&res.verts, vi)
+
+	vert := &m.vertices[vi]
+	if vert.halfEdge == NONE do return res
+
 	hei := vert.halfEdge
 	for {
 		he := m.halfedges[hei]
 
-		set_add(&res.verts, he.vert)
 		set_add(&res.edges, he.edge)
-		set_add(&res.faces, he.face)
+		if he.face != NONE do set_add(&res.faces, he.face)
 
-		hei = m.halfedges[he.twin].next
-		if (hei == vert.halfEdge) {break}
+		if he.twin == NONE do break
+		next := m.halfedges[he.twin].next
+		if next == NONE || next == vert.halfEdge do break
+		hei = next
 	}
 
 	return res
