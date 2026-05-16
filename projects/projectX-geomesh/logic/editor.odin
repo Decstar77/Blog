@@ -437,8 +437,8 @@ draw_arrow :: proc(r: ^Renderer, from, to: Vec3, color: Color, overlay: bool = t
     line(r, from, to, color, overlay)
     line(r, to, base + perp1 * head_width, color, overlay)
     line(r, to, base - perp1 * head_width, color, overlay)
-    //line(r, to, base + perp2 * head_width, color, overlay)
-    //line(r, to, base - perp2 * head_width, color, overlay)
+    line(r, to, base + perp2 * head_width, color, overlay)
+    line(r, to, base - perp2 * head_width, color, overlay)
 }
 
 // Draw the translation gizmo at `origin`. Each axis brightens when hovered

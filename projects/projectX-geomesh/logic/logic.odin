@@ -11,18 +11,18 @@ INVALID_MESH :: Mesh_Handle(0)
 Mat4 :: matrix[4, 4]f32
 
 Renderer :: struct {
-	create_mesh:            proc(positions: []Vec3, indices: []u32) -> Mesh_Handle,
-	update_mesh:            proc(mesh: Mesh_Handle, positions: []Vec3),
-	draw_mesh:              proc(mesh: Mesh_Handle, color: Color),
-	draw_mesh_xform:        proc(mesh: Mesh_Handle, model: Mat4, color: Color),
-	draw_triangles:         proc(positions: []Vec3, indices: []u32, color: Color),
-	draw_line:              proc(a, b: Vec3, color: Color),
-	draw_line_overlay:      proc(a, b: Vec3, color: Color),
-	clear:                  proc(color: Color),
-	set_viewport:           proc(w, h: int),
-	set_view_projection:    proc(vp: Mat4),
-	load_font:              proc(png_path, json_path: string) -> Font_Handle,
-	draw_text_3d:           proc(
+	create_mesh:         proc(positions: []Vec3, indices: []u32) -> Mesh_Handle,
+	update_mesh:         proc(mesh: Mesh_Handle, positions: []Vec3),
+	draw_mesh:           proc(mesh: Mesh_Handle, color: Color),
+	draw_mesh_xform:     proc(mesh: Mesh_Handle, model: Mat4, color: Color),
+	draw_triangles:      proc(positions: []Vec3, indices: []u32, color: Color),
+	draw_line:           proc(a, b: Vec3, color: Color),
+	draw_line_overlay:   proc(a, b: Vec3, color: Color),
+	clear:               proc(color: Color),
+	set_viewport:        proc(w, h: int),
+	set_view_projection: proc(vp: Mat4),
+	load_font:           proc(png_path, json_path: string) -> Font_Handle,
+	draw_text_3d:        proc(
 		font: Font_Handle,
 		text: string,
 		anchor: Vec3,
@@ -79,7 +79,9 @@ App :: struct {
 
 initialize :: proc(app: ^App) {
 	app.halfmesh = create_cube(3) //create_plane(4, 4)
-	app.simplicial = star_vertex(&app.halfmesh, 0)
+	//app.simplicial = star_vertex(&app.halfmesh, 7)
+	//app.simplicial = star_edge(&app.halfmesh, 3)
+	app.simplicial = star_face(&app.halfmesh, 0)
 
 	positions, indices := halfmesh_to_triangles(&app.halfmesh)
 	defer delete(positions)
@@ -87,7 +89,7 @@ initialize :: proc(app: ^App) {
 	app.mesh_handle = app.renderer.create_mesh(positions, indices)
 
 	// Template unit primitives reused for every simplicial vertex / edge draw.
-	app.sphere_mesh   = upload_template_mesh(&app.renderer, create_uv_sphere(1.0, 12, 8))
+	app.sphere_mesh = upload_template_mesh(&app.renderer, create_uv_sphere(1.0, 12, 8))
 	app.cylinder_mesh = upload_template_mesh(&app.renderer, create_cylinder(1.0, 1.0, 12))
 
 	app.font = app.renderer.load_font(
@@ -186,19 +188,31 @@ upload_template_mesh :: proc(r: ^Renderer, hm: HalfMesh) -> Mesh_Handle {
 }
 
 // Build a row-major Mat4 literal for `T(t) * R(basis_x, basis_y, basis_z) * S(s)`.
-@(private="file")
+@(private = "file")
 trs_matrix :: proc(t: Vec3, bx, by, bz: Vec3, s: Vec3) -> Mat4 {
-	return Mat4{
-		s.x*bx.x, s.y*by.x, s.z*bz.x, t.x,
-		s.x*bx.y, s.y*by.y, s.z*bz.y, t.y,
-		s.x*bx.z, s.y*by.z, s.z*bz.z, t.z,
-		0,        0,        0,        1,
+	return Mat4 {
+		s.x * bx.x,
+		s.y * by.x,
+		s.z * bz.x,
+		t.x,
+		s.x * bx.y,
+		s.y * by.y,
+		s.z * bz.y,
+		t.y,
+		s.x * bx.z,
+		s.y * by.z,
+		s.z * bz.z,
+		t.z,
+		0,
+		0,
+		0,
+		1,
 	}
 }
 
 // Rotation basis that maps the unit cylinder's +Y axis onto `axis` (must be unit).
 // Returns three orthonormal columns (new_x, new_y=axis, new_z).
-@(private="file")
+@(private = "file")
 basis_from_y :: proc(axis: Vec3) -> (bx, by, bz: Vec3) {
 	by = axis
 	ref := Vec3{1, 0, 0}
@@ -209,19 +223,23 @@ basis_from_y :: proc(axis: Vec3) -> (bx, by, bz: Vec3) {
 }
 
 draw_simplicial_set :: proc(
-	r: ^Renderer, m: ^HalfMesh, set: ^SimplicialSet, c: ^Camera,
+	r: ^Renderer,
+	m: ^HalfMesh,
+	set: ^SimplicialSet,
+	c: ^Camera,
 	sphere, cylinder: Mesh_Handle,
 ) {
-	YELLOW    :: Color{1.0, 0.95, 0.20, 1.0}
-	FACE_FILL :: Color{1.0, 0.85, 0.10, 0.85}
-	V_RADIUS  :: f32(0.08)
-	E_RADIUS  :: f32(0.03)
+	GREY :: Color{0.9, 0.9, 0.9, 1.0}
+	YELLOW :: Color{0.85, 0.85, 0.20, 1.0}
+	FACE_FILL :: Color{0.85, 0.75, 0.10, 0.85}
+	V_RADIUS :: f32(0.08)
+	E_RADIUS :: f32(0.03)
 
 	for v_idx in set.verts {
 		if v_idx == NONE || int(v_idx) >= len(m.vertices) do continue
 		p := m.vertices[v_idx].position
-		model := trs_matrix(p, {1,0,0}, {0,1,0}, {0,0,1}, {V_RADIUS, V_RADIUS, V_RADIUS})
-		r.draw_mesh_xform(sphere, model, YELLOW)
+		model := trs_matrix(p, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {V_RADIUS, V_RADIUS, V_RADIUS})
+		r.draw_mesh_xform(sphere, model, GREY)
 	}
 
 	for e_idx in set.edges {
@@ -246,7 +264,7 @@ draw_simplicial_set :: proc(
 	// shared edge vertices need separate offset copies per face.
 	NORMAL_OFFSET :: f32(0.002)
 	positions := make([dynamic]Vec3, 0, len(set.faces) * 6)
-	indices   := make([dynamic]u32, 0, len(set.faces) * 6)
+	indices := make([dynamic]u32, 0, len(set.faces) * 6)
 	defer delete(positions)
 	defer delete(indices)
 
@@ -300,7 +318,14 @@ frame :: proc(app: ^App, dt: f32) {
 	app.renderer.set_view_projection(camera_view_projection(&app.camera))
 
 	app.renderer.draw_mesh(app.mesh_handle, {0.45, 0.55, 0.85, 1.0})
-	draw_simplicial_set(&app.renderer, &app.halfmesh, &app.simplicial, &app.camera, app.sphere_mesh, app.cylinder_mesh)
+	draw_simplicial_set(
+		&app.renderer,
+		&app.halfmesh,
+		&app.simplicial,
+		&app.camera,
+		app.sphere_mesh,
+		app.cylinder_mesh,
+	)
 
 	//halfedge_draw_halfedges(app, &app.halfmesh)
 
