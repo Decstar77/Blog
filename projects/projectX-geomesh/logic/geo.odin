@@ -20,6 +20,7 @@ Edge :: struct {
 
 Face :: struct {
 	halfEdge: u32,
+	normal:   Vec3,
 }
 
 HalfEdge :: struct {
@@ -85,11 +86,11 @@ set_intersection :: proc(dst: ^map[u32]struct{}, other: map[u32]struct{}) {
 	}
 }
 
-create_simplicial_set :: proc() -> SimplicialSet {
+create_simplicial_set :: proc(allocator := context.temp_allocator) -> SimplicialSet {
 	return SimplicialSet {
-		verts = make(map[u32]struct{}),
-		edges = make(map[u32]struct{}),
-		faces = make(map[u32]struct{}),
+		verts = make(map[u32]struct{}, allocator),
+		edges = make(map[u32]struct{}, allocator),
+		faces = make(map[u32]struct{}, allocator),
 	}
 }
 
@@ -112,6 +113,29 @@ simplicial_set_intersection :: proc(dst: ^SimplicialSet, src: SimplicialSet) -> 
 	set_intersection(&dst.edges, src.edges)
 	set_intersection(&dst.faces, src.faces)
 	return dst
+}
+
+outgoing_edges :: proc(m: ^HalfMesh, vi: u32) -> [dynamic]u32 {
+	res := make([dynamic]u32, context.temp_allocator)
+
+	hei := m.vertices[vi].halfEdge
+	for {
+		he := m.halfedges[hei]
+		append(&res, he.edge)
+		hei = m.halfedges[he.twin].next
+		if hei == m.vertices[vi].halfEdge do break
+	}
+
+	return res
+}
+
+outgoing_edges_set :: proc(m: ^HalfMesh, vi: u32) -> SimplicialSet {
+	res := create_simplicial_set()
+	edges := outgoing_edges(m, vi)
+	for edge in edges {
+		set_add(&res.edges, edge)
+	}
+	return res
 }
 
 star_vertex :: proc(m: ^HalfMesh, vi: u32) -> SimplicialSet {
@@ -222,4 +246,80 @@ link_face :: proc(m: ^HalfMesh, fi: u32) -> SimplicialSet {
 	s := create_simplicial_set()
 	set_add(&s.faces, fi)
 	return link(m, s)
+}
+
+cache_face_normals :: proc(m: ^HalfMesh) {
+	for &face in m.faces {
+		v1i := m.halfedges[face.halfEdge].vert
+		v2i := m.halfedges[m.halfedges[face.halfEdge].next].vert
+		v3i := m.halfedges[m.halfedges[m.halfedges[face.halfEdge].next].next].vert
+
+		v1 := m.vertices[v1i].position
+		v2 := m.vertices[v2i].position
+		v3 := m.vertices[v3i].position
+
+		e1 := v2 - v1
+		e2 := v3 - v1
+
+		face.normal = linalg.normalize(linalg.cross(e1, e2))
+	}
+}
+
+calculate_face_barycentric_centers :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
+	results := make([dynamic]Vec3, context.temp_allocator)
+	for &face in m.faces {
+		v1i := m.halfedges[face.halfEdge].vert
+		v2i := m.halfedges[m.halfedges[face.halfEdge].next].vert
+		v3i := m.halfedges[m.halfedges[m.halfedges[face.halfEdge].next].next].vert
+
+		v1 := m.vertices[v1i].position
+		v2 := m.vertices[v2i].position
+		v3 := m.vertices[v3i].position
+
+		center := (v1 + v2 + v3) / 3
+		append(&results, center)
+	}
+
+	return results
+}
+
+angle_for_vertex_in_tri :: proc(m: ^HalfMesh, vi: u32, fi: u32) -> f32 {
+	starti := NONE
+	hei := m.faces[fi].halfEdge
+	for {
+		he := m.halfedges[hei]
+		if he.vert == vi {
+			starti = m.faces[fi].halfEdge
+			break
+		}
+		hei = he.next
+		if hei == m.faces[fi].halfEdge do break
+	}
+
+	if starti == NONE {
+		return 0
+	}
+
+	vi1 := m.halfedges[m.halfedges[starti].twin].vert
+	vi2 := m.halfedges[m.halfedges[m.halfedges[m.halfedges[starti].twin].next].twin].vert
+	e1 := m.vertices[vi1].position - m.vertices[vi].position
+	e2 := m.vertices[vi2].position - m.vertices[vi].position
+	angle := linalg.angle_between(e1, e2)
+	return angle
+}
+
+calculate_vertex_normal_weighted_angle :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
+	results := make([dynamic]Vec3, context.temp_allocator)
+	for i in 0 ..< len(m.vertices) {
+		v := m.vertices[i]
+
+
+		edges := outgoing_edges(m, u32(i))
+		for edgei in edges {
+			//ev := m.vertices[m.halfedges[m.halfedges[m.edges[edgei].halfEdge].twin].vert]
+			//v.position
+			//ev.position
+		}
+	}
+	return results
 }

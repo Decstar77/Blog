@@ -79,15 +79,6 @@ App :: struct {
 
 initialize :: proc(app: ^App) {
 	app.halfmesh = create_cube(3) //create_plane(4, 4)
-	//app.simplicial = star_vertex(&app.halfmesh, 7)
-	//app.simplicial = star_edge(&app.halfmesh, 3)
-	//app.simplicial = star_face(&app.halfmesh, 0)
-	//app.simplicial = closure_vertex(&app.halfmesh, 7)
-	//app.simplicial = closure_edge(&app.halfmesh, 3)
-	//app.simplicial = closure_face(&app.halfmesh, 0)
-	//app.simplicial = link_vertex(&app.halfmesh, 7)
-	//app.simplicial = link_edge(&app.halfmesh, 3)
-	//app.simplicial = link_face(&app.halfmesh, 0)
 
 	positions, indices := halfmesh_to_triangles(&app.halfmesh)
 	defer delete(positions)
@@ -306,6 +297,15 @@ draw_simplicial_set :: proc(
 	r.draw_triangles(positions[:], indices[:], FACE_FILL)
 }
 
+draw_normals :: proc(app: ^App) {
+	cache_face_normals(&app.halfmesh)
+	centers := calculate_face_barycentric_centers(&app.halfmesh)
+	for i in 0 ..< len(centers) {
+		col := Color{0.2, 0.2, 1.0, 1.0}
+		app.renderer.draw_line(centers[i], centers[i] + app.halfmesh.faces[i].normal, col)
+	}
+}
+
 frame :: proc(app: ^App, dt: f32) {
 	app.time += dt
 
@@ -324,6 +324,19 @@ frame :: proc(app: ^App, dt: f32) {
 	app.renderer.set_view_projection(camera_view_projection(&app.camera))
 
 	app.renderer.draw_mesh(app.mesh_handle, {0.45, 0.55, 0.85, 1.0})
+	draw_normals(app)
+
+	//app.simplicial = star_vertex(&app.halfmesh, 7)
+	//app.simplicial = star_edge(&app.halfmesh, 3)
+	//app.simplicial = star_face(&app.halfmesh, 0)
+	//app.simplicial = closure_vertex(&app.halfmesh, 7)
+	//app.simplicial = closure_edge(&app.halfmesh, 3)
+	//app.simplicial = closure_face(&app.halfmesh, 0)
+	//app.simplicial = link_vertex(&app.halfmesh, 7)
+	//app.simplicial = link_edge(&app.halfmesh, 3)
+	//app.simplicial = link_face(&app.halfmesh, 0)
+	app.simplicial = outgoing_edges_set(&app.halfmesh, 7)
+
 	draw_simplicial_set(
 		&app.renderer,
 		&app.halfmesh,
@@ -364,4 +377,6 @@ frame :: proc(app: ^App, dt: f32) {
 		anchor := v.position + {0, 0.08, 0}
 		app.renderer.draw_text_3d(app.font, text, anchor, 0.2, label_color, cam_right, cam_up)
 	}
+
+	free_all(context.temp_allocator)
 }
