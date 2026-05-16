@@ -75,8 +75,10 @@ renderer_init :: proc() {
 make_renderer :: proc() -> logic.Renderer {
     return logic.Renderer{
         create_mesh         = gl_create_mesh,
+        update_mesh         = gl_update_mesh,
         draw_mesh           = gl_draw_mesh,
         draw_line           = gl_draw_line,
+        draw_line_overlay   = gl_draw_line_overlay,
         clear               = gl_clear,
         set_viewport        = gl_set_viewport,
         set_view_projection = gl_set_view_projection,
@@ -131,6 +133,28 @@ gl_draw_mesh :: proc(mesh: logic.Mesh_Handle, color: logic.Color) {
     gl.BindVertexArray(m.vao)
     gl.DrawElements(m.primitive, m.index_count, gl.UNSIGNED_INT, nil)
     gl.BindVertexArray(0)
+}
+
+@(private="file")
+gl_update_mesh :: proc(mesh: logic.Mesh_Handle, positions: []logic.Vec3) {
+    idx := int(mesh) - 1
+    if idx < 0 || idx >= len(g_meshes) do return
+    m := g_meshes[idx]
+    gl.BindBuffer(gl.ARRAY_BUFFER, m.vbo)
+    gl.BufferSubData(gl.ARRAY_BUFFER, 0, len(positions) * size_of(logic.Vec3), raw_data(positions))
+}
+
+@(private="file")
+gl_draw_line_overlay :: proc(a, b: logic.Vec3, color: logic.Color) {
+    verts := [2]logic.Vec3{a, b}
+    set_uniforms(color, {0, 0, 0}, 1)
+    gl.Disable(gl.DEPTH_TEST)
+    gl.BindVertexArray(g_line_vao)
+    gl.BindBuffer(gl.ARRAY_BUFFER, g_line_vbo)
+    gl.BufferSubData(gl.ARRAY_BUFFER, 0, size_of(verts), &verts)
+    gl.DrawArrays(gl.LINES, 0, 2)
+    gl.BindVertexArray(0)
+    gl.Enable(gl.DEPTH_TEST)
 }
 
 @(private="file")

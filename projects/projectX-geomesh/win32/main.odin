@@ -29,20 +29,25 @@ g_last_mouse_y:     f64
 g_pending_dx:       f32
 g_pending_dy:       f32
 g_pending_scroll:   f32
+g_lmb_down:         bool
 
 framebuffer_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
     gl.Viewport(0, 0, width, height)
 }
 
 mouse_button_callback :: proc "c" (window: glfw.WindowHandle, button, action, mods: i32) {
-    if button != glfw.MOUSE_BUTTON_RIGHT do return
-    if action == glfw.PRESS {
-        g_capturing     = true
-        g_first_capture = true
-        glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-    } else if action == glfw.RELEASE {
-        g_capturing = false
-        glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+    if button == glfw.MOUSE_BUTTON_RIGHT {
+        if action == glfw.PRESS {
+            g_capturing     = true
+            g_first_capture = true
+            glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+        } else if action == glfw.RELEASE {
+            g_capturing = false
+            glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+        }
+    } else if button == glfw.MOUSE_BUTTON_LEFT {
+        if action == glfw.PRESS   do g_lmb_down = true
+        if action == glfw.RELEASE do g_lmb_down = false
     }
 }
 
@@ -133,6 +138,14 @@ main :: proc() {
             mouse_dy    = g_pending_dy,
             scroll_dy   = g_pending_scroll,
             aspect      = aspect,
+            mouse_x     = f32(g_last_mouse_x),
+            mouse_y     = f32(g_last_mouse_y),
+            viewport_w  = f32(fb_w),
+            viewport_h  = f32(fb_h),
+            lmb         = g_lmb_down,
+            k1          = key_held(window, glfw.KEY_1),
+            k2          = key_held(window, glfw.KEY_2),
+            k3          = key_held(window, glfw.KEY_3),
         }
         g_pending_dx     = 0
         g_pending_dy     = 0
