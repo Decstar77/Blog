@@ -38,6 +38,12 @@ HalfMesh :: struct {
 	halfedges: [dynamic]HalfEdge,
 }
 
+Frame :: struct {
+	normal: Vec3,
+	t1:     Vec3,
+	t2:     Vec3,
+}
+
 add_vertex :: proc(m: ^HalfMesh, p: Vec3) -> u32 {
 	id := u32(len(m.vertices))
 	append(&m.vertices, Vertex{position = p, halfEdge = NONE})
@@ -268,6 +274,22 @@ cache_face_normals :: proc(m: ^HalfMesh) {
 	}
 }
 
+calucate_face_centroid :: proc(m: ^HalfMesh, fi: u32) -> Vec3 {
+	hei := m.vertices[fi].halfEdge
+	count := 0
+	centriod := Vec3{0, 0, 0}
+	for {
+		he := m.halfedges[hei]
+		centriod += m.vertices[he.vert].position
+		count += 1
+		hei = he.next
+		if hei == m.vertices[fi].halfEdge do break
+	}
+
+	centriod /= f32(count)
+	return centriod
+}
+
 calculate_face_barycentric_centers :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
 	results := make([dynamic]Vec3, context.temp_allocator)
 	for &face in m.faces {
@@ -355,28 +377,91 @@ calculate_vertex_normal_weighted_angle :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
 	return results
 }
 
-calculate_vertex_normal_weighted_face_area :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
+calculate_vertex_normal_weighted_face_area :: proc(m: ^HalfMesh, vi: u32) -> Vec3 {
+	starset := star_vertex(m, vi)
+
+	total := f32(0)
+	for facei in starset.faces {
+		total += area_for_tri(m, facei)
+	}
+
+	if total <= 0 {
+		return Vec3{0, 0, 0}
+	}
+
+	normal := Vec3{0, 0, 0}
+	for facei in starset.faces {
+		area := area_for_tri(m, facei)
+		normal += m.faces[facei].normal * (area / total)
+	}
+
+	r := linalg.normalize(normal)
+	return r
+}
+
+calculate_vertex_normal_weighted_face_areas :: proc(m: ^HalfMesh) -> [dynamic]Vec3 {
 	results := make([dynamic]Vec3, context.temp_allocator)
 	for i in 0 ..< len(m.vertices) {
-		starset := star_vertex(m, u32(i))
-
-		total := f32(0)
-		for facei in starset.faces {
-			total += area_for_tri(m, facei)
-		}
-
-		if total <= 0 {
-			append(&results, Vec3{0, 0, 0})
-			continue
-		}
-
-		normal := Vec3{0, 0, 0}
-		for facei in starset.faces {
-			area := area_for_tri(m, facei)
-			normal += m.faces[facei].normal * (area / total)
-		}
-
-		append(&results, linalg.normalize(normal))
+		normal := calculate_vertex_normal_weighted_face_area(m, u32(i))
+		append(&results, normal)
 	}
 	return results
 }
+
+calculate_face_frame :: proc(m: ^HalfMesh, fi: u32) -> Frame {
+	face := m.faces[fi]
+	n := face.normal
+
+	v1 := m.vertices[m.halfedges[face.halfEdge].vert].position
+	v2 := m.vertices[m.halfedges[m.halfedges[face.halfEdge].next].vert].position
+	t1 := linalg.normalize(v2 - v1)
+	t2 := linalg.cross(t1, n)
+
+	frame := Frame{}
+	frame.normal = n
+	frame.t1 = t1
+	frame.t2 = t2
+	return frame
+}
+
+calculate_face_frames :: proc(m: ^HalfMesh) -> [dynamic]Frame {
+	frames := make([dynamic]Frame, context.temp_allocator)
+	for face in m.faces {
+		frame := calculate_face_frame(m, m.halfedges[face.halfEdge].face)
+		append(&frames, frame)
+	}
+	return frames
+}
+
+calculate_vertex_frame :: proc(m: ^HalfMesh, vi: u32) -> Frame {
+	n := calculate_vertex_normal_weighted_face_area(m, vi)
+
+	v1 := m.vertices[vi].position
+	v2 := m.vertices[m.halfedges[m.halfedges[m.vertices[vi].halfEdge].next].vert].position
+	e := v2 - v1
+
+	t1 := linalg.normalize(e - linalg.dot(n, e) * n)
+	t2 := linalg.cross(t1, n)
+
+	frame := Frame{}
+	frame.normal = n
+	frame.t1 = t1
+	frame.t2 = t2
+	return frame
+}
+
+calculate_vertex_frames :: proc(m: ^HalfMesh) -> [dynamic]Frame {
+	frames := make([dynamic]Frame, context.temp_allocator)
+	for vert in m.vertices {
+		frame := calculate_vertex_frame(m, m.halfedges[vert.halfEdge].vert)
+		append(&frames, frame)
+	}
+	return frames
+}
+
+calculate_face_transport :: proc(m: ^HalfMesh, frame1 : Frame, frame2 : Frame, worldTangent : Vec3) -> Vec3 {
+	
+}
+
+
+

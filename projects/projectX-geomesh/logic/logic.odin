@@ -79,6 +79,7 @@ App :: struct {
 
 initialize :: proc(app: ^App) {
 	app.halfmesh = create_cube(3) //create_plane(4, 4)
+	//app.halfmesh = create_uv_sphere(3, 32, 16)
 
 	positions, indices := halfmesh_to_triangles(&app.halfmesh)
 	defer delete(positions)
@@ -305,11 +306,39 @@ draw_normals :: proc(app: ^App) {
 		app.renderer.draw_line(centers[i], centers[i] + app.halfmesh.faces[i].normal * 0.1, col)
 	}
 
-	verts: = calculate_vertex_normal_weighted_face_area(&app.halfmesh)
+	verts := calculate_vertex_normal_weighted_face_areas(&app.halfmesh)
 	for i in 0 ..< len(verts) {
 		col := Color{0.2, 0.2, 1.0, 1.0}
 		v := app.halfmesh.vertices[i].position
 		app.renderer.draw_line(v, v + verts[i] * 0.5, col)
+	}
+}
+
+draw_tangent_frames :: proc(app: ^App) {
+	red := Color{1.0, 0.2, 0.2, 1.0}
+	green := Color{0.2, 1.0, 0.2, 1.0}
+	blue := Color{0.2, 0.2, 1.0, 1.0}
+
+	cache_face_normals(&app.halfmesh)
+	
+	if false {
+		centers := calculate_face_barycentric_centers(&app.halfmesh)
+		face_frames := calculate_face_frames(&app.halfmesh)
+		for i in 0 ..< len(centers) {
+			app.renderer.draw_line(centers[i], centers[i] + face_frames[i].normal * 0.1, blue)
+			app.renderer.draw_line(centers[i], centers[i] + face_frames[i].t1 * 0.1, red)
+			app.renderer.draw_line(centers[i], centers[i] + face_frames[i].t2 * 0.1, green)
+		}
+	}
+
+	if true {
+		vert_frames := calculate_vertex_frames(&app.halfmesh) 
+		for i in 0 ..< len(vert_frames) {
+			pos := app.halfmesh.vertices[i].position
+			app.renderer.draw_line(pos, pos + vert_frames[i].normal * 0.1, blue)
+			app.renderer.draw_line(pos, pos + vert_frames[i].t1 * 0.1, red)
+			app.renderer.draw_line(pos, pos + vert_frames[i].t2 * 0.1, green)
+		}
 	}
 }
 
@@ -331,9 +360,10 @@ frame :: proc(app: ^App, dt: f32) {
 	app.renderer.set_view_projection(camera_view_projection(&app.camera))
 
 	app.renderer.draw_mesh(app.mesh_handle, {0.45, 0.55, 0.85, 1.0})
-	draw_normals(app)
+	// draw_normals(app)
+	draw_tangent_frames(app)
 
-	app.simplicial = star_vertex(&app.halfmesh, 7)
+	//app.simplicial = star_vertex(&app.halfmesh, 7)
 	//app.simplicial = star_edge(&app.halfmesh, 3)
 	//app.simplicial = star_face(&app.halfmesh, 0)
 	//app.simplicial = closure_vertex(&app.halfmesh, 7)
@@ -377,13 +407,13 @@ frame :: proc(app: ^App, dt: f32) {
 		draw_translation_gizmo(&app.renderer, &app.editor, &app.camera, origin)
 	}
 
-	label_color := Color{1, 1, 1, 1}
-	for v, i in app.halfmesh.vertices {
-		buf: [16]u8
-		text := fmt.bprintf(buf[:], "v{}", i)
-		anchor := v.position + {0, 0.08, 0}
-		app.renderer.draw_text_3d(app.font, text, anchor, 0.2, label_color, cam_right, cam_up)
-	}
+	// label_color := Color{1, 1, 1, 1}
+	// for v, i in app.halfmesh.vertices {
+	// 	buf: [16]u8
+	// 	text := fmt.bprintf(buf[:], "v{}", i)
+	// 	anchor := v.position + {0, 0.08, 0}
+	// 	app.renderer.draw_text_3d(app.font, text, anchor, 0.2, label_color, cam_right, cam_up)
+	// }
 
 	free_all(context.temp_allocator)
 }
