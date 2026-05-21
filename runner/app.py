@@ -86,6 +86,21 @@ mnist_diffusion_model, mnist_diffusion_module = load_project(
 )
 print("Diffusion (MNIST) loaded.")
 
+vae_colors_model, vae_colors_module = load_project(
+    py_path       = os.path.join(BASE, "projects/project9-vae-colors/vae_colors.py"),
+    weights_path  = os.path.join(BASE, "projects/project9-vae-colors/model.pt"),
+    return_module = True,
+)
+print("VAE (colors) loaded.")
+
+# Pre-compute the latent-space scatter and decoded grid — both are
+# deterministic given the weights, so there's no need to redo them per request.
+vae_colors_scatter = {"points": vae_colors_module.latent_scatter(vae_colors_model)}
+vae_colors_grid    = {
+    "grid": vae_colors_module.decode_grid(vae_colors_model, grid_size=24, span=3.0),
+    "span": 3.0,
+}
+
 # Pre-generate the circle dataset (deterministic — random_state=6)
 _circle_xs, _circle_ys = make_circles(n_samples=2000, noise=0.1, random_state=6)
 circle_dataset = {
@@ -236,6 +251,36 @@ def run_diffusion_mnist(req: MnistDiffusionRequest):
         "digit": digit,
         "image": [[round(float(v), 4) for v in row] for row in image.tolist()],
     }
+
+
+# ── VAE (colors) ──────────────────────────────────────────────────
+
+class VaeColorsRequest(BaseModel):
+    z0: float
+    z1: float
+
+
+@app.post("/run/vae-colors")
+def run_vae_colors(req: VaeColorsRequest):
+    z0 = max(-3.0, min(3.0, req.z0))
+    z1 = max(-3.0, min(3.0, req.z1))
+    r, g, b = vae_colors_module.decode_point(vae_colors_model, z0, z1)
+    return {
+        "z":   [z0, z1],
+        "rgb": [r, g, b],
+        "hex": "#{:02x}{:02x}{:02x}".format(
+            round(r * 255), round(g * 255), round(b * 255)),
+    }
+
+
+@app.get("/run/vae-colors/grid")
+def vae_colors_grid_endpoint():
+    return vae_colors_grid
+
+
+@app.get("/data/vae-colors")
+def vae_colors_data():
+    return vae_colors_scatter
 
 
 # ── Health ────────────────────────────────────────────────────────

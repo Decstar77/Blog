@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A VAE on Colors — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Machine Learning</span>
+            <h1 style="text-align: center;">A VAE on Colors</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-calendar-alt"></i> May 2025</span>
+                <span><i class="fas fa-tag"></i> Python · PyTorch</span>
+                <span><i class="fas fa-hashtag"></i> Project 9</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                The next topic that I wanted to explore was variational autoencoder (VAE).
+                I wanted to keep things as simple as possible, and so I made an RGB color 
+                picker through 2D latent space. Below is a demo and the mistakes I made creating this.
+                Click anywhere in the latent plane below and the decoder turns that coordinate into a colour.
+            </p>
+        </div>
+        <br/>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <h2 style="text-align: center; margin: 0;">Live demo</h2>
+
+            <div class="classifier-canvas-wrap">
+                <canvas id="latentCanvas" width="420" height="420"
+                        style="background: #111; border: 1px solid var(--border); cursor: crosshair;"></canvas>
+                <p class="demo-canvas-hint">
+                    Latent space z ∈ [-3, 3]². Background = decoded colour, dots = encoded training colours.
+                    Click to decode a point.
+                </p>
+            </div>
+
+            <div class="demo-results" id="demoResults">
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Latent z</span>
+                    <span class="demo-result-value" id="resultZ">—</span>
+                </div>
+                <div class="demo-result-divider"></div>
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Decoded colour</span>
+                    <span class="demo-result-value" id="resultHex">—</span>
+                </div>
+                <div class="demo-result-divider"></div>
+                <div class="demo-result-item">
+                    <span class="demo-result-label">Swatch</span>
+                    <span class="demo-result-value">
+                        <span id="resultSwatch" style="display:inline-block; width:40px; height:18px;
+                              border:1px solid var(--border); vertical-align:middle;"></span>
+                    </span>
+                </div>
+            </div>
+
+            <p class="demo-status" id="demoStatus">Click anywhere in the latent plane.</p>
+        </div>
+
+        <div class="article-body">
+            <h2>How it works</h2>
+            <p>
+                A VAE doesn't encode an input to a single point — it encodes it to a
+                <em>distribution</em>. The encoder maps an RGB colour to a mean
+                <code>μ</code> and log-variance <code>log σ²</code> over the 2D latent
+                space. We sample <code>z = μ + σ ⊙ ε</code> (the reparameterisation
+                trick, so gradients still flow), and the decoder maps <code>z</code>
+                back to RGB.
+            </p>
+            <p>
+                Training balances two terms: a reconstruction MSE, and a KL divergence
+                pulling every encoded posterior towards a unit Gaussian. That KL term
+                is what makes the latent space <em>continuous</em> — nearby points
+                decode to similar colours, which is exactly what the demo above shows.
+            </p>
+            <p>
+                Two things bit me. First, I initially trained on fully random colours,
+                which just taught the model to predict the mean which is grey. Switching to
+                three distinct R/G/B blobs gave it real structure to learn. Second, the
+                KL term was overpowering reconstruction and collapsing every input to
+                the same point (<em>posterior collapse</em>); weighting it with a small
+                <code>β = 0.1</code> fixed it.
+            </p>
+
+            <h2>Latent space</h2>
+            <p style="color: var(--text-muted); font-size: 0.92rem; margin-top: -0.5rem;">
+                Left: each training colour plotted at its encoded mean. Right: the
+                decoder swept across a grid of the latent plane — a smooth colour map.
+            </p>
+            <p style="text-align: center;">
+                <img src="vae-colors-latent.png" alt="VAE colour latent space"
+                     style="width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px;">
+            </p>
+        </div>
+
+        <!-- ── Code ─────────────────────────────────────────────── -->
+        <div class="article-body">
+            <h2 style="text-align: center;">Code</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">
+                Full source on <a href="https://github.com/Decstar77">GitHub</a> — abridged here for readability.
+            </p>
+            <pre><code>import torch
+import torch.nn as nn
+from torch.nn import functional as F
+
+
+class Model(nn.Module):
+    """A tiny VAE: 3-D RGB &lt;-&gt; 2-D latent space."""
+    def __init__(self):
+        super().__init__()
+        self.enc  = nn.Linear(3, 2)
+        self.enca = nn.ReLU()
+        self.mean = nn.Linear(2, 2)
+        self.lvar = nn.Linear(2, 2)
+        self.dec  = nn.Linear(2, 3)
+        self.deca = nn.Tanh()
+
+    def encode(self, x):
+        r = self.enca(self.enc(x))
+        return self.mean(r), self.lvar(r)
+
+    def decode(self, z):
+        return self.deca(self.dec(z))
+
+    def forward(self, x):
+        mu, lv = self.encode(x)
+        std = torch.exp(0.5 * lv)
+        eps = torch.randn_like(std)        # reparameterisation trick
+        z = mu + std * eps
+        return self.decode(z), mu, lv
+
+
+def loss_function(preds, target, mu, lvar, beta=0.1):
+    mse = F.mse_loss(preds, target)
+    # KL divergence between the encoder posterior and a unit Gaussian.
+    kld = -0.5 * torch.mean(1 + lvar - mu.pow(2) - lvar.exp())
+    return mse + beta * kld               # beta tames posterior collapse</code></pre>
+        </div>
+
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+<script>
+const RUNNER = '/api';
+const SPAN   = 3.0;                       // latent plane is [-SPAN, SPAN]^2
+
+const canvas = document.getElementById('latentCanvas');
+const ctx    = canvas.getContext('2d');
+const W      = canvas.width;
+const H      = canvas.height;
+
+const status   = document.getElementById('demoStatus');
+const zEl      = document.getElementById('resultZ');
+const hexEl    = document.getElementById('resultHex');
+const swatchEl = document.getElementById('resultSwatch');
+
+let scatter = [];   // [{z0, z1, r, g, b}]
+let marker  = null; // last clicked {x, y}
+
+// latent z -> canvas pixel. z1 increases upward, so flip y.
+function zToPx(z0, z1) {
+    return {
+        x: (z0 + SPAN) / (2 * SPAN) * W,
+        y: (1 - (z1 + SPAN) / (2 * SPAN)) * H,
+    };
+}
+// canvas pixel -> latent z
+function pxToZ(x, y) {
+    return {
+        z0: x / W * (2 * SPAN) - SPAN,
+        z1: (1 - y / H) * (2 * SPAN) - SPAN,
+    };
+}
+
+function drawGridFallback() {
+    // No runner — just a flat backdrop so the page still renders.
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, W, H);
+}
+
+function drawGrid(grid) {
+    const n   = grid.length;
+    const off = document.createElement('canvas');
+    off.width = n; off.height = n;
+    const octx = off.getContext('2d');
+    const img  = octx.createImageData(n, n);
+    for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+            // grid is indexed [z0][z1]; flip z1 so up = +z1
+            const px = grid[c][n - 1 - r];
+            const i  = (r * n + c) * 4;
+            img.data[i]     = Math.round(px[0] * 255);
+            img.data[i + 1] = Math.round(px[1] * 255);
+            img.data[i + 2] = Math.round(px[2] * 255);
+            img.data[i + 3] = 255;
+        }
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, W, H);
+}
+
+function drawScatter() {
+    for (const p of scatter) {
+        const { x, y } = zToPx(p.z0, p.z1);
+        ctx.beginPath();
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgb(${p.r * 255}, ${p.g * 255}, ${p.b * 255})`;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+    }
+}
+
+function drawMarker() {
+    if (!marker) return;
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, 8, 0, Math.PI * 2);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, 8, 0, Math.PI * 2);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+}
+
+let gridCache = null;
+function render() {
+    if (gridCache) drawGrid(gridCache);
+    else drawGridFallback();
+    drawScatter();
+    drawMarker();
+}
+
+async function loadScene() {
+    try {
+        const [gRes, sRes] = await Promise.all([
+            fetch(`${RUNNER}/run/vae-colors/grid`),
+            fetch(`${RUNNER}/data/vae-colors`),
+        ]);
+        if (!gRes.ok || !sRes.ok) throw new Error('bad response');
+        gridCache = (await gRes.json()).grid;
+        scatter   = (await sRes.json()).points;
+        render();
+        status.textContent = 'Click anywhere in the latent plane.';
+        status.style.color = 'var(--text-muted)';
+    } catch {
+        render();
+        status.textContent = 'Runner unavailable — start the Docker services to enable the demo.';
+        status.style.color = '#b05050';
+    }
+}
+
+async function query(x, y) {
+    const { z0, z1 } = pxToZ(x, y);
+    marker = { x, y };
+    render();
+    zEl.textContent = `(${z0.toFixed(2)}, ${z1.toFixed(2)})`;
+    status.textContent = 'Decoding…';
+    status.style.color = 'var(--text-muted)';
+
+    try {
+        const res = await fetch(`${RUNNER}/run/vae-colors`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ z0, z1 }),
+        });
+        if (!res.ok) throw new Error('bad response');
+        const data = await res.json();
+        hexEl.textContent       = data.hex;
+        swatchEl.style.background = data.hex;
+        status.textContent      = `Decoded z = (${data.z[0].toFixed(2)}, ${data.z[1].toFixed(2)}) → ${data.hex}`;
+        status.style.color      = 'var(--text-muted)';
+    } catch {
+        status.textContent = 'Runner unavailable — start the Docker services to enable the demo.';
+        status.style.color = '#b05050';
+    }
+}
+
+canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width  * W;
+    const y = (e.clientY - rect.top)  / rect.height * H;
+    query(x, y);
+});
+
+render();
+loadScene();
+</script>
+</body>
+</html>

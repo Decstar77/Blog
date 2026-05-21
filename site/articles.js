@@ -24,22 +24,23 @@ const articles = [
         readTime: "15 min read",
         url: "diffusion-forward-process.html"
     },
-    {
-        title: "Real-Time Market Simulation with ESP32 Microcontrollers",
-        summary: "Exploring my experimental market simulator that uses ESP32 trader nodes to study market microstructure and algorithmic trading mechanics with a TCP/UDP-based order book engine.",
-        category: "Embedded",
-        date: "2025-08-01",
-        readTime: "12 min read",
-        url: "market-simulation.html"
-    },
-    {
-        title: "High-Reliability C++ Firmware for Distributed IoT Fleets",
-        summary: "Lessons learned from engineering low-latency, deterministic firmware for real-time IoT devices — covering multi-threaded design, MQTT integration, and hard-won reliability principles.",
-        category: "Embedded",
-        date: "2025-01-06",
-        readTime: "18 min read",
-        url: "cpp-firmware.html"
-    }
+    // Don't show these anymore 
+    // {
+    //     title: "Real-Time Market Simulation with ESP32 Microcontrollers",
+    //     summary: "Exploring my experimental market simulator that uses ESP32 trader nodes to study market microstructure and algorithmic trading mechanics with a TCP/UDP-based order book engine.",
+    //     category: "Embedded",
+    //     date: "2025-08-01",
+    //     readTime: "12 min read",
+    //     url: "market-simulation.html"
+    // },
+    // {
+    //     title: "High-Reliability C++ Firmware for Distributed IoT Fleets",
+    //     summary: "Lessons learned from engineering low-latency, deterministic firmware for real-time IoT devices — covering multi-threaded design, MQTT integration, and hard-won reliability principles.",
+    //     category: "Embedded",
+    //     date: "2025-01-06",
+    //     readTime: "18 min read",
+    //     url: "cpp-firmware.html"
+    // }
 ];
 
 function formatDate(dateString) {

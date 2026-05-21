@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes on Discrete Differential Geometry - Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        })"></script>
+    <style>
+        .katex-display {
+            margin: 1.6rem 0;
+            padding: 0 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .katex {
+            font-size: 1.05em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <main class="wrapper article-page">
+
+        <nav class="inner-nav">
+            <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+            <ul class="inner-nav-links">
+                <li><a href="articles.html" class="active">Articles</a></li>
+                <li><a href="index.html#about">About</a></li>
+            </ul>
+        </nav>
+
+        <article class="article-content">
+            <div class="container">
+                <a href="articles.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Articles</a>
+                <div class="article-header">
+                    <span class="article-category">Mathematics</span>
+                    <h1>Notes on Discrete Differential Geometry: Part 1</h1>
+                    <div class="article-meta">
+                        <div class="article-date">
+                            <i class="far fa-calendar"></i>
+                            <span>April 24, 2026</span>
+                        </div>
+                        <div class="read-time">
+                            <i class="far fa-clock"></i>
+                            <span>18 min read</span>
+                        </div>
+                        <div class="article-author">
+                            <i class="far fa-user"></i>
+                            <span>By Declan Porter</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="article-body">
+                    <p class="lead">
+                        I've been learning about discrete differential geometry these past few weeks and thought I'd
+                        write up what I've learnt to solidify my understanding. This isn't really a tutorial, rather it
+                        is some concise notes made for myself and others.
+                    </p>
+
+                    <h2>Simplices</h2>
+                    <p>
+                        The first concept is the <strong>k-simplex</strong>. A k-simplex is the simplest geometric
+                        primitive you can build in $k$ dimensions: it's the convex hull of $k+1$ affinely independent
+                        points (meaning no point lies in the affine span of the others). "Affinely independent" is just
+                        the requirement that the points actually span $k$ dimensions and don't collapse onto a lower
+                        flat — three collinear points don't make a real triangle, four coplanar points don't make a
+                        real tetrahedron.
+                    </p>
+                    <ul>
+                        <li><strong>0-simplex</strong>: a vertex (1 point)</li>
+                        <li><strong>1-simplex</strong>: an edge (2 points)</li>
+                        <li><strong>2-simplex</strong>: a triangle (3 points)</li>
+                        <li><strong>3-simplex</strong>: a tetrahedron (4 points)</li>
+                    </ul>
+                    <p>
+                        We usually write a simplex as the ordered tuple of its vertices, e.g. $\sigma = [a, b, c]$ for
+                        a triangle. The ordering matters because it gives the simplex an <em>orientation</em>:
+                        $[a,b,c]$ and $[b,a,c]$ are the same set of points but opposite orientations, which becomes
+                        important once we start integrating things over them.
+                    </p>
+                    <img src="simpleximg.png" alt="Example Simplices"
+                        style="width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px;"></img>
+
+                    <h2>Face</h2>
+                    <p>
+                        A <strong>face</strong> of a simplex is any simplex you can form from a non-empty subset of its
+                        vertices. So every face is itself a simplex of lower (or equal) dimension. For a triangle
+                        $[a,b,c]$ the faces are:
+                    </p>
+                    <ul>
+                        <li>2-dimensional face: the triangle $[a,b,c]$ itself (every simplex is a face of itself)</li>
+                        <li>1-dimensional faces: the edges $[a,b], [b,c], [a,c]$</li>
+                        <li>0-dimensional faces: the vertices $[a], [b], [c]$</li>
+                    </ul>
+                    <p>
+                        If we want to exclude the simplex itself we call the rest its <em>proper faces</em>.
+                    </p>
+
+                    <h2>Simplicial complex</h2>
+                    <p>
+                        A <strong>simplicial complex</strong> $K$ is a collection of simplices that fit together
+                        cleanly. "Cleanly" means two rules:
+                    </p>
+                    <ol>
+                        <li>Every face of a simplex in $K$ is also in $K$. (If you've got a triangle, you must also
+                            have its edges and vertices.)</li>
+                        <li>The intersection of any two simplices in $K$ is either empty or a face of both.
+                            (Triangles can share an edge or a vertex, but they can't cross through each other or
+                            overlap partially.)</li>
+                    </ol>
+                    <p>
+                        This is what makes a simplicial complex a "nice" mesh: it's a discrete stand-in for a smooth
+                        surface or manifold, with no weird self-intersections. A triangle mesh of a 3D model is the
+                        canonical example.
+                    </p>
+
+                    <h2>Star, Closure, and Link</h2>
+                    <p>
+                        These three operators let us talk about neighbourhoods of a simplex inside a complex. They're
+                        the discrete analogues of "open ball around a point" from smooth topology.
+                    </p>
+
+                    <h3>Closure</h3>
+                    <p>
+                        The <strong>closure</strong> $\mathrm{Cl}(S)$ of a set of simplices $S$ is the smallest
+                        simplicial complex containing $S$. In practice: take everything in $S$, then add all the
+                        faces. It goes <em>down</em> in dimension.
+                    </p>
+                    <p>$$\mathrm{Cl}(S) = \{ \tau : \tau \text{ is a face of some } \sigma \in S \}$$</p>
+                    <p>
+                        Example: for a single triangle $[a,b,c]$,
+                    </p>
+                    <p>$$\mathrm{Cl}([a,b,c]) = \{\, [a,b,c],\ [a,b],\ [b,c],\ [a,c],\ [a],\ [b],\ [c] \,\}$$</p>
+                    <p>
+                        Closure is what turns a loose pile of top-dimensional simplices into a valid simplicial
+                        complex.
+                    </p>
+
+                    <h3>Star</h3>
+                    <p>
+                        The <strong>star</strong> $\mathrm{St}(\sigma)$ of a simplex $\sigma$ is the set of all
+                        simplices in the complex that have $\sigma$ as a face. It goes <em>up</em> in dimension.
+                    </p>
+                    <p>$$\mathrm{St}(\sigma) = \{ \tau \in K : \sigma \text{ is a face of } \tau \}$$</p>
+                    <p>
+                        Concrete example: imagine a vertex $a$ in a triangle mesh, surrounded by triangles
+                        $[a,b,c], [a,c,d], [a,d,e]$. The star of $a$ is:
+                    </p>
+                    <p>$$\mathrm{St}(a) = \{\, [a],\ [a,b],\ [a,c],\ [a,d],\ [a,e],\ [a,b,c],\ [a,c,d],\ [a,d,e] \,\}$$</p>
+                    <p>
+                        Note the star is generally <em>not</em> a simplicial complex on its own — it contains
+                        $[a,b,c]$ but not the opposite edge $[b,c]$, so closure rule #1 is violated. That asymmetry is
+                        exactly what makes the link useful.
+                    </p>
+
+                    <h3>Link</h3>
+                    <p>
+                        The <strong>link</strong> $\mathrm{Lk}(\sigma)$ is the "boundary" of the neighbourhood —
+                        everything around $\sigma$ that doesn't actually touch it. Formally:
+                    </p>
+                    <p>$$\mathrm{Lk}(\sigma) = \mathrm{Cl}(\mathrm{St}(\sigma)) \setminus \mathrm{St}(\mathrm{Cl}(\sigma))$$</p>
+                    <p>
+                        Read that as: take the closed neighbourhood, then remove anything that still touches $\sigma$
+                        or any of its faces. What's left are the simplices "across the way" from $\sigma$.
+                    </p>
+                    <p>
+                        For the vertex $a$ with star as above, the link is the cycle of edges and vertices opposite
+                        $a$:
+                    </p>
+                    <p>$$\mathrm{Lk}(a) = \{\, [b],\ [c],\ [d],\ [e],\ [b,c],\ [c,d],\ [d,e] \,\}$$</p>
+                    <p>
+                        On a well-behaved 2D mesh, the link of an interior vertex is always a closed loop. If it
+                        isn't, the vertex is on the boundary or the mesh is non-manifold there — so the link doubles
+                        as a local sanity check on mesh topology.
+                    </p>
+
+                    <h2>k-vectors</h2>
+                    <p>
+                        A <strong>k-vector</strong> is an oriented $k$-dimensional volume element, built by wedging
+                        vectors together. The wedge product $\wedge$ is antisymmetric ($u \wedge v = -\, v \wedge u$),
+                        which is what bakes orientation into the algebra.
+                    </p>
+                    <ul>
+                        <li><strong>0-vector</strong>: a scalar.</li>
+                        <li><strong>1-vector</strong>: an ordinary vector — magnitude and direction.</li>
+                        <li><strong>2-vector (bivector)</strong>: $u \wedge v$, representing an oriented area. You
+                            can picture it as the parallelogram spanned by $u$ and $v$, with a sign telling you which
+                            way around its boundary you walk.</li>
+                        <li><strong>3-vector (trivector)</strong>: $u \wedge v \wedge w$, an oriented volume — the
+                            parallelepiped spanned by the three vectors with a handedness attached.</li>
+                    </ul>
+                    <p>
+                        The important shift from "vector" to "k-vector" is that we no longer care about the specific
+                        vectors used to build it — only the oriented subspace and its magnitude. $u \wedge v$ and
+                        $(u + v) \wedge v$ describe the same bivector because $v \wedge v = 0$.
+                    </p>
+
+                    <h2>k-forms</h2>
+                    <p>
+                        A <strong>k-form</strong> is a linear map that eats a $k$-vector and spits out a scalar.
+                        Algebraically a k-form looks almost identical to a k-vector — same wedge-product machinery,
+                        same antisymmetry — but the role is different: k-vectors are the <em>things being measured</em>
+                        and k-forms are the <em>measurements</em>.
+                    </p>
+                    <p>$$\alpha : \underbrace{V \times \cdots \times V}_{k \text{ times}} \to \mathbb{R}, \qquad
+                        \alpha(v_1, \dots, v_k) \in \mathbb{R}$$</p>
+                    <p>
+                        Concretely: a 1-form on $\mathbb{R}^3$ like $\alpha = 2\,dx + 3\,dy$ takes a vector
+                        $v = (v_x, v_y, v_z)$ and returns $2 v_x + 3 v_y$. A 2-form like $dx \wedge dy$ takes a
+                        bivector and returns its signed area projected onto the $xy$-plane. This is exactly the kind
+                        of object you integrate — "$\int f\, dx$" is integrating the 1-form $f\,dx$ along a 1-vector
+                        (a curve).
+                    </p>
+
+                    <h2>The Hodge Star</h2>
+                    <p>
+                        The <strong>Hodge star</strong> $\star$ is an isomorphism that swaps a $k$-form for an
+                        $(n-k)$-form on an $n$-dimensional space. The idea is that in $n$ dimensions, every
+                        $k$-subspace has a unique orthogonal complement of dimension $n-k$ — and the Hodge star sends
+                        you to that complement, preserving magnitude.
+                    </p>
+                    <p>$$\star : \Lambda^k(V) \to \Lambda^{n-k}(V)$$</p>
+                    <p>
+                        On $\mathbb{R}^3$ with the standard basis:
+                    </p>
+                    <p>$$\star\, dx = dy \wedge dz, \quad \star\, dy = dz \wedge dx, \quad \star\, dz = dx \wedge dy$$</p>
+                    <p>
+                        This is why the cross product only really works in 3D: $u \times v$ is secretly
+                        $\star(u \wedge v)$, turning a bivector (the oriented area) into the 1-vector normal to it.
+                        In higher dimensions the wedge still makes sense but there's no longer a unique perpendicular
+                        vector, so the cross product breaks.
+                    </p>
+                    <p>
+                        In discrete differential geometry, the Hodge star is what lets us pair primal mesh elements
+                        (vertices, edges, faces) with their dual elements (dual faces, dual edges, dual vertices) —
+                        the discrete Hodge star is essentially a diagonal matrix of ratios of dual-to-primal sizes.
+                    </p>
+
+                    <h2>Sharp and Flat operators</h2>
+                    <p>
+                        Sharp ($\sharp$) and flat ($\flat$) are the "musical isomorphisms" that translate between
+                        vectors and 1-forms using a metric (an inner product) $g$.
+                    </p>
+                    <ul>
+                        <li><strong>Flat $\flat$</strong>: vector $\to$ 1-form. Given a vector $v$, define the
+                            1-form $v^\flat(w) = g(v, w)$. Flat <em>lowers</em> an index.</li>
+                        <li><strong>Sharp $\sharp$</strong>: 1-form $\to$ vector. The inverse: given a 1-form
+                            $\alpha$, $\alpha^\sharp$ is the unique vector such that $g(\alpha^\sharp, w) = \alpha(w)$
+                            for all $w$. Sharp <em>raises</em> an index.</li>
+                    </ul>
+                    <p>
+                        In Euclidean space with the standard dot product the distinction is invisible — a vector
+                        $(a,b,c)$ and the 1-form $a\,dx + b\,dy + c\,dz$ look identical, and $\sharp$ and $\flat$
+                        amount to "drop the $d$'s" or "add them back". The distinction matters once the metric isn't
+                        the identity (curved surfaces, relativity, anisotropic materials), because then raising and
+                        lowering indices genuinely changes the numbers.
+                    </p>
+                    <p>
+                        The names come from musical notation: flat lowers a note, sharp raises it — same as what
+                        these operators do to tensor indices.
+                    </p>
+
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <span>&copy; 2026 Decstar</span>
+            <a href="articles.html">&larr; All Articles</a>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
