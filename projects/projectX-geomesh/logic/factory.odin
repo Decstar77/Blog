@@ -317,14 +317,17 @@ create_cylinder :: proc(radius: f32, height: f32, segments: int = 16) -> HalfMes
 		builder_add_face(&b, bot[j], bot[j2], top[j2], top[j])
 	}
 
-	// Top n-gon, wound CCW as seen from +Y (so outward = +Y).
+	// Top n-gon. Its rim must run opposite the side faces' top edge
+	// (top[j2]->top[j]) so the shared edges pair into twins; this winding also
+	// gives the cap an outward (+Y) normal.
 	top_face := make([]u32, seg); defer delete(top_face)
-	for j in 0..<seg do top_face[j] = top[seg - 1 - j]
+	for j in 0..<seg do top_face[j] = top[j]
 	builder_add_face(&b, ..top_face)
 
-	// Bottom n-gon, wound CCW as seen from -Y (so outward = -Y).
+	// Bottom n-gon. Reversed so its rim runs opposite the side faces' bottom
+	// edge (bot[j]->bot[j2]); this winding gives an outward (-Y) normal.
 	bot_face := make([]u32, seg); defer delete(bot_face)
-	for j in 0..<seg do bot_face[j] = bot[j]
+	for j in 0..<seg do bot_face[j] = bot[seg - 1 - j]
 	builder_add_face(&b, ..bot_face)
 
 	return builder_finish(&b)
