@@ -78,8 +78,9 @@ App :: struct {
 }
 
 initialize :: proc(app: ^App) {
-	app.halfmesh = create_cube(3) //create_plane(4, 4)
+	//app.halfmesh = create_cube(3) //create_plane(4, 4)
 	//app.halfmesh = create_uv_sphere(3, 32, 16)
+	app.halfmesh = create_cylinder(1.0, 1.0, 16)
 
 	positions, indices := halfmesh_to_triangles(&app.halfmesh)
 	defer delete(positions)
