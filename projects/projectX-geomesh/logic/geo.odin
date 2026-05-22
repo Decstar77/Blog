@@ -459,9 +459,49 @@ calculate_vertex_frames :: proc(m: ^HalfMesh) -> [dynamic]Frame {
 	return frames
 }
 
-calculate_face_transport :: proc(m: ^HalfMesh, frame1 : Frame, frame2 : Frame, worldTangent : Vec3) -> Vec3 {
-	
+find_common_edge :: proc(m: ^HalfMesh, face1Index: u32, face2Index: u32) -> u32 {
+	hei1 := m.faces[face1Index].halfEdge
+	for {
+		he1 := m.halfedges[hei1]
+
+		hei2 := m.faces[face2Index].halfEdge
+		for {
+			he2 := m.halfedges[hei2]
+
+			if he2.twin == hei1 {
+				return he1.edge
+			}
+
+			hei2 = he2.next
+			if hei2 == m.faces[face2Index].halfEdge do break
+		}
+
+		hei1 = he1.next
+		if hei1 == m.faces[face1Index].halfEdge do break
+	}
+
+	return NONE
 }
 
+signed_dihedral_angle :: proc(m: ^HalfMesh, face1: u32, face2: u32) -> f32 {
+	ei := find_common_edge(m, face1, face2)
+	if ei == NONE do return 0
 
+	v1 := m.vertices[m.halfedges[m.edges[ei].halfEdge].vert].position
+	v2 := m.vertices[m.halfedges[m.halfedges[m.edges[ei].halfEdge].next].vert].position
+	e := linalg.normalize(v2 - v1)
 
+	n1 := m.faces[face1].normal
+	n2 := m.faces[face2].normal
+
+	m := linalg.cross(n1, e)
+	x := linalg.dot(n1, n2)
+	y := linalg.dot(m, n2)
+
+	angle := linalg.atan2(y, x)
+	return angle
+}
+
+// calculate_face_transport :: proc(m: ^HalfMesh, frame1 : Frame, frame2 : Frame, worldTangent : Vec3) -> Vec3 {
+
+// }
