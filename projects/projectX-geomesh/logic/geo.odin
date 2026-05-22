@@ -459,7 +459,17 @@ calculate_vertex_frames :: proc(m: ^HalfMesh) -> [dynamic]Frame {
 	return frames
 }
 
-find_common_edge :: proc(m: ^HalfMesh, face1Index: u32, face2Index: u32) -> u32 {
+// Returns the shared edge and the half-edge belonging to face1 along that
+// edge. The half-edge is needed so callers can orient the edge consistently
+// with face1's winding. Returns (NONE, NONE) if the faces share no edge.
+find_common_edge :: proc(
+	m: ^HalfMesh,
+	face1Index: u32,
+	face2Index: u32,
+) -> (
+	edge: u32,
+	he1Index: u32,
+) {
 	hei1 := m.faces[face1Index].halfEdge
 	for {
 		he1 := m.halfedges[hei1]
@@ -469,7 +479,7 @@ find_common_edge :: proc(m: ^HalfMesh, face1Index: u32, face2Index: u32) -> u32 
 			he2 := m.halfedges[hei2]
 
 			if he2.twin == hei1 {
-				return he1.edge
+				return he1.edge, hei1
 			}
 
 			hei2 = he2.next
@@ -480,28 +490,50 @@ find_common_edge :: proc(m: ^HalfMesh, face1Index: u32, face2Index: u32) -> u32 
 		if hei1 == m.faces[face1Index].halfEdge do break
 	}
 
-	return NONE
+	return NONE, NONE
 }
 
 signed_dihedral_angle :: proc(m: ^HalfMesh, face1: u32, face2: u32) -> f32 {
-	ei := find_common_edge(m, face1, face2)
+	ei, hei1 := find_common_edge(m, face1, face2)
 	if ei == NONE do return 0
 
-	v1 := m.vertices[m.halfedges[m.edges[ei].halfEdge].vert].position
-	v2 := m.vertices[m.halfedges[m.halfedges[m.edges[ei].halfEdge].next].vert].position
-	e := linalg.normalize(v2 - v1)
+	v1 := m.vertices[m.halfedges[hei1].vert].position
+	v2 := m.vertices[m.halfedges[m.halfedges[hei1].next].vert].position
+	d := v2 - v1
+	if linalg.length(d) == 0 do return 0 // degenerate edge
+	e := linalg.normalize(d)
 
 	n1 := m.faces[face1].normal
 	n2 := m.faces[face2].normal
 
-	m := linalg.cross(n1, e)
+	axis := linalg.cross(n1, e)
 	x := linalg.dot(n1, n2)
-	y := linalg.dot(m, n2)
+	y := linalg.dot(axis, n2)
 
 	angle := linalg.atan2(y, x)
 	return angle
 }
 
-// calculate_face_transport :: proc(m: ^HalfMesh, frame1 : Frame, frame2 : Frame, worldTangent : Vec3) -> Vec3 {
+// Axis is assumed normalized
+rotate_vector_about :: proc(v: Vec3, axis: Vec3, angle: f32) -> Vec3 {
+	v_cos := v * linalg.cos(angle)
+	v_cross := linalg.cross(axis, v) * linalg.sin(angle)
+	v_dot := axis * linalg.dot(axis, v) * (1 - linalg.cos(angle))
+	return v_cos + v_cross + v_dot
+}
 
-// }
+calculate_face_transport :: proc(m: ^HalfMesh, face1: u32, face2: u32, wt: Vec3) -> Vec3 {
+	edge, hei1 := find_common_edge(m, face1, face2)
+	if edge == NONE do return Vec3{0, 0, 0}
+
+	v1 := m.vertices[m.halfedges[hei1].vert].position
+	v2 := m.vertices[m.halfedges[m.halfedges[hei1].next].vert].position
+	d := v2 - v1
+	if linalg.length(d) == 0 do return Vec3{0, 0, 0} // degenerate edge
+	axis := linalg.normalize(d)
+	// signed_dihedral_angle returns the rotation about +axis that maps n2->n1,
+	// so negate it to transport from face1's plane into face2's.
+	angle := signed_dihedral_angle(m, face1, face2)
+	ported := rotate_vector_about(wt, axis, -angle)
+	return ported
+}
