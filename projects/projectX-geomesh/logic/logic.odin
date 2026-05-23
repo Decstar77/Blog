@@ -68,7 +68,6 @@ App :: struct {
 	font:          Font_Handle,
 	camera:        Camera,
 	input:         Input,
-	editor:        Editor,
 	time:          f32,
 	halfmesh:      HalfMesh,
 	simplicial:    SimplicialSet,
@@ -168,7 +167,7 @@ halfedge_draw_halfedges :: proc(app: ^App, hm: ^HalfMesh) {
 		p4 := p1 + (p2 - p1) * 0.9
 		p3.y += 0.1
 		p4.y += 0.1
-		draw_arrow(&app.renderer, p3, p4, {1, 1, 1, 1}, false)
+		//draw_arrow(&app.renderer, p3, p4, {1, 1, 1, 1}, false)
 	}
 }
 
@@ -348,15 +347,6 @@ frame :: proc(app: ^App, dt: f32) {
 
 	update_camera(&app.camera, app.input, dt)
 
-	if editor_update(&app.editor, &app.halfmesh, &app.camera, app.input) {
-		positions, indices := halfmesh_to_triangles(&app.halfmesh)
-		defer delete(positions)
-		defer delete(indices)
-		if app.renderer.update_mesh != nil {
-			app.renderer.update_mesh(app.mesh_handle, positions)
-		}
-	}
-
 	app.renderer.clear({0.10, 0.11, 0.15, 1.0})
 	app.renderer.set_view_projection(camera_view_projection(&app.camera))
 
@@ -402,11 +392,6 @@ frame :: proc(app: ^App, dt: f32) {
 	cam_fwd := camera_forward(&app.camera)
 	cam_right := linalg.normalize(linalg.cross(cam_fwd, Vec3{0, 1, 0}))
 	cam_up := linalg.normalize(linalg.cross(cam_right, cam_fwd))
-
-	draw_selection_highlight(&app.renderer, &app.halfmesh, app.editor.selection, &app.camera)
-	if origin, ok := selection_centroid(&app.halfmesh, app.editor.selection); ok {
-		draw_translation_gizmo(&app.renderer, &app.editor, &app.camera, origin)
-	}
 
 	// label_color := Color{1, 1, 1, 1}
 	// for v, i in app.halfmesh.vertices {

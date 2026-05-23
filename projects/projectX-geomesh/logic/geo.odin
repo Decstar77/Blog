@@ -5,7 +5,9 @@ import "core:math"
 import "core:math/linalg"
 
 Vec3 :: [3]f32
+Vec2 :: [2]f32
 Color :: [4]f32
+Mat2 :: matrix[2, 2]f32
 
 NONE :: max(u32)
 
@@ -142,6 +144,33 @@ outgoing_edges_set :: proc(m: ^HalfMesh, vi: u32) -> SimplicialSet {
 		set_add(&res.edges, edge)
 	}
 	return res
+}
+
+// Returns the shared edge and the half-edge belonging to face1 along that
+// edge. The half-edge is needed so callers can orient the edge consistently
+// with face1's winding. Returns (NONE, NONE) if the faces share no edge.
+find_common_edge :: proc(m: ^HalfMesh, f1i: u32, f2i: u32) -> (edge: u32, he1i: u32) {
+	hei1 := m.faces[f1i].halfEdge
+	for {
+		he1 := m.halfedges[hei1]
+
+		hei2 := m.faces[f2i].halfEdge
+		for {
+			he2 := m.halfedges[hei2]
+
+			if he2.twin == hei1 {
+				return he1.edge, hei1
+			}
+
+			hei2 = he2.next
+			if hei2 == m.faces[f2i].halfEdge do break
+		}
+
+		hei1 = he1.next
+		if hei1 == m.faces[f1i].halfEdge do break
+	}
+
+	return NONE, NONE
 }
 
 star_vertex :: proc(m: ^HalfMesh, vi: u32) -> SimplicialSet {
@@ -459,33 +488,6 @@ calculate_vertex_frames :: proc(m: ^HalfMesh) -> [dynamic]Frame {
 	return frames
 }
 
-// Returns the shared edge and the half-edge belonging to face1 along that
-// edge. The half-edge is needed so callers can orient the edge consistently
-// with face1's winding. Returns (NONE, NONE) if the faces share no edge.
-find_common_edge :: proc(m: ^HalfMesh, f1i: u32, f2i: u32) -> (edge: u32, he1i: u32) {
-	hei1 := m.faces[f1i].halfEdge
-	for {
-		he1 := m.halfedges[hei1]
-
-		hei2 := m.faces[f2i].halfEdge
-		for {
-			he2 := m.halfedges[hei2]
-
-			if he2.twin == hei1 {
-				return he1.edge, hei1
-			}
-
-			hei2 = he2.next
-			if hei2 == m.faces[f2i].halfEdge do break
-		}
-
-		hei1 = he1.next
-		if hei1 == m.faces[f1i].halfEdge do break
-	}
-
-	return NONE, NONE
-}
-
 signed_dihedral_angle :: proc(m: ^HalfMesh, face1: u32, face2: u32) -> f32 {
 	ei, hei1 := find_common_edge(m, face1, face2)
 	if ei == NONE do return 0
@@ -507,16 +509,60 @@ signed_dihedral_angle :: proc(m: ^HalfMesh, face1: u32, face2: u32) -> f32 {
 	return angle
 }
 
-// Axis is assumed normalized
-rotate_vector_about :: proc(v: Vec3, axis: Vec3, angle: f32) -> Vec3 {
+rotate_vector_about :: proc(v: Vec3, axis: Vec3, angle: f32) -> Vec3 { 	// Axis is assumed normalized
 	v_cos := v * linalg.cos(angle)
 	v_cross := linalg.cross(axis, v) * linalg.sin(angle)
 	v_dot := axis * linalg.dot(axis, v) * (1 - linalg.cos(angle))
 	return v_cos + v_cross + v_dot
 }
 
-calculate_face_transport :: proc(m: ^HalfMesh, face1: u32, face2: u32, wt: Vec3) -> Vec3 {
-	edge, hei1 := find_common_edge(m, face1, face2)
+world_space_to_frame :: proc(frame: Frame, ws: Vec3) -> Vec2 {
+	local := Vec2{0, 0}
+	local[0] = linalg.dot(ws, frame.t1)
+	local[1] = linalg.dot(ws, frame.t2)
+	return local
+}
+
+frame_local_to_world_space :: proc(frame: Frame, local: Vec2) -> Vec3 {
+	ws := local[0] * frame.t1 + local[1] * frame.t2
+	return ws
+}
+
+face_shape_operator :: proc(m: ^HalfMesh, fi: u32) -> Mat2 {
+	// Cohen-Steiner & Morvan
+	shape := Mat2{0, 0, 0, 0}
+	area := area_for_tri(m, fi)
+	frame := calculate_face_frame(m, fi)
+
+	hei := m.faces[fi].halfEdge
+	for {
+		he := m.halfedges[hei]
+
+		v1 := m.vertices[he.vert].position
+		v2 := m.vertices[m.halfedges[he.twin].vert].position
+		e := v2 - v1
+		l := linalg.length(e)
+		te := world_space_to_frame(frame, e / l)
+		nf := m.halfedges[he.twin].face
+
+		// Boundary edge, which can be a problem as it's now biased but fine for now
+		if nf != NONE {
+			perp := Vec2{ -te[1], te[0] }
+			angle := signed_dihedral_angle(m, fi, nf)
+			shape += 0.5 * angle * l * linalg.outer_product(perp, perp)
+		}
+
+		hei = he.next
+		if hei == m.faces[fi].halfEdge do break
+	}
+
+	shape = (1 / area) * shape
+
+	return shape
+}
+
+calculate_face_transport :: proc(m: ^HalfMesh, f1i: u32, f2i: u32, wt: Vec3) -> Vec3 {
+	edge, hei1 := find_common_edge(m, f1i, f2i)
 	if edge == NONE do return Vec3{0, 0, 0}
 
 	v1 := m.vertices[m.halfedges[hei1].vert].position
@@ -526,13 +572,19 @@ calculate_face_transport :: proc(m: ^HalfMesh, face1: u32, face2: u32, wt: Vec3)
 	axis := linalg.normalize(d)
 	// signed_dihedral_angle returns the rotation about +axis that maps n2->n1,
 	// so negate it to transport from face1's plane into face2's.
-	angle := signed_dihedral_angle(m, face1, face2)
+	angle := signed_dihedral_angle(m, f1i, f2i)
 	ported := rotate_vector_about(wt, axis, -angle)
 	return ported
 }
 
+calculate_tangent_vector_field :: proc(m: ^HalfMesh) {
 
+}
 
+calculate_tangent_cross_field :: proc(m: ^HalfMesh) {
 
+}
 
+calculate_tangent_principal_field :: proc(m: ^HalfMesh) {
 
+}
