@@ -462,19 +462,12 @@ calculate_vertex_frames :: proc(m: ^HalfMesh) -> [dynamic]Frame {
 // Returns the shared edge and the half-edge belonging to face1 along that
 // edge. The half-edge is needed so callers can orient the edge consistently
 // with face1's winding. Returns (NONE, NONE) if the faces share no edge.
-find_common_edge :: proc(
-	m: ^HalfMesh,
-	face1Index: u32,
-	face2Index: u32,
-) -> (
-	edge: u32,
-	he1Index: u32,
-) {
-	hei1 := m.faces[face1Index].halfEdge
+find_common_edge :: proc(m: ^HalfMesh, f1i: u32, f2i: u32) -> (edge: u32, he1i: u32) {
+	hei1 := m.faces[f1i].halfEdge
 	for {
 		he1 := m.halfedges[hei1]
 
-		hei2 := m.faces[face2Index].halfEdge
+		hei2 := m.faces[f2i].halfEdge
 		for {
 			he2 := m.halfedges[hei2]
 
@@ -483,11 +476,11 @@ find_common_edge :: proc(
 			}
 
 			hei2 = he2.next
-			if hei2 == m.faces[face2Index].halfEdge do break
+			if hei2 == m.faces[f2i].halfEdge do break
 		}
 
 		hei1 = he1.next
-		if hei1 == m.faces[face1Index].halfEdge do break
+		if hei1 == m.faces[f1i].halfEdge do break
 	}
 
 	return NONE, NONE
@@ -537,3 +530,9 @@ calculate_face_transport :: proc(m: ^HalfMesh, face1: u32, face2: u32, wt: Vec3)
 	ported := rotate_vector_about(wt, axis, -angle)
 	return ported
 }
+
+
+
+
+
+
