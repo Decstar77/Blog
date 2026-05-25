@@ -614,9 +614,9 @@ calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> ma
 		field_count += 1
 	}
 
+	fixed_index := u32(rand.int_max(field_count))
+
 	for it in 0 ..< iterations {
-		fixed_index := u32(rand.int_max(field_count))
-	
 		for fi, &entry in field {
 			if fixed_index == fi do continue
 
@@ -624,18 +624,22 @@ calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> ma
 			count := 0
 
 			for nfi in entry.neighbours {
+				if nfi == NONE do continue
 				ne := field[nfi]
 				ws := frame_local_to_world_space(ne.frame, ne.local)
-				tr := calculate_face_transport(m, fi, nfi, ws)
+				tr := calculate_face_transport(m, nfi, fi, ws)
 				lo := world_space_to_frame(entry.frame, tr)
 				locals[count] = lo
 				count += 1
 			}
 
+			if count == 0 do continue
+
 			local := Vec2{0, 0}
 			for i in 0 ..< count do local += locals[i]
 			local /= f32(count)
 
+			if l := linalg.length(local); l > 1e-8 do local /= l
 			entry.local = local
 		}
 	}
