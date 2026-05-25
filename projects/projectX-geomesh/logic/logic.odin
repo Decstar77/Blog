@@ -74,38 +74,7 @@ App :: struct {
 	mesh_handle:   Mesh_Handle,
 	sphere_mesh:   Mesh_Handle,
 	cylinder_mesh: Mesh_Handle,
-}
-
-initialize :: proc(app: ^App) {
-	//app.halfmesh = create_cube(3) //create_plane(4, 4)
-	//app.halfmesh = create_uv_sphere(3, 32, 16)
-	app.halfmesh = create_cylinder(1.0, 3.0, 16)
-
-	positions, indices := halfmesh_to_triangles(&app.halfmesh)
-	defer delete(positions)
-	defer delete(indices)
-	app.mesh_handle = app.renderer.create_mesh(positions, indices)
-
-	// Template unit primitives reused for every simplicial vertex / edge draw.
-	app.sphere_mesh = upload_template_mesh(&app.renderer, create_uv_sphere(1.0, 12, 8))
-	app.cylinder_mesh = upload_template_mesh(&app.renderer, create_cylinder(1.0, 1.0, 12))
-
-	app.font = app.renderer.load_font(
-		"res/fonts/FiraCode-Regular.png",
-		"res/fonts/FiraCode-Regular.json",
-	)
-
-	app.camera = Camera {
-		position   = {0, 3, 6},
-		yaw        = 0,
-		pitch      = -0.45,
-		fov_y      = math.PI * 0.33,
-		aspect     = 16.0 / 9.0,
-		near       = 0.05,
-		far        = 500,
-		move_speed = 5,
-		look_speed = 0.0025,
-	}
+	field:         map[u32]FieldEntry,
 }
 
 // Forward direction implied by yaw/pitch. yaw=0,pitch=0 -> -Z.
@@ -320,7 +289,7 @@ draw_tangent_frames :: proc(app: ^App) {
 	blue := Color{0.2, 0.2, 1.0, 1.0}
 
 	cache_face_normals(&app.halfmesh)
-	
+
 	if false {
 		centers := calculate_face_barycentric_centers(&app.halfmesh)
 		face_frames := calculate_face_frames(&app.halfmesh)
@@ -332,13 +301,77 @@ draw_tangent_frames :: proc(app: ^App) {
 	}
 
 	if true {
-		vert_frames := calculate_vertex_frames(&app.halfmesh) 
+		vert_frames := calculate_vertex_frames(&app.halfmesh)
 		for i in 0 ..< len(vert_frames) {
 			pos := app.halfmesh.vertices[i].position
 			app.renderer.draw_line(pos, pos + vert_frames[i].normal * 0.1, blue)
 			app.renderer.draw_line(pos, pos + vert_frames[i].t1 * 0.1, red)
 			app.renderer.draw_line(pos, pos + vert_frames[i].t2 * 0.1, green)
 		}
+	}
+}
+
+draw_field :: proc(app: ^App, length: f32 = 0.12) {
+	centers := calculate_face_barycentric_centers(&app.halfmesh)
+
+	col := Color{1.0, 0.55, 0.10, 1.0}
+	tip_col := Color{1.0, 0.85, 0.20, 1.0}
+
+	for fi, entry in app.field {
+		if int(fi) >= len(centers) do continue
+		ws := frame_local_to_world_space(entry.frame, entry.local)
+		l := linalg.length(ws)
+		if l < 1e-6 do continue
+		dir := ws / l
+
+		base := centers[fi] + entry.frame.normal * 0.003
+		tip := base + dir * length
+
+		app.renderer.draw_line(base, tip, col)
+
+		// Two small barbs at the tip, perpendicular to dir in the face plane.
+		perp := linalg.cross(entry.frame.normal, dir)
+		barb := length * 0.25
+		back := tip - dir * barb
+		app.renderer.draw_line(tip, back + perp * (barb * 0.5), tip_col)
+		app.renderer.draw_line(tip, back - perp * (barb * 0.5), tip_col)
+	}
+
+	delete(centers)
+}
+
+initialize :: proc(app: ^App) {
+	//app.halfmesh = create_cube(3) //create_plane(4, 4)
+	//app.halfmesh = create_uv_sphere(3, 32, 16)
+	app.halfmesh = create_cylinder(1.0, 3.0, 16)
+
+	cache_face_normals(&app.halfmesh)
+	app.field = calculate_tangent_vector_field(&app.halfmesh, 32)
+
+	positions, indices := halfmesh_to_triangles(&app.halfmesh)
+	defer delete(positions)
+	defer delete(indices)
+	app.mesh_handle = app.renderer.create_mesh(positions, indices)
+
+	// Template unit primitives reused for every simplicial vertex / edge draw.
+	app.sphere_mesh = upload_template_mesh(&app.renderer, create_uv_sphere(1.0, 12, 8))
+	app.cylinder_mesh = upload_template_mesh(&app.renderer, create_cylinder(1.0, 1.0, 12))
+
+	app.font = app.renderer.load_font(
+		"res/fonts/FiraCode-Regular.png",
+		"res/fonts/FiraCode-Regular.json",
+	)
+
+	app.camera = Camera {
+		position   = {0, 3, 6},
+		yaw        = 0,
+		pitch      = -0.45,
+		fov_y      = math.PI * 0.33,
+		aspect     = 16.0 / 9.0,
+		near       = 0.05,
+		far        = 500,
+		move_speed = 5,
+		look_speed = 0.0025,
 	}
 }
 
@@ -351,8 +384,9 @@ frame :: proc(app: ^App, dt: f32) {
 	app.renderer.set_view_projection(camera_view_projection(&app.camera))
 
 	app.renderer.draw_mesh(app.mesh_handle, {0.45, 0.55, 0.85, 1.0})
-	// draw_normals(app)
-	draw_tangent_frames(app)
+	//draw_normals(app)
+	//draw_tangent_frames(app)
+	//draw_field(app)
 
 	//app.simplicial = star_vertex(&app.halfmesh, 7)
 	//app.simplicial = star_edge(&app.halfmesh, 3)

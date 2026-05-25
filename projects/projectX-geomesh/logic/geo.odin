@@ -602,7 +602,7 @@ FieldEntry :: struct {
 }
 
 calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> map[u32]FieldEntry {
-	field := make(map[u32]FieldEntry, context.temp_allocator)
+	field := make(map[u32]FieldEntry)
 	field_count := 0
 	for face in m.faces {
 		entry := FieldEntry{}
@@ -616,7 +616,12 @@ calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> ma
 
 	fixed_index := u32(rand.int_max(field_count))
 
+	prev := make(map[u32]Vec2, context.temp_allocator)
+
 	for it in 0 ..< iterations {
+		clear(&prev)
+		for fi, &entry in field do prev[fi] = entry.local
+
 		for fi, &entry in field {
 			if fixed_index == fi do continue
 
@@ -626,7 +631,7 @@ calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> ma
 			for nfi in entry.neighbours {
 				if nfi == NONE do continue
 				ne := field[nfi]
-				ws := frame_local_to_world_space(ne.frame, ne.local)
+				ws := frame_local_to_world_space(ne.frame, prev[nfi])
 				tr := calculate_face_transport(m, nfi, fi, ws)
 				lo := world_space_to_frame(entry.frame, tr)
 				locals[count] = lo
