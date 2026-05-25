@@ -1,8 +1,10 @@
 package logic
 
-import "core:crypto/legacy/sha1"
+import "core:container/queue"
+import "core:container/small_array"
 import "core:math"
 import "core:math/linalg"
+import "core:math/rand"
 
 Vec3 :: [3]f32
 Vec2 :: [2]f32
@@ -171,6 +173,21 @@ find_common_edge :: proc(m: ^HalfMesh, f1i: u32, f2i: u32) -> (edge: u32, he1i: 
 	}
 
 	return NONE, NONE
+}
+
+neighbouring_faces :: proc(m: ^HalfMesh, f: u32) -> [dynamic]u32 {
+	faces := make([dynamic]u32, context.temp_allocator)
+	hei := m.faces[f].halfEdge
+	for {
+		he := m.halfedges[hei]
+
+		nf := m.halfedges[he.twin].face
+		append(&faces, nf)
+
+		hei = he.next
+		if hei == m.faces[f].halfEdge do break
+	}
+	return faces
 }
 
 star_vertex :: proc(m: ^HalfMesh, vi: u32) -> SimplicialSet {
@@ -578,22 +595,52 @@ face_shape_operator :: proc(m: ^HalfMesh, fi: u32) -> Mat2 {
 }
 
 FieldEntry :: struct {
-	fi:    u32,
-	fixed: bool,
-	frame: Frame,
-	local: Vec2,
+	fi:         u32,
+	frame:      Frame,
+	local:      Vec2,
+	neighbours: [dynamic]u32,
 }
 
-calculate_tangent_vector_field :: proc(m: ^HalfMesh) {
-	field := make([dynamic]FieldEntry, context.temp_allocator)
-
+calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> map[u32]FieldEntry {
+	field := make(map[u32]FieldEntry, context.temp_allocator)
+	field_count := 0
 	for face in m.faces {
 		entry := FieldEntry{}
 		entry.fi = m.halfedges[face.halfEdge].face
 		entry.frame = calculate_face_frame(m, entry.fi)
-		entry.local = Vec2{1,0}
-		append(&field, entry)
+		entry.local = Vec2{1, 0}
+		entry.neighbours = neighbouring_faces(m, entry.fi)
+		field[entry.fi] = entry
+		field_count += 1
 	}
+
+	for it in 0 ..< iterations {
+		fixed_index := u32(rand.int_max(field_count))
+	
+		for fi, &entry in field {
+			if fixed_index == fi do continue
+
+			locals: [16]Vec2
+			count := 0
+
+			for nfi in entry.neighbours {
+				ne := field[nfi]
+				ws := frame_local_to_world_space(ne.frame, ne.local)
+				tr := calculate_face_transport(m, fi, nfi, ws)
+				lo := world_space_to_frame(entry.frame, tr)
+				locals[count] = lo
+				count += 1
+			}
+
+			local := Vec2{0, 0}
+			for i in 0 ..< count do local += locals[i]
+			local /= f32(count)
+
+			entry.local = local
+		}
+	}
+
+	return field
 }
 
 calculate_tangent_cross_field :: proc(m: ^HalfMesh) {
