@@ -537,6 +537,58 @@ a:hover {
     border-radius: 12px;
 }
 
+.related-section {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.related-section h3 {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin: 0 0 1rem 0;
+}
+
+.related-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.related-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.related-kind {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--accent-muted);
+    background: var(--accent-light);
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.related-list a {
+    font-weight: 500;
+}
+
+.related-note {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 .device-image-placeholder {
     background: var(--bg-alt);
     border: 1px dashed var(--border);

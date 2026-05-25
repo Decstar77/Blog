@@ -161,6 +161,27 @@ def loss_function(preds, target, mu, lvar, beta=0.1):
     return mse + beta * kld               # beta tames posterior collapse</code></pre>
         </div>
 
+        <section class="related-section">
+            <h3>Related</h3>
+            <ul class="related-list">
+                <li>
+                    <span class="related-kind">Article</span>
+                    <a href="vae-math.html">The Math Behind Variational Autoencoders</a>
+                    <span class="related-note">— the ELBO, reparameterisation trick, and Gaussian KL that this demo implements.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Project</span>
+                    <a href="project-diffusion-mnist.html">Diffusion on MNIST</a>
+                    <span class="related-note">— a different latent-variable generative model on a slightly less trivial dataset.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Project</span>
+                    <a href="project-diffusion-circle.html">Diffusion on Circles</a>
+                    <span class="related-note">— another minimal generative-model toy, useful for comparing how each family explores its latent space.</span>
+                </li>
+            </ul>
+        </section>
+
     </article>
 
 </main>

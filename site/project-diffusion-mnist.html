@@ -171,6 +171,32 @@ def sample_reverse(net, num_samples, value):
 # between predicted and true epsilon. 20 epochs, Adam(1e-4), cosine LR.</code></pre>
         </div>
 
+        <section class="related-section">
+            <h3>Related</h3>
+            <ul class="related-list">
+                <li>
+                    <span class="related-kind">Article</span>
+                    <a href="diffusion-forward-process.html">Diffusion #1: The Gaussian Forward Pass</a>
+                    <span class="related-note">— the $\sqrt{\bar{\alpha}_t}\,x + \sqrt{1-\bar{\alpha}_t}\,\varepsilon$ noising used in the training loop above.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Article</span>
+                    <a href="diffusion-backward-pass.html">Diffusion #2: The Gaussian Backward Pass</a>
+                    <span class="related-note">— the reverse-process math behind the sampler that turns noise into a digit.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Project</span>
+                    <a href="project-diffusion-circle.html">Diffusion on Circles</a>
+                    <span class="related-note">— the same DDPM on a 2-D toy dataset, with the reverse trajectory animated step by step.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Project</span>
+                    <a href="project-vae-colors.html">A VAE on Colors</a>
+                    <span class="related-note">— a contrasting latent-variable generative model with an explicitly visualisable latent space.</span>
+                </li>
+            </ul>
+        </section>
+
     </article>
 
 </main>

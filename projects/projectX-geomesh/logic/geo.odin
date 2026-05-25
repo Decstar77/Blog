@@ -528,6 +528,22 @@ frame_local_to_world_space :: proc(frame: Frame, local: Vec2) -> Vec3 {
 	return ws
 }
 
+calculate_face_transport :: proc(m: ^HalfMesh, f1i: u32, f2i: u32, wt: Vec3) -> Vec3 {
+	edge, hei1 := find_common_edge(m, f1i, f2i)
+	if edge == NONE do return Vec3{0, 0, 0}
+
+	v1 := m.vertices[m.halfedges[hei1].vert].position
+	v2 := m.vertices[m.halfedges[m.halfedges[hei1].next].vert].position
+	d := v2 - v1
+	if linalg.length(d) == 0 do return Vec3{0, 0, 0} // degenerate edge
+	axis := linalg.normalize(d)
+	// signed_dihedral_angle returns the rotation about +axis that maps n2->n1,
+	// so negate it to transport from face1's plane into face2's.
+	angle := signed_dihedral_angle(m, f1i, f2i)
+	ported := rotate_vector_about(wt, axis, -angle)
+	return ported
+}
+
 face_shape_operator :: proc(m: ^HalfMesh, fi: u32) -> Mat2 {
 	// Cohen-Steiner & Morvan
 	shape := Mat2{0, 0, 0, 0}
@@ -547,7 +563,7 @@ face_shape_operator :: proc(m: ^HalfMesh, fi: u32) -> Mat2 {
 
 		// Boundary edge, which can be a problem as it's now biased but fine for now
 		if nf != NONE {
-			perp := Vec2{ -te[1], te[0] }
+			perp := Vec2{-te[1], te[0]}
 			angle := signed_dihedral_angle(m, fi, nf)
 			shape += 0.5 * angle * l * linalg.outer_product(perp, perp)
 		}
@@ -561,24 +577,23 @@ face_shape_operator :: proc(m: ^HalfMesh, fi: u32) -> Mat2 {
 	return shape
 }
 
-calculate_face_transport :: proc(m: ^HalfMesh, f1i: u32, f2i: u32, wt: Vec3) -> Vec3 {
-	edge, hei1 := find_common_edge(m, f1i, f2i)
-	if edge == NONE do return Vec3{0, 0, 0}
-
-	v1 := m.vertices[m.halfedges[hei1].vert].position
-	v2 := m.vertices[m.halfedges[m.halfedges[hei1].next].vert].position
-	d := v2 - v1
-	if linalg.length(d) == 0 do return Vec3{0, 0, 0} // degenerate edge
-	axis := linalg.normalize(d)
-	// signed_dihedral_angle returns the rotation about +axis that maps n2->n1,
-	// so negate it to transport from face1's plane into face2's.
-	angle := signed_dihedral_angle(m, f1i, f2i)
-	ported := rotate_vector_about(wt, axis, -angle)
-	return ported
+FieldEntry :: struct {
+	fi:    u32,
+	fixed: bool,
+	frame: Frame,
+	local: Vec2,
 }
 
 calculate_tangent_vector_field :: proc(m: ^HalfMesh) {
+	field := make([dynamic]FieldEntry, context.temp_allocator)
 
+	for face in m.faces {
+		entry := FieldEntry{}
+		entry.fi = m.halfedges[face.halfEdge].face
+		entry.frame = calculate_face_frame(m, entry.fi)
+		entry.local = Vec2{1,0}
+		append(&field, entry)
+	}
 }
 
 calculate_tangent_cross_field :: proc(m: ^HalfMesh) {
