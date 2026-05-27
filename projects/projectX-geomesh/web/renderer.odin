@@ -23,22 +23,49 @@ void main() {
     frag_color = u_color;
 }`
 
+LINE_VS_SRC :: `#version 300 es
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec4 a_color;
+uniform mat4 u_view_proj;
+out vec4 v_color;
+void main() {
+    v_color = a_color;
+    gl_Position = u_view_proj * vec4(a_pos, 1.0);
+}`
+
+LINE_FS_SRC :: `#version 300 es
+precision mediump float;
+in vec4 v_color;
+out vec4 frag_color;
+void main() {
+    frag_color = v_color;
+}`
+
 GL_Mesh :: struct {
     vao:         gl.VertexArrayObject,
     vbo, ibo:    gl.Buffer,
     index_count: int,
 }
 
-g_program       : gl.Program
-g_u_color_loc   : i32
-g_u_model_loc   : i32
-g_u_vp_loc      : i32
-g_meshes        : [dynamic]GL_Mesh
-g_line_vao      : gl.VertexArrayObject
-g_line_vbo      : gl.Buffer
-g_tri_vao       : gl.VertexArrayObject
-g_tri_vbo       : gl.Buffer
-g_tri_ibo       : gl.Buffer
+Line_Vertex :: struct {
+    pos:   logic.Vec3,
+    color: logic.Color,
+}
+
+g_program           : gl.Program
+g_u_color_loc       : i32
+g_u_model_loc       : i32
+g_u_vp_loc          : i32
+g_meshes            : [dynamic]GL_Mesh
+g_line_program      : gl.Program
+g_line_u_vp_loc     : i32
+g_line_vao          : gl.VertexArrayObject
+g_line_vbo          : gl.Buffer
+g_line_vbo_capacity : int
+g_lines             : [dynamic]Line_Vertex
+g_tri_vao           : gl.VertexArrayObject
+g_tri_vbo           : gl.Buffer
+g_tri_ibo           : gl.Buffer
 
 IDENTITY4 :: logic.Mat4{
     1, 0, 0, 0,
@@ -60,13 +87,22 @@ renderer_init :: proc() {
 
     gl.Enable(gl.DEPTH_TEST)
 
+    line_prog, line_ok := gl.CreateProgramFromStrings({LINE_VS_SRC}, {LINE_FS_SRC})
+    if !line_ok {
+        fmt.eprintln("line shader program failed to build")
+        return
+    }
+    g_line_program  = line_prog
+    g_line_u_vp_loc = gl.GetUniformLocation(line_prog, "u_view_proj")
+
     g_line_vao = gl.CreateVertexArray()
     g_line_vbo = gl.CreateBuffer()
     gl.BindVertexArray(g_line_vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, g_line_vbo)
-    gl.BufferData(gl.ARRAY_BUFFER, 2 * size_of([3]f32), nil, gl.DYNAMIC_DRAW)
     gl.EnableVertexAttribArray(0)
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, false, size_of([3]f32), 0)
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, false, size_of(Line_Vertex), 0)
+    gl.EnableVertexAttribArray(1)
+    gl.VertexAttribPointer(1, 4, gl.FLOAT, false, size_of(Line_Vertex), size_of(logic.Vec3))
     gl.BindVertexArray(0)
 
     g_tri_vao = gl.CreateVertexArray()
@@ -88,7 +124,7 @@ make_renderer :: proc() -> logic.Renderer {
         draw_mesh_xform         = gl_draw_mesh_xform,
         draw_triangles          = gl_draw_triangles,
         draw_line               = gl_draw_line,
-        draw_line_overlay       = gl_draw_line_overlay,
+        end_frame               = gl_end_frame,
         clear                   = gl_clear,
         set_viewport            = gl_set_viewport,
         set_view_projection     = gl_set_view_projection,
@@ -169,28 +205,30 @@ gl_update_mesh :: proc(mesh: logic.Mesh_Handle, positions: []logic.Vec3) {
 }
 
 @(private="file")
-gl_draw_line_overlay :: proc(a, b: logic.Vec3, color: logic.Color) {
-    verts := [2]logic.Vec3{a, b}
-    set_uniforms(color, IDENTITY4)
-    gl.Disable(gl.DEPTH_TEST)
-    gl.BindVertexArray(g_line_vao)
-    gl.BindBuffer(gl.ARRAY_BUFFER, g_line_vbo)
-    gl.BufferSubData(gl.ARRAY_BUFFER, 0, size_of(verts), &verts)
-    gl.DrawArrays(gl.LINES, 0, 2)
-    gl.BindVertexArray(0)
-    gl.Enable(gl.DEPTH_TEST)
+gl_draw_line :: proc(a, b: logic.Vec3, color: logic.Color) {
+    append(&g_lines, Line_Vertex{pos = a, color = color})
+    append(&g_lines, Line_Vertex{pos = b, color = color})
 }
 
 @(private="file")
-gl_draw_line :: proc(a, b: logic.Vec3, color: logic.Color) {
-    verts := [2]logic.Vec3{a, b}
+gl_end_frame :: proc() {
+    if len(g_lines) == 0 do return
 
-    set_uniforms(color, IDENTITY4)
+    bytes := len(g_lines) * size_of(Line_Vertex)
     gl.BindVertexArray(g_line_vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, g_line_vbo)
-    gl.BufferSubData(gl.ARRAY_BUFFER, 0, size_of(verts), &verts)
-    gl.DrawArrays(gl.LINES, 0, 2)
+    if bytes > g_line_vbo_capacity {
+        gl.BufferData(gl.ARRAY_BUFFER, bytes, raw_data(g_lines), gl.DYNAMIC_DRAW)
+        g_line_vbo_capacity = bytes
+    } else {
+        gl.BufferSubData(gl.ARRAY_BUFFER, 0, bytes, raw_data(g_lines))
+    }
+
+    gl.UseProgram(g_line_program)
+    gl.DrawArrays(gl.LINES, 0, len(g_lines))
     gl.BindVertexArray(0)
+
+    clear(&g_lines)
 }
 
 @(private="file")
@@ -207,5 +245,8 @@ gl_set_viewport :: proc(w, h: int) {
 @(private="file")
 gl_set_view_projection :: proc(vp: logic.Mat4) {
     m := glm.mat4(vp)
+    gl.UseProgram(g_program)
     gl.UniformMatrix4fv(g_u_vp_loc, m)
+    gl.UseProgram(g_line_program)
+    gl.UniformMatrix4fv(g_line_u_vp_loc, m)
 }

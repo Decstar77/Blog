@@ -601,9 +601,9 @@ FieldEntry :: struct {
 	neighbours: [dynamic]u32,
 }
 
-calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> map[u32]FieldEntry {
+make_field :: proc(m: ^HalfMesh) -> (map[u32]FieldEntry, u32) {
 	field := make(map[u32]FieldEntry)
-	field_count := 0
+	field_count: u32 = 0
 	for face in m.faces {
 		entry := FieldEntry{}
 		entry.fi = m.halfedges[face.halfEdge].face
@@ -614,8 +614,12 @@ calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> ma
 		field_count += 1
 	}
 
-	fixed_index := u32(rand.int_max(field_count))
+	return field, field_count
+}
 
+calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> map[u32]FieldEntry {
+	field, field_count := make_field(m)
+	fixed_index := u32(rand.int_max(int(field_count)))
 	prev := make(map[u32]Vec2, context.temp_allocator)
 
 	for it in 0 ..< iterations {
@@ -652,8 +656,43 @@ calculate_tangent_vector_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> ma
 	return field
 }
 
-calculate_tangent_cross_field :: proc(m: ^HalfMesh) {
+calculate_tangent_cross_field :: proc(m: ^HalfMesh, iterations: u32 = 10) -> map[u32]FieldEntry {
+	field, field_count := make_field(m)
+	fixed_index := u32(rand.int_max(int(field_count)))
+	prev := make(map[u32]Vec2, context.temp_allocator)
 
+	for it in 0 ..< iterations {
+		clear(&prev)
+		for fi, &entry in field do prev[fi] = entry.local
+
+		for fi, &entry in field {
+			if fixed_index == fi do continue
+
+			locals: [16]Vec2
+			count := 0
+
+			for nfi in entry.neighbours {
+				if nfi == NONE do continue
+				ne := field[nfi]
+				ws	 := frame_local_to_world_space(ne.frame, prev[nfi])
+				tr := calculate_face_transport(m, nfi, fi, ws)
+				lo := world_space_to_frame(entry.frame, tr)
+				locals[count] = lo
+				count += 1
+			}
+
+			if count == 0 do continue
+
+			local := Vec2{0, 0}
+			for i in 0 ..< count do local += locals[i]
+			local /= f32(count)
+
+			if l := linalg.length(local); l > 1e-8 do local /= l
+			entry.local = local
+		}
+	}
+
+	return field
 }
 
 calculate_tangent_principal_field :: proc(m: ^HalfMesh) {

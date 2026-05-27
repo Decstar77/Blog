@@ -17,7 +17,7 @@ Renderer :: struct {
 	draw_mesh_xform:     proc(mesh: Mesh_Handle, model: Mat4, color: Color),
 	draw_triangles:      proc(positions: []Vec3, indices: []u32, color: Color),
 	draw_line:           proc(a, b: Vec3, color: Color),
-	draw_line_overlay:   proc(a, b: Vec3, color: Color),
+	end_frame:           proc(),
 	clear:               proc(color: Color),
 	set_viewport:        proc(w, h: int),
 	set_view_projection: proc(vp: Mat4),
@@ -386,7 +386,7 @@ frame :: proc(app: ^App, dt: f32) {
 	app.renderer.draw_mesh(app.mesh_handle, {0.45, 0.55, 0.85, 1.0})
 	//draw_normals(app)
 	//draw_tangent_frames(app)
-	//draw_field(app)
+	draw_field(app)
 
 	//app.simplicial = star_vertex(&app.halfmesh, 7)
 	//app.simplicial = star_edge(&app.halfmesh, 3)
@@ -434,6 +434,8 @@ frame :: proc(app: ^App, dt: f32) {
 	// 	anchor := v.position + {0, 0.08, 0}
 	// 	app.renderer.draw_text_3d(app.font, text, anchor, 0.2, label_color, cam_right, cam_up)
 	// }
+
+	app.renderer.end_frame()
 
 	free_all(context.temp_allocator)
 }
