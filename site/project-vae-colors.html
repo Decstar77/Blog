@@ -84,8 +84,7 @@
         <div class="article-body">
             <h2>How it works</h2>
             <p>
-                A VAE doesn't encode an input to a single point — it encodes it to a
-                <em>distribution</em>. The encoder maps an RGB colour to a mean
+                A VAE  encodes it to a <em>distribution</em>. The encoder maps an RGB colour to a mean
                 <code>μ</code> and log-variance <code>log σ²</code> over the 2D latent
                 space. We sample <code>z = μ + σ ⊙ ε</code> (the reparameterisation
                 trick, so gradients still flow), and the decoder maps <code>z</code>
@@ -94,7 +93,7 @@
             <p>
                 Training balances two terms: a reconstruction MSE, and a KL divergence
                 pulling every encoded posterior towards a unit Gaussian. That KL term
-                is what makes the latent space <em>continuous</em> — nearby points
+                is what makes the latent space <em>continuous</em> as nearby points
                 decode to similar colours, which is exactly what the demo above shows.
             </p>
             <p>

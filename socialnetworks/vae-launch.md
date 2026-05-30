@@ -7,7 +7,7 @@ Covers the RGB color VAE: a 3-dim → 2-dim VAE that learns to separate red, gre
 ## X (Twitter)
 
 **Title (first post):**
-I built the smallest useful VAE I could think of — 3 colour inputs, 2 latent dims — just to watch what the latent space does.
+I built the smallest useful VAE I could think of a RGB (3D) color value through a 2D latent space
 
 **Thread:**
 
