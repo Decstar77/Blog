@@ -6,3 +6,4 @@ matplotlib==3.10.8
 scikit-learn
 PySide6==6.11.0
 tqdm==4.67.3
+torch_geometric

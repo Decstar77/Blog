@@ -2,7 +2,7 @@
 const articles = [
     {
         title: "The Math Behind Variational Autoencoders",
-        summary: "From the intractable evidence integral to the ELBO — deriving the variational lower bound, the reparameterisation trick, and the closed-form KL between two Gaussians that turns a VAE into something you can actually train with backprop.",
+        summary: "From the intractable evidence integral to the ELBO, deriving the variational lower bound, the reparameterisation trick, and the closed-form KL.",
         category: "Machine Learning",
         date: "2026-04-22",
         readTime: "25 min read",
@@ -10,7 +10,7 @@ const articles = [
     },
     {
         title: "Diffusion #2: The Math Of The Gaussian Backward Pass",
-        summary: "Deriving the reverse diffusion posterior from Bayes' theorem — working through log-space algebra to obtain the closed-form mean and variance, then eliminating x₀ via the reparameterisation trick to arrive at the noise-prediction form used during sampling.",
+        summary: "Deriving the reverse diffusion posterior from Bayes' theorem.",
         category: "Machine Learning",
         date: "2026-04-14",
         readTime: "20 min read",
@@ -18,7 +18,7 @@ const articles = [
     },
     {
         title: "Diffusion #1: The Math Of The Gaussian Forward Pass",
-        summary: "Deriving the closed-form forward process for diffusion models from first principles — the noise schedule, sampling form of the Gaussian, the reparameterization trick, and how to jump to any noisy x_t directly from x_0.",
+        summary: "Deriving the closed-form forward process for diffusion models from first principles. ",
         category: "Machine Learning",
         date: "2026-04-11",
         readTime: "15 min read",
