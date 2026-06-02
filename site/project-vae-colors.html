@@ -128,7 +128,6 @@ from torch.nn import functional as F
 
 
 class Model(nn.Module):
-    """A tiny VAE: 3-D RGB &lt;-&gt; 2-D latent space."""
     def __init__(self):
         super().__init__()
         self.enc  = nn.Linear(3, 2)
