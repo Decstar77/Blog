@@ -585,6 +585,7 @@ face_shape_operator :: proc(m: ^HalfMesh, fi: u32) -> Mat2 {
 			shape += 0.5 * angle * l * linalg.outer_product(perp, perp)
 		}
 
+		
 		hei = he.next
 		if hei == m.faces[fi].halfEdge do break
 	}
