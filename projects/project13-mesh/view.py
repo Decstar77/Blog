@@ -12,6 +12,7 @@ Controls (trimesh viewer):
     q / esc     - quit
 """
 
+
 import argparse
 import sys
 from pathlib import Path
