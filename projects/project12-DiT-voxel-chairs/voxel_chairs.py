@@ -9,7 +9,3 @@ dataset = load_dataset("ShapeNet/ShapeNetCore", name="v2", token=True)
 # dataset = load_dataset("ShapeNet/ShapeNetCore", name="v2", cache_dir="./my_data")
 
 
-
-
-
-
