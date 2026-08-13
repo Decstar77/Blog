@@ -125,7 +125,7 @@
                     x)}\right]$$
                     <p>
                         This lower bound is called the <strong>ELBO</strong> (Evidence Lower
-                        BOund). Maximising the ELBO pushes up $\log p(x)$ — which is exactly
+                        BOund). Maximising the ELBO pushes up $\log p(x)$ which is exactly
                         what we want.
                     </p>
 
@@ -188,7 +188,7 @@
                     <h3>Term A</h3>
                     <p>
                         $\mathbb{E}_q\!\left[-\tfrac{1}{2}\log \sigma^2\right]$ is a constant
-                        with respect to $z$ — it only depends on the encoder's output — so it
+                        with respect to $z$, it only depends on the encoder's output, so it
                         passes straight through:
                     </p>
                     $$\mathbb{E}_q\!\left[-\tfrac{1}{2}\log \sigma^2\right] = -\tfrac{1}{2}\log \sigma^2$$
@@ -211,8 +211,7 @@
                         This is where I initially got stuck, because the usual derivation
                         jumps straight to the identity
                         $\mathbb{E}[z^2] = \operatorname{Var}(z) + (\mathbb{E}[z])^2$
-                        without saying where it comes from. It is worth pausing on, because
-                        it is not a trick — it is just the definition of variance rearranged.
+                        without saying where it comes from. It is just the definition of variance rearranged.
                     </p>
                     <p>
                         Start from the definition of variance and let $\mu= \mathbb{E}[z]$:
@@ -233,7 +232,7 @@
                     </p>
                     $$\mathbb{E}[z^2] = \operatorname{Var}(z) + (\mathbb{E}[z])^2$$
                     <p>
-                        That is all it is — the definition of variance, expanded, solved for
+                        That is all it is, the definition of variance, expanded, solved for
                         $\mathbb{E}[z^2]$. With this in hand, and since $z\sim q$ has
                         $\operatorname{Var}(z) = \sigma^2$ and $\mathbb{E}[z] = \mu$:
                     </p>
@@ -259,8 +258,8 @@
                     <p>
                         Sanity check the intuition: if the encoder outputs$\mu = 0$ and
                         $\sigma^2 = 1$ (i.e. it matches the prior exactly), the penalty is
-                        $-\tfrac{1}{2}(1 + 0 - 0 - 1) = 0$. Any drift awayfrom a standard
-                        normal — in either the mean or the variance — makes the penalty grow.
+                        $-\tfrac{1}{2}(1 + 0 - 0 - 1) = 0$. Any drift away from a standard
+                        normal, either the mean or the variance, makes the penalty grow.
                     </p>
 
                     <h2>The Reparameterisation Trick</h2>
@@ -268,7 +267,7 @@
                         One more obstacle: during training, we need to sample
                         $z \sim q_\phi(z \mid x) = \mathcal{N}(\mu, \sigma^2)$ and then
                         backpropagate through that sampling step to updatethe encoder. But
-                        sampling is a stochastic operation — you cannot compute
+                        sampling is a stochastic operation because you cannot compute
                         $\partial z / \partial \mu$ if $z$ was just drawn at random.
                     </p>
                     <p>
@@ -282,7 +281,7 @@
                         $\partial z / \partial \mu = 1$ and $\partial z / \partial \sigma = \varepsilon$.
                         The randomness $\varepsilon$ is treated as a constant input, like the
                         data itself. This is the same change-of-variables logic that underpins
-                        the sampling form of the Gaussian — here it just gets used for
+                        the sampling form of the Gaussian but here it just gets used for
                         gradient flow rather than for deriving a PDF.
                     </p>
 
@@ -294,7 +293,7 @@
                     \;+\; \underbrace{-\frac{1}{2}\sum_{j=1}^{d}\left(1 + \log \sigma_j^2 - \mu_j^2 -
                     \sigma_j^2\right)}_{\text{KL divergence}}$$
                     <p>
-                        In practice you often weight the KL term — this isthe $\beta$-VAE
+                        In practice you often weight the KL term. This is the $\beta$-VAE
                         variant:
                     </p>
                     $$\mathcal{L} = \text{Reconstruction} + \beta \cdot D_{KL}$$
@@ -333,11 +332,11 @@
                     <h2>Conclusion</h2>
                     <p>
                         What I like about the VAE derivation is how much it hinges on
-                        elementary identities — the definition of variance, Jensen's
+                        elementary identities, the definition of variance, Jensen's
                         inequality, basic properties of Gaussians. There is no single
                         breathtaking insight; it is a chain of small, honest algebraic moves
                         that ends somewhere genuinely useful. Next up I want to try coupling a
-                        VAE to a diffusion prior, the way Stable Diffusiondoes — which would
+                        VAE to a diffusion prior, the way Stable Diffusion does. Which would
                         tie this article back to the diffusion posts from earlier.
                     </p>
 

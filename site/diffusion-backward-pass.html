@@ -71,7 +71,7 @@
                     I will still skip steps with algebra though as I think most readers will be familiar with that.
                 </p>
 
-                <h2>Step 1 — Why We Condition on $x_0$</h2>
+                <h2>Step 1: Why We Condition on $x_0$</h2>
                 <p>
                     We cannot directly compute the reverse distribution:
                 </p>
@@ -84,7 +84,7 @@
                     We will eliminate $x_0$ later by substituting in the noise prediction from our model.
                 </p>
 
-                <h2>Step 2 — Apply Bayes' Theorem</h2>
+                <h2>Step 2: Apply Bayes' Theorem</h2>
                 <p>
                     Bayes' theorem in three-variable form is:
                 </p>
@@ -113,7 +113,7 @@
                 <p>
                    We use this method of proportionality to isolate the important terms, which makes things simpler.
                 </p>
-                <h2>Step 3 — Write the Gaussians</h2>
+                <h2>Step 3: Write the Gaussians</h2>
                 <p>
                     Recall from the forward process derivation that, using
                     $\alpha_t = 1 - \beta_t$ and $\bar{\alpha}_t = \prod_{s=1}^{t}\alpha_s$:
@@ -123,13 +123,13 @@
                 $$q(x_{t-1} \mid x_0)
                 = \mathcal{N}\!\left(x_{t-1};\; \sqrt{\bar{\alpha}_{t-1}}\,x_0,\; (1-\bar{\alpha}_{t-1})\mathbf{I}\right)$$
                 <p>
-                    These are all Gaussians with known means and variances — exactly the form we need
+                    These are all Gaussians with known means and variances which is exactly the form we need
                     to multiply together in log-space. Why log-space ? This is one of those, "Because Computers" reasons.
                     If we don't use log scale, gradients and values can either get really large or really small. 
                     Log-scale smooths things out and makes everything more stable.
                 </p>
 
-                <h2>Step 4 — Work in Log-Space</h2>
+                <h2>Step 4: Work in Log-Space</h2>
                 <p>
                     For a Gaussian, $\log \mathcal{N}(x;\,\mu,\,\sigma^2) \propto -\frac{(x-\mu)^2}{2\sigma^2}$.
                     Taking the log of the proportionality from Step 2 and treating only the

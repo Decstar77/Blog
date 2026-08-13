@@ -79,7 +79,7 @@
                         The core idea behind diffusion models is surprisingly straightforward: you train a
                         neural network to predict a noise term drawn from a Gaussian distribution. Concretely,
                         you corrupt an input (an image, say) by gradually adding noise over $T$ steps, then
-                        train the network to reverse that process — predicting and removing noise step by step
+                        train the network to reverse that process which involves predicting and removing noise step by step
                         until you recover something clean.
                     </p>
 
@@ -87,7 +87,7 @@
                     <p>
                         The forward process runs from $t = 0$ to $t = T$ (typically $T = 1000$), slowly
                         corrupting the input into pure Gaussian noise. The tricky part is that we need to be
-                        able to compute $x_t$ — the noisy image at an arbitrary time step $t$ — without
+                        able to compute $x_t$ , the noisy image at an arbitrary time step $t$ , without
                         running the process step-by-step from $x_0$.
                     </p>
                     <p>
@@ -178,7 +178,7 @@
 
                     <h2>The Key Insight: Any $x_t$ Directly from $x_0$</h2>
                     <p>
-                        The equation above gives $x_t$ from $x_{t-1}$ — one step back. What we want is $x_t$
+                        The equation above gives $x_t$ from $x_{t-1}$, one step back. What we want is $x_t$
                         directly from $x_0$, so we can sample any noise level in a single operation during
                         training. Let's expand a few steps and look for the pattern.
                     </p>
@@ -198,7 +198,7 @@
                     </p>
                     $$x_2 = \sqrt{\alpha_1 \alpha_2}\; x_0 + \underbrace{\sqrt{\alpha_2}\sqrt{1-\alpha_1}\;\varepsilon_1 + \sqrt{1-\alpha_2}\;\varepsilon_2}_{\text{linear combination of Gaussians}}$$
                     <p>
-                        The remaining terms (after $x_0$) don't depend on $x_0$ — they are a linear combination
+                        The remaining terms (after $x_0$) don't depend on $x_0$ , that is a linear combination
                         of independent Gaussians. By the closure property of Gaussians:
                     </p>
                     <blockquote>
@@ -223,7 +223,7 @@
                     $$\boxed{x_t = \sqrt{\bar{\alpha}_t}\; x_0 + \sqrt{1 - \bar{\alpha}_t}\; \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, \mathbf{I})}$$
                     <p>
                         This is the key result of the forward process. Given any input image $x_0$, you can
-                        sample the noisy version at any time step $t$ in a single operation — no need to iterate
+                        sample the noisy version at any time step $t$ in a single operation therefore there is no need to iterate
                         through all previous steps. As $t \to T$, $\bar{\alpha}_t \to 0$ and the image becomes
                         pure noise; as $t \to 0$, $\bar{\alpha}_t \to 1$ and you recover the original image.
                     </p>
@@ -232,7 +232,7 @@
                     <p>
                         Both coefficients are square roots because of a requirement called
                         <strong>variance preservation</strong>. We want each forward step to
-                        maintain unit variance — if $\operatorname{Var}(x_{t-1}) = 1$, we
+                        maintain unit variance, if $\operatorname{Var}(x_{t-1}) = 1$, we
                         need $\operatorname{Var}(x_t) = 1$ as well. This keeps the signal
                         scale stable as noise accumulates.
                     </p>
@@ -250,7 +250,7 @@
                     $$\operatorname{Var}(x_t) = \alpha_t \cdot 1 + (1 - \alpha_t) \cdot 1 = 1 \checkmark$$
                     <p>
                         Variance is perfectly preserved at every step. To see why the square roots are
-                        necessary, consider what happens without them — say we used
+                        necessary, consider what happens without them. For instance say we used
                         $x_t = \alpha_t\, x_{t-1} + (1 - \alpha_t)\, \varepsilon$ instead:
                     </p>
                     $$\operatorname{Var}(x_t) = \alpha_t^2 + (1 - \alpha_t)^2 \neq 1$$
@@ -262,7 +262,7 @@
 
                     <h2>Conclusion</h2>
                     <p>
-                        This covers the math behind the forward diffusion process — how to corrupt data
+                        This covers the math behind the forward diffusion process, how to corrupt data
                         with Gaussians, why the square roots are necessary for variance stability, and
                         how to derive the closed-form $q(x_t \mid x_0)$ that makes training tractable.
                         The next part is the reverse process, which is also math-heavy, and will come
