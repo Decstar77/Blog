@@ -1,6 +1,13 @@
 // All articles, newest first
 const articles = [
     {
+        title: "C++26 Reflection: A JSON Serializer in Forty Lines",
+        summary: "Building a struct-to-JSON writer with the ^^ reflection operator, splicers and template for, and what the four rewrites taught me.",
+        category: "C++",
+        readTime: "14 min read",
+        url: "cpp26-reflection-json.html"
+    },
+    {
         title: "The Math Behind Variational Autoencoders",
         summary: "From the intractable evidence integral to the ELBO, deriving the variational lower bound, the reparameterisation trick, and the closed-form KL.",
         category: "Machine Learning",

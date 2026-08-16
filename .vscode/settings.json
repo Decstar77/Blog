@@ -86,4 +86,5 @@
         "stack": "cpp"
     },
     "cmake.sourceDirectory": "C:/Projects/2024/Smol/vendor/glfw",
+    "C_Cpp.default.compilerPath": "C:/Projects/2026/Heisenburg/mingw64/bin/g++.exe",
 }
