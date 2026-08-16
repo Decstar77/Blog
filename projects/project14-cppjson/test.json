@@ -1,1 +1,1 @@
-{"number":2,"realNumber":5,"str":"GG \"quoted\" back\\slash\nnewline\ttab \u0001 café","sub":{"boolean":true,"otherNumber":7},"ids":[1,2,3],"vecs":[{"x":1,"y":2,"z":3},{"x":4,"y":5,"z":6}]}
+{"number":2,"realNumber":5,"str":"GG","sub":{"boolean":true,"otherNumber":7},"ids":[1,2,3],"vecs":[{"x":1,"y":2,"z":3},{"x":4,"y":5,"z":6}]}
