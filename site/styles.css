@@ -178,15 +178,6 @@ a:hover {
     flex-wrap: wrap;
 }
 
-.post-list-date {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    min-width: 108px;
-    flex-shrink: 0;
-}
-
 .post-list-title {
     font-size: 1rem;
     font-weight: 600;
@@ -667,8 +658,6 @@ a:hover {
     .article-header h1 { font-size: 1.5rem; }
 
     .post-list-row { flex-direction: column; gap: 2px; }
-
-    .post-list-date { min-width: unset; }
 }
 
 /* ============================================================
