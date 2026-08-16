@@ -1,7 +1,7 @@
 // All articles, newest first
 const articles = [
     {
-        title: "C++26 Reflection: A JSON Serializer in Forty Lines",
+        title: "C++26 Reflection, Exploration",
         summary: "Building a struct-to-JSON writer with the ^^ reflection operator, splicers and template for, and what the four rewrites taught me.",
         category: "C++",
         readTime: "14 min read",
