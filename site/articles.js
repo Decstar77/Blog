@@ -1,8 +1,8 @@
 // All articles, newest first
 const articles = [
     {
-        title: "C++26 Reflection, Exploration",
-        summary: "Building a struct-to-JSON writer with the ^^ reflection operator, splicers and template for, and what the four rewrites taught me.",
+        title: "C++26 Reflection, A Quick Exploration",
+        summary: "Building a struct-to-JSON writer with the ^^ reflection operator, splicers and template for.",
         category: "C++",
         readTime: "14 min read",
         url: "cpp26-reflection-json.html"
