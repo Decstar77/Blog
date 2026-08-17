@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MNIST: VAE vs DiT — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Machine Learning</span>
+            <h1 style="text-align: center;">Project 10 &amp; 11 — MNIST: VAE vs DiT</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-tag"></i> Python · PyTorch · torchvision</span>
+                <span><i class="fas fa-hashtag"></i> Projects 10 &amp; 11</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                Same dataset, two completely different generative models. Project 10 is a
+                convolutional VAE, project 11 is a diffusion transformer (DiT). Press generate
+                on both below and you'll see the whole story in about ten seconds: the VAE spits
+                out a digit instantly and it's a bit of a smudge, the DiT takes a thousand steps
+                and comes out looking like someone actually wrote it.
+            </p>
+        </div>
+        <br/>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <h2 style="text-align: center; margin: 0;">Live demo</h2>
+
+            <div class="mnist-results-grid">
+
+                <div class="mnist-model-card">
+                    <div class="mnist-model-header">
+                        <span class="mnist-model-tag">Project 10</span>
+                        <span class="mnist-model-name">VAE</span>
+                    </div>
+                    <div class="classifier-canvas-wrap">
+                        <canvas id="vaeCanvas" width="140" height="140" style="image-rendering: pixelated; background: #000; border: 1px solid var(--border);"></canvas>
+                        <p class="demo-canvas-hint">One forward pass, z ~ N(0, I)</p>
+                    </div>
+                    <div class="demo-controls" style="margin-top: 10px;">
+                        <button id="vaeBtn" class="mnist-clear-btn">Generate</button>
+                    </div>
+                </div>
+
+                <div class="mnist-model-card">
+                    <div class="mnist-model-header">
+                        <span class="mnist-model-tag">Project 11</span>
+                        <span class="mnist-model-name">DiT</span>
+                    </div>
+                    <div class="classifier-canvas-wrap">
+                        <canvas id="ditCanvas" width="140" height="140" style="image-rendering: pixelated; background: #000; border: 1px solid var(--border);"></canvas>
+                        <p class="demo-canvas-hint">1000 reverse-diffusion steps</p>
+                    </div>
+                    <div id="digitPicker" style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-top: 10px;">
+                        <button class="mnist-clear-btn digit-btn" data-digit="0">0</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="1">1</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="2">2</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="3">3</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="4">4</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="5">5</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="6">6</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="7">7</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="8">8</button>
+                        <button class="mnist-clear-btn digit-btn" data-digit="9">9</button>
+                    </div>
+                    <div class="demo-controls" style="margin-top: 10px;">
+                        <button id="ditBtn" class="mnist-clear-btn">Generate</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <p class="demo-status" id="demoStatus">VAE generates instantly. DiT needs a digit picked first, then takes a few seconds.</p>
+        </div>
+
+        <div class="article-body">
+            <h2>What's actually different here</h2>
+            <p>
+                The VAE squashes a 28×28 digit down to a 32-number latent vector and back up
+                through a couple of transposed-conv-ish upsample blocks. Sampling means drawing
+                a random z from a unit Gaussian and running it through the decoder once. That's
+                it, one forward pass, done in milliseconds. The catch is the KL term in the loss
+                pulls every digit's encoding toward the same blob of latent space, so the decoder
+                never has to commit to a sharp edge anywhere. It hedges. You get the average of
+                every "3" it ever saw.
+            </p>
+            <p>
+                The DiT does the opposite. It starts from pure noise and asks the network
+                "what's one small step less noisy than this" a thousand times in a row, each time
+                conditioned on the digit you picked and how far along the noising schedule it is.
+                Every step only has to make a tiny local correction, so the network never has to
+                solve "draw a 7" in one shot. It just has to solve "denoise this a bit," which
+                turns out to be a much easier problem, repeated a thousand times. That's the whole
+                trade: VAE is fast and blurry, DiT is slow and crisp.
+            </p>
+            <p>
+                Random samples, VAE (top) vs the class-conditional DiT samples I got at the end
+                of training (below, one column per digit):
+            </p>
+            <p style="text-align: center;">
+                <img src="../projects/project10-vae-mnist/samples.png" alt="VAE MNIST random samples" style="width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px;">
+            </p>
+            <p style="text-align: center; margin-top: 12px;">
+                <img src="../projects/project11-diffusion-transformer/sample.png" alt="DiT MNIST samples, one column per digit" style="width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px;">
+            </p>
+
+            <h2>Building the DiT was the hard part</h2>
+            <p>
+                Getting the U-Net diffusion model from project 8 working was fairly painless. The
+                transformer version fought me the whole way. First pass, the samples came out as
+                grey blobs with no digit-like structure at all. Turned out the AdaLN modulation
+                layers (the linear layers that turn the timestep + label embedding into per-block
+                shift/scale/gate values) were badly initialised, so the gates were letting through
+                near-zero signal and the network found it cheaper to just learn "predict the input
+                back as noise" — a real local minimum for the MSE loss, since at large t the input
+                genuinely is mostly noise. Zero-initialising those AdaLN weights (so every block
+                starts as a no-op and has to earn its way into doing something) fixed it. That's
+                a real trick from the original DiT paper, not something I invented, but I only
+                understood <em>why</em> it mattered after staring at cosine similarities between
+                ε̂ at t=0 and t=999 and realising they were nearly identical, meaning the model
+                wasn't even looking at the timestep. If you want the actual probes I used to catch
+                this, they're in <code>diagnostics.py</code> next to the project.
+            </p>
+
+            <h2>Code</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">
+                Full source on <a href="https://github.com/Decstar77">GitHub</a> — abridged here for readability.
+            </p>
+
+            <h3 style="text-align: center;">VAE — encode/decode</h3>
+            <pre><code>class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # conv encoder: 28x28 -> 64x7x7, then a linear head to (mean, logvar)
+        self.mean = nn.Linear(64 * 7 * 7, LATENT_DIM)
+        self.lvar = nn.Linear(64 * 7 * 7, LATENT_DIM)
+        # linear + upsample decoder: LATENT_DIM -> 64x7x7 -> 28x28
+        self.decode_fc = nn.Linear(LATENT_DIM, 64 * 7 * 7)
+
+    def encode(self, x):
+        r = self.pool2(F.relu(self.conv2(self.pool1(F.relu(self.conv1(x))))))
+        r = torch.flatten(r, 1)
+        return self.mean(r), self.lvar(r)
+
+    def decode(self, z):
+        r = F.relu(self.decode_fc(z)).reshape(z.shape[0], 64, 7, 7)
+        r = self.dcn1a(self.dcn1(self.up1(r)))
+        return self.dcn2(self.up2(r))
+
+    def forward(self, x):
+        mu, lv = self.encode(x)
+        z = mu + torch.exp(0.5 * lv) * torch.randn_like(lv)  # reparameterisation trick
+        return self.decode(z), mu, lv</code></pre>
+
+            <h3 style="text-align: center;">DiT — an AdaLN-modulated transformer block</h3>
+            <pre><code>class DiTBlock(nn.Module):
+    def __init__(self, hidden, heads, mlp_ratio=4):
+        super().__init__()
+        self.adal  = nn.Linear(hidden, 6 * hidden)   # conditioning -> 6 modulation vectors
+        self.adaa  = nn.SiLU()
+        self.preln = nn.LayerNorm(hidden, elementwise_affine=False)
+        self.attn  = nn.MultiheadAttention(hidden, heads, batch_first=True)
+        self.mlpln = nn.LayerNorm(hidden, elementwise_affine=False)
+        self.mlp   = nn.Sequential(nn.Linear(hidden, hidden * mlp_ratio), nn.GELU(),
+                                    nn.Linear(hidden * mlp_ratio, hidden))
+
+    def forward(self, x):
+        x, c = x   # c = conditioning: sinusoidal(t) embedding + label embedding
+        shift1, scale1, gate1, shift2, scale2, gate2 = \
+            self.adal(self.adaa(c)).chunk(6, dim=-1)
+
+        h = self.preln(x) * (1 + scale1) + shift1
+        a, _ = self.attn(h, h, h, need_weights=False)
+        x = x + gate1 * a                              # gate starts at ~0
+
+        h = self.mlpln(x) * (1 + scale2) + shift2
+        return x + gate2 * self.mlp(h)
+
+# The fix that mattered: zero-init the adaLN weight so every block starts
+# as a no-op (gate ~ 0) and has to earn its way into modulating anything.
+for blk in model.blocks:
+    nn.init.zeros_(blk.adal.weight)</code></pre>
+
+            <h3 style="text-align: center;">DiT — reverse sampling</h3>
+            <pre><code>@torch.no_grad()
+def sample_reverse(net, num_samples, value):
+    net.eval()
+    x_t = torch.randn(num_samples, 1, 28, 28)
+
+    for t in reversed(range(tmax)):
+        t_en  = torch.full((num_samples,), t, dtype=torch.long)
+        label = torch.full((num_samples,), value, dtype=torch.long)
+        eps_hat = net((x_t, t_en, label))
+
+        alpha_t, alpha_bar_t, beta_t = alpha_tensor[t], alpha_prod_tensor[t], beta_tensor[t]
+        mu_t = (1.0 / alpha_t.sqrt()) * (x_t - ((1 - alpha_t) / (1 - alpha_bar_t).sqrt()) * eps_hat)
+
+        x_t = mu_t + beta_t.sqrt() * torch.randn_like(x_t) if t > 0 else mu_t
+
+    return x_t</code></pre>
+        </div>
+
+        <section class="related-section">
+            <h3>Related</h3>
+            <ul class="related-list">
+                <li>
+                    <span class="related-kind">Project</span>
+                    <a href="project-vae-colors.html">A VAE on Colors</a>
+                    <span class="related-note">— the same VAE idea in miniature, with an explicitly visualisable 2-D latent space.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Project</span>
+                    <a href="project-diffusion-mnist.html">Diffusion on MNIST</a>
+                    <span class="related-note">— the convolutional U-Net DDPM this DiT is a direct rewrite of, same task, different backbone.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Article</span>
+                    <a href="diffusion-forward-process.html">Diffusion #1: The Gaussian Forward Pass</a>
+                    <span class="related-note">— the noising math behind the training loop both diffusion projects share.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Article</span>
+                    <a href="diffusion-backward-pass.html">Diffusion #2: The Gaussian Backward Pass</a>
+                    <span class="related-note">— the reverse-process derivation behind <code>sample_reverse</code> above.</span>
+                </li>
+                <li>
+                    <span class="related-kind">Article</span>
+                    <a href="vae-math.html">The Math Behind Variational Autoencoders</a>
+                    <span class="related-note">— the ELBO and KL term that make the VAE's samples blurry in the first place.</span>
+                </li>
+            </ul>
+        </section>
+
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+<script>
+const RUNNER = '/api';
+
+const vaeCanvas = document.getElementById('vaeCanvas');
+const ditCanvas = document.getElementById('ditCanvas');
+const vctx = vaeCanvas.getContext('2d');
+const dctx = ditCanvas.getContext('2d');
+const W = vaeCanvas.width, H = vaeCanvas.height, CELL = W / 28;
+
+const vaeBtn    = document.getElementById('vaeBtn');
+const ditBtn    = document.getElementById('ditBtn');
+const status    = document.getElementById('demoStatus');
+const digitBtns = document.querySelectorAll('.digit-btn');
+
+let selectedDigit = null;
+
+function drawNoise(ctx) {
+    const img = ctx.createImageData(W, H);
+    for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.floor(Math.random() * 255);
+        img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v; img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+}
+
+function drawImage(ctx, grid) {
+    ctx.clearRect(0, 0, W, H);
+    for (let r = 0; r < 28; r++) {
+        for (let c = 0; c < 28; c++) {
+            const v = Math.max(0, Math.min(1, grid[r][c]));
+            const g = Math.floor(v * 255);
+            ctx.fillStyle = `rgb(${g}, ${g}, ${g})`;
+            ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
+        }
+    }
+}
+
+digitBtns.forEach(b => {
+    b.addEventListener('click', () => {
+        selectedDigit = parseInt(b.dataset.digit, 10);
+        digitBtns.forEach(x => { x.style.background = ''; x.style.color = ''; x.style.borderColor = ''; });
+        b.style.background = 'var(--accent)';
+        b.style.color = '#fff';
+        b.style.borderColor = 'var(--accent)';
+    });
+});
+
+async function generateVae() {
+    vaeBtn.disabled = true;
+    status.textContent = 'Querying VAE…';
+    status.style.color = 'var(--text-muted)';
+    try {
+        const res = await fetch(`${RUNNER}/run/vae-mnist`, { method: 'POST' });
+        if (!res.ok) throw new Error('bad response');
+        const data = await res.json();
+        drawImage(vctx, data.image);
+        status.textContent = 'VAE sample done.';
+    } catch {
+        status.textContent = 'Runner unavailable — start the Docker services to enable live queries.';
+        status.style.color = '#b05050';
+    } finally {
+        vaeBtn.disabled = false;
+    }
+}
+
+async function generateDit() {
+    if (selectedDigit === null) {
+        status.textContent = 'Pick a digit for the DiT first.';
+        status.style.color = '#b05050';
+        return;
+    }
+    ditBtn.disabled = true;
+    digitBtns.forEach(b => b.disabled = true);
+    status.textContent = 'Running 1000 reverse-diffusion steps on CPU… (~5–15 seconds)';
+    status.style.color = 'var(--text-muted)';
+    drawNoise(dctx);
+    try {
+        const res = await fetch(`${RUNNER}/run/dit-mnist`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ digit: selectedDigit }),
+        });
+        if (!res.ok) throw new Error('bad response');
+        const data = await res.json();
+        drawImage(dctx, data.image);
+        status.textContent = `DiT generated a ${data.digit}.`;
+    } catch {
+        status.textContent = 'Runner unavailable — start the Docker services to enable live queries.';
+        status.style.color = '#b05050';
+    } finally {
+        ditBtn.disabled = false;
+        digitBtns.forEach(b => b.disabled = false);
+    }
+}
+
+vaeBtn.addEventListener('click', generateVae);
+ditBtn.addEventListener('click', generateDit);
+
+drawNoise(vctx);
+drawNoise(dctx);
+</script>
+</body>
+</html>

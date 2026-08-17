@@ -93,6 +93,20 @@ vae_colors_model, vae_colors_module = load_project(
 )
 print("VAE (colors) loaded.")
 
+vae_mnist_model, vae_mnist_module = load_project(
+    py_path       = os.path.join(BASE, "projects/project10-vae-mnist/vae_mnist.py"),
+    weights_path  = os.path.join(BASE, "projects/project10-vae-mnist/model.pt"),
+    return_module = True,
+)
+print("VAE (MNIST) loaded.")
+
+dit_mnist_model, dit_mnist_module = load_project(
+    py_path       = os.path.join(BASE, "projects/project11-diffusion-transformer/diffusion_transformer.py"),
+    weights_path  = os.path.join(BASE, "projects/project11-diffusion-transformer/model.pt"),
+    return_module = True,
+)
+print("DiT (MNIST) loaded.")
+
 # Pre-compute the latent-space scatter and decoded grid — both are
 # deterministic given the weights, so there's no need to redo them per request.
 vae_colors_scatter = {"points": vae_colors_module.latent_scatter(vae_colors_model)}
@@ -281,6 +295,33 @@ def vae_colors_grid_endpoint():
 @app.get("/data/vae-colors")
 def vae_colors_data():
     return vae_colors_scatter
+
+
+# ── VAE (MNIST) vs DiT (MNIST) ─────────────────────────────────────
+
+@app.post("/run/vae-mnist")
+def run_vae_mnist():
+    image = vae_mnist_module.sample_random(vae_mnist_model, 1)[0, 0]
+    return {
+        "image": [[round(float(v), 4) for v in row] for row in image.tolist()],
+    }
+
+
+class DitMnistRequest(BaseModel):
+    digit: int
+
+
+@app.post("/run/dit-mnist")
+def run_dit_mnist(req: DitMnistRequest):
+    digit = max(0, min(9, int(req.digit)))
+    samples = dit_mnist_module.sample_reverse(dit_mnist_model, 1, digit)
+    image = samples[0, 0]
+    image = (image + 1.0) / 2.0
+    image = image.clamp(0.0, 1.0)
+    return {
+        "digit": digit,
+        "image": [[round(float(v), 4) for v in row] for row in image.tolist()],
+    }
 
 
 # ── Health ────────────────────────────────────────────────────────

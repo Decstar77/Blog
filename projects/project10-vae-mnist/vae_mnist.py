@@ -1,30 +1,10 @@
-import torch 
+import torch
 import torch.nn as nn
-import torch.optim as optim
-import random
-import math
-from torch.utils.data import DataLoader
-import torch.optim as optim
-import torchvision
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 from torch.nn import functional as F
-
-transform = torchvision.transforms.Compose(
-    [
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5,), (0.5,)),
-    ])
-
-batch_size = 32
-
-mnist_train = torchvision.datasets.MNIST(root='./data',      train=True, download=True, transform=transform)
-mnist_validation  = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
-training_loader     = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
-validation_loader   = DataLoader(mnist_validation, batch_size=batch_size, shuffle=True)
 
 LATENT_DIM = 32
 
+# Convention: the runner looks for a class named `Model` in each project file.
 class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
@@ -52,30 +32,32 @@ class Model(nn.Module):
         self.up2     = nn.Upsample( scale_factor=2, mode='bilinear', align_corners=False )
         self.dcn2    = nn.Conv2d( in_channels=32, out_channels=1, kernel_size=3, padding=1 )
 
-    def forward(self, x):
-        B = x.shape[0]
-
+    def encode(self, x):
         r = x
         r = self.pool1(F.relu(self.conv1(r)))
         r = self.pool2(F.relu(self.conv2(r)))
-
         r = torch.flatten(r, 1)
-        mu = self.mean(r)
-        lv = self.lvar(r)
+        return self.mean(r), self.lvar(r)
+
+    def decode(self, z):
+        B = z.shape[0]
+        r = F.relu(self.decode_fc(z))
+        r = r.reshape(B, 64, 7, 7)
+        r = self.up1(r)
+        r = self.dcn1a(self.dcn1(r))
+        r = self.up2(r)
+        r = self.dcn2(r)
+        return r
+
+    def forward(self, x):
+        mu, lv = self.encode(x)
 
         std = torch.exp( 0.5 * lv )
         eps = torch.randn_like(std)
         z = mu + std * eps          # reparameterization trick
 
-        r = F.relu(self.decode_fc(z))
-        r = r.reshape(B, 64, 7, 7)
+        return self.decode(z), mu, lv
 
-        r = self.up1(r)
-        r = self.dcn1a(self.dcn1(r))
-
-        r = self.up2(r)
-        r = self.dcn2(r)
-        return r, mu, lv
 
 def loss_function(preds, targets, mu, lvar, beta=0.15):
     # Reconstruction loss
@@ -85,88 +67,119 @@ def loss_function(preds, targets, mu, lvar, beta=0.15):
     loss = mse + beta * kld
     return loss
 
-model       = Model()
-optimizer   = optim.Adam( model.parameters(), lr=1e-3 )
 
-for epoch in range(1):
+# ── Inference helper (used by the runner) ──────────────────────────
+# The VAE isn't class-conditional, so "generating a sample" just means
+# decoding a fresh z ~ N(0, I) — no digit picker, unlike the DiT.
 
-    model.train()
-    pbar = tqdm(training_loader, "Training")
-    training_loss = 0
-    training_count = 0
-    for i, (x, _) in enumerate(pbar):
-        optimizer.zero_grad()
+@torch.no_grad()
+def sample_random(net, n=1):
+    net.eval()
+    z = torch.randn(n, LATENT_DIM)
+    images = net.decode(z)
+    images = (images * 0.5 + 0.5).clamp(0, 1)
+    return images
 
-        preds, mu, lvar = model(x)
-        loss = loss_function(preds, x, mu, lvar)
-        loss.backward()
-        optimizer.step()
 
-        training_loss+= loss
-        training_count+=1
-        loss_str = f"{(training_loss / training_count):.5f}"
-        pbar.set_postfix({"loss":loss_str})
+if __name__ == "__main__":
+    import os
+    import random
+    import torch.optim as optim
+    from torch.utils.data import DataLoader
+    import torchvision
+    import matplotlib.pyplot as plt
+    from tqdm import tqdm
 
-    model.eval()
-    validation_loss = 0
-    validation_count = 0
-    pbar = tqdm(validation_loader, desc="Validatn")
-    with torch.no_grad():
-        for i, (x, y) in  enumerate(pbar):
+    # Trained and served on CPU — the model is small enough that CUDA
+    # buys nothing worth the device-mismatch headache at load time.
+    device = torch.device("cpu")
+
+    transform = torchvision.transforms.Compose(
+        [
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize((0.5,), (0.5,)),
+        ])
+
+    batch_size = 32
+
+    mnist_train = torchvision.datasets.MNIST(root='./data',      train=True, download=True, transform=transform)
+    mnist_validation  = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+    training_loader     = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
+    validation_loader   = DataLoader(mnist_validation, batch_size=batch_size, shuffle=True)
+
+    model       = Model().to(device)
+    optimizer   = optim.Adam( model.parameters(), lr=1e-3 )
+
+    for epoch in range(1):
+
+        model.train()
+        pbar = tqdm(training_loader, "Training")
+        training_loss = 0
+        training_count = 0
+        for i, (x, _) in enumerate(pbar):
+            optimizer.zero_grad()
+
             preds, mu, lvar = model(x)
             loss = loss_function(preds, x, mu, lvar)
-            validation_loss+= loss
-            validation_count+=1
-            loss_str = f"{(validation_loss / validation_count):.5f}"
+            loss.backward()
+            optimizer.step()
+
+            training_loss+= loss
+            training_count+=1
+            loss_str = f"{(training_loss / training_count):.5f}"
             pbar.set_postfix({"loss":loss_str})
 
-def visualize_reconstructions(model, loader, n=8):
-    """Show n original images alongside their VAE reconstructions."""
-    model.eval()
-    x, _ = next(iter(loader))
-    x = x[:n]
-    with torch.no_grad():
-        recon, _, _ = model(x)
+        model.eval()
+        validation_loss = 0
+        validation_count = 0
+        pbar = tqdm(validation_loader, desc="Validatn")
+        with torch.no_grad():
+            for i, (x, y) in  enumerate(pbar):
+                preds, mu, lvar = model(x)
+                loss = loss_function(preds, x, mu, lvar)
+                validation_loss+= loss
+                validation_count+=1
+                loss_str = f"{(validation_loss / validation_count):.5f}"
+                pbar.set_postfix({"loss":loss_str})
 
-    # Denormalize from [-1, 1] back to [0, 1]
-    x     = (x     * 0.5 + 0.5).clamp(0, 1)
-    recon = (recon * 0.5 + 0.5).clamp(0, 1)
+    weights_path = os.path.join(os.path.dirname(__file__), "model.pt")
+    torch.save(model.state_dict(), weights_path)
+    print(f"Saved -> {weights_path}")
 
-    fig, axes = plt.subplots(2, n, figsize=(n * 1.5, 3))
-    for i in range(n):
-        axes[0, i].imshow(x[i, 0].cpu(), cmap='gray')
-        axes[0, i].axis('off')
-        axes[1, i].imshow(recon[i, 0].cpu(), cmap='gray')
-        axes[1, i].axis('off')
-    axes[0, 0].set_title('Original', loc='left')
-    axes[1, 0].set_title('Reconstructed', loc='left')
-    plt.tight_layout()
-    plt.savefig('./projects/project10-vae-mnist/reconstructions.png')
-    #plt.show()
+    def visualize_reconstructions(model, loader, n=8):
+        """Show n original images alongside their VAE reconstructions."""
+        model.eval()
+        x, _ = next(iter(loader))
+        x = x[:n]
+        with torch.no_grad():
+            recon, _, _ = model(x)
 
-def visualize_samples(model, n=8):
-    """Decode random latent vectors sampled from N(0, I)."""
-    model.eval()
-    with torch.no_grad():
-        z = torch.randn(n, LATENT_DIM)
-        B = z.shape[0]
-        r = F.relu(model.decode_fc(z))
-        r = r.reshape(B, 64, 7, 7)
-        r = model.up1(r)
-        r = model.dcn1a(model.dcn1(r))
-        r = model.up2(r)
-        samples = model.dcn2(r)
+        # Denormalize from [-1, 1] back to [0, 1]
+        x     = (x     * 0.5 + 0.5).clamp(0, 1)
+        recon = (recon * 0.5 + 0.5).clamp(0, 1)
 
-    samples = (samples * 0.5 + 0.5).clamp(0, 1)
+        fig, axes = plt.subplots(2, n, figsize=(n * 1.5, 3))
+        for i in range(n):
+            axes[0, i].imshow(x[i, 0].cpu(), cmap='gray')
+            axes[0, i].axis('off')
+            axes[1, i].imshow(recon[i, 0].cpu(), cmap='gray')
+            axes[1, i].axis('off')
+        axes[0, 0].set_title('Original', loc='left')
+        axes[1, 0].set_title('Reconstructed', loc='left')
+        plt.tight_layout()
+        plt.savefig(os.path.join(os.path.dirname(__file__), 'reconstructions.png'))
 
-    fig, axes = plt.subplots(1, n, figsize=(n * 1.5, 2))
-    for i in range(n):
-        axes[i].imshow(samples[i, 0].cpu(), cmap='gray')
-        axes[i].axis('off')
-    fig.suptitle('Random Samples from Latent Space')
-    plt.tight_layout()
-    plt.savefig('./projects/project10-vae-mnist/samples.png')
-    #plt.show()
+    def visualize_samples(model, n=8):
+        """Decode random latent vectors sampled from N(0, I)."""
+        samples = sample_random(model, n)
 
-visualize_reconstructions(model, validation_loader)
-visualize_samples(model)
+        fig, axes = plt.subplots(1, n, figsize=(n * 1.5, 2))
+        for i in range(n):
+            axes[i].imshow(samples[i, 0].cpu(), cmap='gray')
+            axes[i].axis('off')
+        fig.suptitle('Random Samples from Latent Space')
+        plt.tight_layout()
+        plt.savefig(os.path.join(os.path.dirname(__file__), 'samples.png'))
+
+    visualize_reconstructions(model, validation_loader)
+    visualize_samples(model)

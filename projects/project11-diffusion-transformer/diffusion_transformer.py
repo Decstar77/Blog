@@ -1,36 +1,13 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
-import matplotlib.pyplot as plt
 
 import math
-import random
-
-import torchvision
-import numpy as np
-from tqdm import tqdm
-
-transform = torchvision.transforms.Compose(
-    [
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5,), (0.5,)),
-    ])
-
-mnist_train         = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-mnist_validation    = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
-batch_size = 64
 
 beta_start = 1e-4
-beta_end = 0.02
-tmax = 1000
-torch.manual_seed(23)
-random.seed(32)
+beta_end   = 0.02
+tmax       = 1000
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device {device}")
-
-def f_beta(i): 
+def f_beta(i):
     return beta_start + ( beta_end - beta_start ) * ( i / ( tmax - 1 ) )
 
 def f_alpha(i):
@@ -91,7 +68,7 @@ class DitFinalModule(nn.Module):
         self.adal       = nn.Linear(hidden, 2 * hidden)
         self.adaa       = nn.SiLU()
         self.norm       = nn.LayerNorm(hidden, elementwise_affine=False)
-        self.proj       = nn.Linear( hidden, 1 * patch_size * patch_size ) 
+        self.proj       = nn.Linear( hidden, 1 * patch_size * patch_size )
 
     def forward(self, x):
         x, c = x
@@ -109,13 +86,14 @@ class DitFinalModule(nn.Module):
         r = r.reshape(B, 1, H*P, W*P)
         return r
 
+# Convention: the runner looks for a class named `Model` in each project file.
 class Model(nn.Module):
     def __init__(self, patch_size=4, hidden=192, depth=6, heads=6, classes=10):
         super(Model, self).__init__()
         self.patch_size = patch_size
         self.hidden = hidden
         self.num_patches = int(28 / patch_size) ** 2
-        
+
         self.patch       = nn.Conv2d(1, hidden, kernel_size=patch_size, stride=patch_size)
         self.pos_embed   = nn.Parameter(torch.zeros(1, self.num_patches, hidden))
         self.time_mlp    = nn.Sequential( nn.Linear(hidden, hidden), nn.SiLU(), nn.Linear(hidden, hidden) )
@@ -135,91 +113,24 @@ class Model(nn.Module):
 
         return r
 
-training_loader     = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
-validation_loader   = DataLoader(mnist_validation, batch_size=batch_size, shuffle=True)
-beta_tensor         = torch.tensor( [ f_beta( i ) for i in range( tmax ) ], dtype=torch.float32, device=device )
-alpha_tensor        = torch.tensor( [ f_alpha( i ) for i in range( tmax ) ], dtype=torch.float32, device=device )
+
+# ── Reverse diffusion (used by the runner) ─────────────────────────
+# CPU-only tensors, no device plumbing — matches how the runner loads
+# and serves every project's weights.
+
+beta_tensor         = torch.tensor( [ f_beta( i ) for i in range( tmax ) ], dtype=torch.float32 )
+alpha_tensor        = torch.tensor( [ f_alpha( i ) for i in range( tmax ) ], dtype=torch.float32 )
 alpha_prod_tensor   = torch.cumprod( alpha_tensor, dim=0 )
 
-epochs          = 20
-model           = Model().to(device)
-loss_function   = nn.MSELoss()
-optimizer       = optim.Adam(model.parameters(), lr=3e-4)
-scheduler       = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-
-for blk in model.blocks:
-    nn.init.zeros_(blk.adal.weight)
-
-nn.init.zeros_(model.final.adal.weight)
-nn.init.zeros_(model.final.proj.weight)
-nn.init.zeros_(model.final.proj.bias)
-
-state_dict = torch.load("./projects/project12-diffusion-transformer/model.pt", weights_only=True, map_location=device)
-model.load_state_dict(state_dict)
-
-total_params = sum(p.numel() for p in model.parameters())
-print(f"DiT! {(total_params / 1000000):.2f} million parameters ")
-
-for epoch in range(0):
-    print(f"==================={epoch}===================")
-    model.train()
-    training_loss = 0
-    training_count = 0
-    pbar = tqdm(training_loader, desc="Training")
-    for i, (x0, y) in  enumerate(pbar):
-        x0 = x0.to(device)
-        y = y.to(device)
-        B = x0.shape[0]
-
-        tvals = torch.randint(0, tmax, (B,), device=device)
-        alphas = alpha_prod_tensor[tvals].float().view(B, 1, 1, 1)
-        eps = torch.randn_like(x0)
-        xt = torch.sqrt(alphas) * x0 + torch.sqrt(1 - alphas) * eps
-
-        preds = model((xt, tvals, y))
-        optimizer.zero_grad()
-        loss = loss_function(preds, eps)
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 5.0)
-        optimizer.step()
-        training_loss+= loss
-        training_count+=1
-        loss_str = f"{(training_loss / training_count):.5f}"
-        pbar.set_postfix({"loss":loss_str})
-
-    scheduler.step()
-
-    model.eval()
-    validation_loss = 0
-    validation_count = 0
-    pbar = tqdm(validation_loader, desc="Validatn")
-    with torch.no_grad():
-        for i, (x, y) in  enumerate(pbar):
-            x = x.to(device)
-            y = y.to(device)
-            B = x.shape[0]
-            e_noise = torch.randn_like(x) # [64, 1, 28, 28]
-            t_en = torch.randint(low=0, high=tmax, size=(B,), dtype=torch.long, device=device)
-            alpha_bar_t = alpha_prod_tensor[t_en].float().view(B, 1, 1, 1)  # [64, 1, 1, 1]
-            x_t = torch.sqrt(alpha_bar_t) * x + torch.sqrt(1 - alpha_bar_t) * e_noise
-            preds = model((x_t, t_en, y))
-            loss = loss_function(preds, e_noise)
-            validation_loss+= loss
-            validation_count+=1
-            loss_str = f"{(validation_loss / validation_count):.5f}"
-            pbar.set_postfix({"loss":loss_str})
-
-    torch.save(model.state_dict(), "./projects/project12-diffusion-transformer/model.pt")
-
 @torch.no_grad()
-def sample_reverse(num_samples, value):
-    model.eval()
-    x_t = torch.randn(num_samples, 1, 28, 28, device=device)
+def sample_reverse(net, num_samples, value):
+    net.eval()
+    x_t = torch.randn(num_samples, 1, 28, 28)
 
     for t in reversed(range(tmax)):
-        t_en = torch.full((num_samples,), t, dtype=torch.long, device=device)
-        label = torch.full((num_samples,), value, dtype=torch.long, device=device)
-        eps_hat = model( (x_t, t_en, label) )
+        t_en = torch.full((num_samples,), t, dtype=torch.long)
+        label = torch.full((num_samples,), value, dtype=torch.long)
+        eps_hat = net((x_t, t_en, label))
 
         alpha_t = alpha_tensor[t]
         alpha_bar_t = alpha_prod_tensor[t]
@@ -238,21 +149,125 @@ def sample_reverse(num_samples, value):
 
     return x_t
 
-num_digits = 10
-num_per_digit = 10
-fig, axes = plt.subplots(num_per_digit, num_digits, figsize=(num_digits * 2, num_per_digit * 2))
 
-for d in tqdm(range(num_digits), desc="Generating samples"):
-    samples = sample_reverse(num_per_digit, d)
-    for r in range(num_per_digit):
-        image = samples[r].reshape(28, 28).cpu()
-        image = (image + torch.ones(28, 28)) / 2
-        axes[r][d].imshow(image, cmap='gray')
-        axes[r][d].axis('off')
+if __name__ == "__main__":
+    import os
+    import random
+    import torch.optim as optim
+    from torch.utils.data import DataLoader
+    import torchvision
+    import matplotlib.pyplot as plt
+    from tqdm import tqdm
 
-plt.tight_layout()
-print("saving image")
-plt.savefig('./projects/project12-diffusion-transformer/sample.png')
+    torch.manual_seed(23)
+    random.seed(32)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device {device}")
 
+    transform = torchvision.transforms.Compose(
+        [
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize((0.5,), (0.5,)),
+        ])
 
+    mnist_train         = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    mnist_validation    = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+    batch_size = 64
+
+    training_loader     = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
+    validation_loader   = DataLoader(mnist_validation, batch_size=batch_size, shuffle=True)
+
+    beta_tensor_dev       = beta_tensor.to(device)
+    alpha_tensor_dev      = alpha_tensor.to(device)
+    alpha_prod_tensor_dev = alpha_prod_tensor.to(device)
+
+    epochs          = 20
+    model           = Model().to(device)
+    loss_function   = nn.MSELoss()
+    optimizer       = optim.Adam(model.parameters(), lr=3e-4)
+    scheduler       = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+    for blk in model.blocks:
+        nn.init.zeros_(blk.adal.weight)
+
+    nn.init.zeros_(model.final.adal.weight)
+    nn.init.zeros_(model.final.proj.weight)
+    nn.init.zeros_(model.final.proj.bias)
+
+    weights_path = os.path.join(os.path.dirname(__file__), "model.pt")
+    if os.path.exists(weights_path):
+        state_dict = torch.load(weights_path, weights_only=True, map_location=device)
+        model.load_state_dict(state_dict)
+        print(f"loaded weights from {weights_path}")
+
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"DiT! {(total_params / 1000000):.2f} million parameters ")
+
+    for epoch in range(0):
+        print(f"==================={epoch}===================")
+        model.train()
+        training_loss = 0
+        training_count = 0
+        pbar = tqdm(training_loader, desc="Training")
+        for i, (x0, y) in  enumerate(pbar):
+            x0 = x0.to(device)
+            y = y.to(device)
+            B = x0.shape[0]
+
+            tvals = torch.randint(0, tmax, (B,), device=device)
+            alphas = alpha_prod_tensor_dev[tvals].float().view(B, 1, 1, 1)
+            eps = torch.randn_like(x0)
+            xt = torch.sqrt(alphas) * x0 + torch.sqrt(1 - alphas) * eps
+
+            preds = model((xt, tvals, y))
+            optimizer.zero_grad()
+            loss = loss_function(preds, eps)
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            optimizer.step()
+            training_loss+= loss
+            training_count+=1
+            loss_str = f"{(training_loss / training_count):.5f}"
+            pbar.set_postfix({"loss":loss_str})
+
+        scheduler.step()
+
+        model.eval()
+        validation_loss = 0
+        validation_count = 0
+        pbar = tqdm(validation_loader, desc="Validatn")
+        with torch.no_grad():
+            for i, (x, y) in  enumerate(pbar):
+                x = x.to(device)
+                y = y.to(device)
+                B = x.shape[0]
+                e_noise = torch.randn_like(x) # [64, 1, 28, 28]
+                t_en = torch.randint(low=0, high=tmax, size=(B,), dtype=torch.long, device=device)
+                alpha_bar_t = alpha_prod_tensor_dev[t_en].float().view(B, 1, 1, 1)  # [64, 1, 1, 1]
+                x_t = torch.sqrt(alpha_bar_t) * x + torch.sqrt(1 - alpha_bar_t) * e_noise
+                preds = model((x_t, t_en, y))
+                loss = loss_function(preds, e_noise)
+                validation_loss+= loss
+                validation_count+=1
+                loss_str = f"{(validation_loss / validation_count):.5f}"
+                pbar.set_postfix({"loss":loss_str})
+
+        torch.save(model.state_dict(), weights_path)
+
+    num_digits = 10
+    num_per_digit = 10
+    fig, axes = plt.subplots(num_per_digit, num_digits, figsize=(num_digits * 2, num_per_digit * 2))
+
+    model_cpu = model.to("cpu")
+    for d in tqdm(range(num_digits), desc="Generating samples"):
+        samples = sample_reverse(model_cpu, num_per_digit, d)
+        for r in range(num_per_digit):
+            image = samples[r].reshape(28, 28).cpu()
+            image = (image + torch.ones(28, 28)) / 2
+            axes[r][d].imshow(image, cmap='gray')
+            axes[r][d].axis('off')
+
+    plt.tight_layout()
+    print("saving image")
+    plt.savefig(os.path.join(os.path.dirname(__file__), 'sample.png'))
