@@ -10,6 +10,12 @@
 #include <string.h>
 #include "tinyexr.h"
 
+/*
+    Notes:
+    - The natural discrete nature of it. Black holes.
+    - Windowing
+*/
+
 const float RECIP_PI = 1 / PI;
 const float Constants[] = {
     sqrtf( RECIP_PI ) * 0.5f,
