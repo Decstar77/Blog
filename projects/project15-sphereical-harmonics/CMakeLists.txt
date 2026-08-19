@@ -43,6 +43,8 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sSTACK_SIZE=1048576
         -sFORCE_FILESYSTEM=1
+        # the page drives the demo through these instead of raylib's own overlay
+        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
         --preload-file "${CMAKE_CURRENT_SOURCE_DIR}/malagas_ferry_road_1k.exr@malagas_ferry_road_1k.exr"
         --shell-file "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
     )

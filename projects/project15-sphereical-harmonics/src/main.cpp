@@ -531,6 +531,11 @@ static const char * ViewName( int view ) {
     }
 }
 
+// The immediate-mode overlay is desktop only. On the web the page owns the
+// controls and pushes values in through the exports below, so drawing a second
+// set of sliders on top of the image would just be a rival copy of the state.
+#if !defined( PLATFORM_WEB )
+
 static const void * g_activeSlider = nullptr;
 static bool Slider( Rectangle bounds, const char * label, float * value, float minV, float maxV, bool integral ) {
     const Vector2 mouse = GetMousePosition();
@@ -567,6 +572,8 @@ static bool Slider( Rectangle bounds, const char * label, float * value, float m
     return changed;
 }
 
+#endif // !PLATFORM_WEB
+
 static void RebuildResult( const SphereicalHarmonic & raw, int l, float windowSize ) {
     SphereicalHarmonic sh = raw; // window a copy; the raw set is kept intact
     ApplyWindowing( sh, l, windowSize );
@@ -581,10 +588,79 @@ static float exposure = 1.0f;
 static float lSlider = (float) MAX_L; // 0..3
 static float windowSize = 6.0f;       // 3..10
 static int view = VIEW_EQUI;
-static bool shDirty = true;  // reconstruction is stale (view / l / windowSize changed)
-static bool texDirty = true; // GPU textures are stale (exposure or resImage changed)
+static bool shDirty = true;       // reconstruction is stale (view / l / windowSize changed)
+static bool texDirty = true;      // GPU textures are stale (exposure or resImage changed)
+static bool exposureDirty = true; // the source texture needs re-tonemapping
 static Texture2D srcTex = {};
 static Texture2D resTex = {};
+
+static void SetExposure( float e ) {
+    if ( e < 0.01f ) {
+        e = 0.01f;
+    }
+    if ( e == exposure ) {
+        return;
+    }
+    exposure = e;
+    exposureDirty = true;
+}
+
+#if defined( PLATFORM_WEB )
+
+// Called from the page. Each one only touches plain state and dirty flags, so
+// there is nothing to synchronise against the main loop: the next frame picks
+// the change up and re-derives whatever went stale.
+extern "C" {
+
+EMSCRIPTEN_KEEPALIVE void SH_SetView( int v ) {
+    if ( v < 0 || v >= VIEW_COUNT || v == view ) {
+        return;
+    }
+    view = v;
+    shDirty = true;
+}
+
+EMSCRIPTEN_KEEPALIVE void SH_SetL( int l ) {
+    if ( l < 0 ) {
+        l = 0;
+    }
+    if ( l > MAX_L ) {
+        l = MAX_L;
+    }
+    if ( (float) l == lSlider ) {
+        return;
+    }
+    lSlider = (float) l;
+    shDirty = true;
+}
+
+EMSCRIPTEN_KEEPALIVE void SH_SetWindow( float w ) {
+    if ( w < 3.0f ) {
+        w = 3.0f;
+    }
+    if ( w > 10.0f ) {
+        w = 10.0f;
+    }
+    if ( w == windowSize ) {
+        return;
+    }
+    windowSize = w;
+    shDirty = true;
+}
+
+EMSCRIPTEN_KEEPALIVE void SH_SetExposure( float e ) {
+    SetExposure( e );
+}
+
+// Exported rather than reimplemented in JS so the numbers the page prints come
+// from the same windowing function the reconstruction actually used.
+EMSCRIPTEN_KEEPALIVE float SH_BandGain( int band ) {
+    return Windowing( band, windowSize );
+}
+
+} // extern "C"
+
+#endif // PLATFORM_WEB
 
 static void UpdateDrawFrame();
 
@@ -623,7 +699,7 @@ int main() {
 
     InitWindow( 1280, 720, "SphericalHarmonics - SH projection explorer" );
 
-    srcTex = HdrToTexture( exrImage, exposure );
+    // srcTex is built by the first frame; exposureDirty starts set.
 
 #if defined( PLATFORM_WEB )
     emscripten_set_main_loop( UpdateDrawFrame, 0, 1 ); // 0 = use requestAnimationFrame
@@ -645,19 +721,29 @@ int main() {
 }
 
 static void UpdateDrawFrame() {
+#if !defined( PLATFORM_WEB )
+    // On the web these are the page's job. Leaving raylib listening for keys
+    // would also mean the canvas had to hold focus to be usable, and SPACE
+    // would scroll the article whenever it did not.
     if ( IsKeyPressed( KEY_SPACE ) ) {
         view = ( view + 1 ) % VIEW_COUNT;
         shDirty = true;
     }
 
-    const float oldExposure = exposure;
-    if ( IsKeyDown( KEY_UP ) )
-        exposure *= 1.02f;
-    if ( IsKeyDown( KEY_DOWN ) )
-        exposure /= 1.02f;
-    if ( exposure != oldExposure ) {
-        UnloadTexture( srcTex );
+    if ( IsKeyDown( KEY_UP ) ) {
+        SetExposure( exposure * 1.02f );
+    }
+    if ( IsKeyDown( KEY_DOWN ) ) {
+        SetExposure( exposure / 1.02f );
+    }
+#endif
+
+    if ( exposureDirty ) {
+        if ( srcTex.id ) {
+            UnloadTexture( srcTex );
+        }
         srcTex = HdrToTexture( exrImage, exposure );
+        exposureDirty = false;
         texDirty = true;
     }
 
@@ -689,16 +775,17 @@ static void UpdateDrawFrame() {
         tex.height * scale
     };
 
+    BeginDrawing();
+    ClearBackground( BLACK );
+    DrawTexturePro( tex, srcRec, dstRec, { 0, 0 }, 0.0f, WHITE );
+
+#if !defined( PLATFORM_WEB )
     // Per-band gains actually in effect, so the window is legible as numbers.
     char bandText[160];
     int off = snprintf( bandText, sizeof( bandText ), "band gain:" );
     for ( int b = 0; b <= l; b++ ) {
         off += snprintf( bandText + off, sizeof( bandText ) - off, "  %d:%.2f", b, Windowing( b, windowSize ) );
     }
-
-    BeginDrawing();
-    ClearBackground( BLACK );
-    DrawTexturePro( tex, srcRec, dstRec, { 0, 0 }, 0.0f, WHITE );
 
     DrawRectangle( 10, 10, 470, 176, Fade( BLACK, 0.55f ) );
     DrawText( TextFormat( "%s   [SPACE]", ViewName( view ) ), 20, 18, 20, RAYWHITE );
@@ -713,5 +800,6 @@ static void UpdateDrawFrame() {
 
     DrawText( TextFormat( "%d coefficients", ( l + 1 ) * ( l + 1 ) ), 20, 130, 16, LIGHTGRAY );
     DrawText( bandText, 20, 150, 16, windowSize <= lSlider ? ORANGE : LIGHTGRAY );
+#endif
     EndDrawing();
 }

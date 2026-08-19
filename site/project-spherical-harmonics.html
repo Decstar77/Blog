@@ -9,9 +9,20 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        .wasm-demo-frame {
+        /* The demo's own controls sit under the canvas inside the frame, so the
+           box is a 16:9 stage plus a strip for them. If that strip wraps to
+           more rows on a narrow screen the canvas shrinks rather than the
+           controls getting clipped. */
+        .wasm-demo-wrap {
+            position: relative;
             width: 100%;
-            aspect-ratio: 16 / 9;
+            padding-bottom: calc(56.25% + 150px);
+        }
+        .wasm-demo-frame {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
             border: 1px solid var(--border);
             border-radius: 8px;
             background: #000;
@@ -28,16 +39,6 @@
         .sh-controls li {
             font-size: 0.9rem;
             color: var(--text-muted);
-        }
-        .sh-controls kbd {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 0.8rem;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-bottom-width: 2px;
-            border-radius: 4px;
-            padding: 1px 6px;
-            color: var(--accent-dark);
         }
     </style>
 </head>
@@ -81,22 +82,23 @@
         <div class="project-demo">
             <h2 style="text-align: center; margin: 0;">Live demo</h2>
 
-            <iframe class="wasm-demo-frame"
-                    src="demos/spherical-harmonics/index.html"
-                    title="Spherical harmonics projection explorer"
-                    loading="lazy"
-                    allow="autoplay"></iframe>
+            <div class="wasm-demo-wrap">
+                <iframe class="wasm-demo-frame"
+                        src="demos/spherical-harmonics/index.html"
+                        title="Spherical harmonics projection explorer"
+                        loading="lazy"></iframe>
+            </div>
 
             <p class="demo-canvas-hint" style="margin: 0;">
-                Click the view first so it takes keyboard focus. It downloads about 6&nbsp;MB and then
-                spends a few seconds projecting the environment map before the first frame appears.
+                The controls appear once it has loaded. It downloads about 6&nbsp;MB and then spends a
+                few seconds projecting the environment map before the first frame.
             </p>
 
             <ul class="sh-controls">
-                <li><kbd>Space</kbd> cycle raw HDR / cube projection / equirect projection</li>
-                <li><kbd>&uarr;</kbd> <kbd>&darr;</kbd> exposure</li>
-                <li><b>l slider</b> highest band kept, 0 to 3</li>
-                <li><b>window slider</b> strength of the ringing suppression</li>
+                <li><b>view</b> raw HDR, or the reconstruction from either projection</li>
+                <li><b>bands kept</b> highest band <code>l</code>, 0 to 3</li>
+                <li><b>window</b> strength of the ringing suppression</li>
+                <li><b>exposure</b> tone mapping only, applied after reconstruction</li>
             </ul>
         </div>
 
@@ -146,7 +148,7 @@
             </p>
             <p>
                 Both are approximating the same integral, so both should land in roughly the same place.
-                Cycling between them with <kbd>Space</kbd> is a decent sanity check on the weights: if
+                Switching between them with the view buttons is a decent sanity check on the weights: if
                 either set of solid angles were wrong, the two reconstructions would disagree, usually
                 with the equirect one biased toward whatever colour sits at the poles.
             </p>
@@ -186,6 +188,20 @@
                 double into a <code>float</code> array in braces is an error rather than a warning. The
                 literals needed <code>f</code> suffixes.
             </p>
+            <p>
+                The controls are the other difference. On the desktop the demo draws its own
+                immediate-mode sliders and text over the image, and reads the keyboard directly. Neither
+                survives the move: raylib would need the canvas to hold focus to see a keypress, and
+                <code>Space</code> scrolls the article whenever it does not. So the whole overlay is
+                compiled out under <code>PLATFORM_WEB</code> and the page owns the controls instead,
+                pushing values in through a handful of <code>EMSCRIPTEN_KEEPALIVE</code> exports. They
+                only write plain state and set dirty flags, so there is nothing to synchronise against
+                the render loop: the next frame notices and re-derives whatever went stale. The band
+                gains printed under the sliders come back out through an export too, rather than being
+                reimplemented in JavaScript, so the numbers on the page are the ones the reconstruction
+                actually used.
+            </p>
+
             <p>
                 The EXR is preloaded into Emscripten's virtual filesystem with
                 <code>--preload-file</code> so <code>LoadEXR</code> finds it at the path it already
