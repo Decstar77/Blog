@@ -12,3 +12,6 @@ checkpoints2
 *.exe
 *.wasm
 extern
+vcpkg-overlays
+vendor
+.clang-format
