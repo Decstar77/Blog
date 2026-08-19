@@ -14,7 +14,6 @@ set "DEPLOYDIR=%PROJDIR%..\..\site\demos\spherical-harmonics"
 if /i "%~1"=="clean" (
     echo [clean] removing %BUILDDIR%
     if exist "%BUILDDIR%" rmdir /s /q "%BUILDDIR%"
-    shift
 )
 
 rem ---- Emscripten -------------------------------------------------------
@@ -68,7 +67,7 @@ rem FetchContent pulls raylib 5.5 and builds it with PLATFORM=Web, so the
 rem first configure is slow. Skipped once the cache exists.
 if not exist "%BUILDDIR%\CMakeCache.txt" (
     echo [build] configuring ^(fetches and builds raylib, this takes a while^)
-    call emcmake cmake -S "%PROJDIR%." -B "%BUILDDIR%" -G "!GENERATOR!" -DCMAKE_BUILD_TYPE=Release
+    call "%EMROOT%\emcmake.bat" cmake -S "%PROJDIR%." -B "%BUILDDIR%" -G "!GENERATOR!" -DCMAKE_BUILD_TYPE=Release
     if errorlevel 1 exit /b 1
 )
 
