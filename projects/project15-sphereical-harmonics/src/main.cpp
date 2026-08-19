@@ -12,16 +12,16 @@
 
 const float RECIP_PI = 1 / PI;
 const float Constants[] = {
-    sqrtf( RECIP_PI ) * 0.5,
-    sqrtf( 3 * RECIP_PI ) * 0.5,
-    sqrtf( 15 * RECIP_PI ) * 0.5,
-    sqrtf( 5 * RECIP_PI ) * 0.25,
-    sqrtf( 15 * RECIP_PI ) * 0.25,
-    sqrtf( 70 * RECIP_PI ) * 0.125,
-    sqrtf( 105 * RECIP_PI ) * 0.5,
-    sqrtf( 42 * RECIP_PI ) * 0.125,
-    sqrtf( 7 * RECIP_PI ) * 0.25,
-    sqrtf( 105 * RECIP_PI ) * 0.25
+    sqrtf( RECIP_PI ) * 0.5f,
+    sqrtf( 3 * RECIP_PI ) * 0.5f,
+    sqrtf( 15 * RECIP_PI ) * 0.5f,
+    sqrtf( 5 * RECIP_PI ) * 0.25f,
+    sqrtf( 15 * RECIP_PI ) * 0.25f,
+    sqrtf( 70 * RECIP_PI ) * 0.125f,
+    sqrtf( 105 * RECIP_PI ) * 0.5f,
+    sqrtf( 42 * RECIP_PI ) * 0.125f,
+    sqrtf( 7 * RECIP_PI ) * 0.25f,
+    sqrtf( 105 * RECIP_PI ) * 0.25f
 };
 
 static float y00( float x, float y, float z ) { return Constants[0]; }

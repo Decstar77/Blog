@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spherical Harmonics</title>
+<style>
+  html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #000; overflow: hidden;
+      font-family: Inter, system-ui, sans-serif;
+  }
+  /* raylib sets the backing size to 1280x720 in InitWindow; letting CSS scale
+     that keeps the aspect uniform so raylib's mouse mapping stays correct. */
+  canvas.emscripten {
+      display: block; width: 100%; height: 100%;
+      border: 0; outline: none; background: #000;
+  }
+  #loading {
+      position: absolute; inset: 0; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      color: #ddd; font-size: 0.9rem; gap: 14px; background: #000; text-align: center;
+  }
+  #bar { width: 220px; height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
+  #barFill { height: 100%; width: 0%; background: #6ab8ff; transition: width 0.15s linear; }
+  #note { color: #888; font-size: 0.78rem; max-width: 30ch; line-height: 1.5; }
+  #loading.done { display: none; }
+</style>
+</head>
+<body>
+
+<canvas class="emscripten" id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+
+<div id="loading">
+    <div id="msg">Downloading environment map…</div>
+    <div id="bar"><div id="barFill"></div></div>
+    <div id="note">5&nbsp;MB of HDR, then the SH projection runs on the main thread. Give it a few seconds.</div>
+</div>
+
+<script type="text/javascript">
+  var canvasEl  = document.getElementById('canvas');
+  var loadingEl = document.getElementById('loading');
+  var barFill   = document.getElementById('barFill');
+  var msgEl     = document.getElementById('msg');
+
+  function hideOverlay() { loadingEl.classList.add('done'); }
+
+  var Module = {
+      canvas: canvasEl,
+      print: function (text) {
+          console.log(text);
+          // main() does the whole SH projection *before* InitWindow, so the
+          // runtime-initialized callback fires far too early to use here.
+          // raylib's own init log is the first moment there is a frame to show.
+          if (/initialized successfully/i.test(text)) hideOverlay();
+      },
+      printErr: function (text) { console.error(text); },
+      setStatus: function (text) {
+          // emscripten reports "Downloading data... (x/y)" while preloading
+          var m = text.match(/([\d.]+)\s*\/\s*([\d.]+)/);
+          if (m) {
+              barFill.style.width = (parseFloat(m[1]) / parseFloat(m[2]) * 100) + '%';
+          } else if (!text) {
+              barFill.style.width = '100%';
+          }
+      },
+      onRuntimeInitialized: function () {
+          msgEl.textContent = 'Projecting into spherical harmonics…';
+          barFill.style.width = '100%';
+      }
+  };
+
+  // Clicking the canvas focuses it so SPACE and the arrow keys reach raylib
+  // instead of scrolling the parent page.
+  canvasEl.addEventListener('mousedown', function () { canvasEl.focus(); });
+</script>
+
+{{{ SCRIPT }}}
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spherical Harmonics — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .wasm-demo-frame {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #000;
+            display: block;
+        }
+        .sh-controls {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 10px 24px;
+        }
+        .sh-controls li {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        .sh-controls kbd {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.8rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-bottom-width: 2px;
+            border-radius: 4px;
+            padding: 1px 6px;
+            color: var(--accent-dark);
+        }
+    </style>
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Graphics</span>
+            <h1 style="text-align: center;">Spherical Harmonics</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-tag"></i> C++ · raylib · WebAssembly</span>
+                <span><i class="fas fa-hashtag"></i> Project 15</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                Spherical harmonics are how real-time renderers store an entire environment's lighting
+                in a handful of numbers. This one takes a 1k HDR environment map, projects it down to at
+                most 16 coefficients per colour channel, and reconstructs it again so you can see exactly
+                how much of the original survives. The whole thing is C++ compiled to WebAssembly, running
+                below in your browser.
+            </p>
+        </div>
+        <br/>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <h2 style="text-align: center; margin: 0;">Live demo</h2>
+
+            <iframe class="wasm-demo-frame"
+                    src="demos/spherical-harmonics/index.html"
+                    title="Spherical harmonics projection explorer"
+                    loading="lazy"
+                    allow="autoplay"></iframe>
+
+            <p class="demo-canvas-hint" style="margin: 0;">
+                Click the view first so it takes keyboard focus. It downloads about 6&nbsp;MB and then
+                spends a few seconds projecting the environment map before the first frame appears.
+            </p>
+
+            <ul class="sh-controls">
+                <li><kbd>Space</kbd> cycle raw HDR / cube projection / equirect projection</li>
+                <li><kbd>&uarr;</kbd> <kbd>&darr;</kbd> exposure</li>
+                <li><b>l slider</b> highest band kept, 0 to 3</li>
+                <li><b>window slider</b> strength of the ringing suppression</li>
+            </ul>
+        </div>
+
+        <div class="article-body">
+
+            <h2>What the projection actually does</h2>
+            <p>
+                An environment map is a function over directions: give it a direction on the sphere and it
+                gives you back a colour. Spherical harmonics are a set of basis functions over that same
+                sphere, the way sines and cosines are a basis over an interval. Projecting means taking the
+                integral of the environment against each basis function to get one coefficient per basis,
+                and reconstruction is the weighted sum of the bases back again.
+            </p>
+            <p>
+                The bases come in bands. Band 0 is a single constant, the average colour of the whole
+                environment. Band 1 adds three linear terms that encode which direction the light is
+                coming from. Band 2 adds five quadratic terms, band 3 adds seven. Bands 0 through
+                <code>l</code> give <code>(l+1)²</code> coefficients, so the slider tops out at 16 per
+                channel. That is 48 floats for a whole sky.
+            </p>
+            <p>
+                Move the <code>l</code> slider from 3 down to 0 and you can watch the reconstruction
+                collapse. At <code>l = 3</code> you get a blurry but recognisable horizon with the sun
+                roughly in the right place. At <code>l = 1</code> it is a soft gradient that still points
+                the right way. At <code>l = 0</code> the entire sky is one flat colour. Nothing here is
+                trying to be a sharp image, which is the point: this representation is for diffuse
+                lighting, where the surface response is so broad that the high frequencies would be
+                integrated away anyway.
+            </p>
+
+            <h2>Two ways to integrate the same sphere</h2>
+            <p>
+                The integral has to be discretised, and the demo does it twice so you can compare.
+            </p>
+            <p>
+                The equirect version walks the source image pixel by pixel. That is convenient because the
+                data is already in that layout, but an equirect image massively oversamples the poles,
+                where the rows squeeze into a point. The fix is the <code>sin(θ)</code> term in the solid
+                angle weight, which shrinks each row's contribution as it approaches a pole.
+            </p>
+            <p>
+                The cube version resamples the environment onto six 128×128 faces first and integrates
+                those. Cube faces have the opposite problem: the corner texels cover more of the sphere
+                than the centre ones, because a flat square projected onto a sphere stretches at its
+                edges. That is what <code>TexelCoordSolidAngle</code> corrects, computing the exact solid
+                angle each texel subtends from the four corners of its footprint.
+            </p>
+            <p>
+                Both are approximating the same integral, so both should land in roughly the same place.
+                Cycling between them with <kbd>Space</kbd> is a decent sanity check on the weights: if
+                either set of solid angles were wrong, the two reconstructions would disagree, usually
+                with the equirect one biased toward whatever colour sits at the poles.
+            </p>
+
+            <h2>Windowing, and why the reconstruction can go negative</h2>
+            <p>
+                Truncating a series at band 3 is multiplying it by a box: everything up to <code>l</code>
+                is kept at full strength and everything past it is dropped. Sharp cutoffs in one domain
+                turn into ringing in the other, the same Gibbs phenomenon you get truncating a Fourier
+                series at a step edge. In an environment map that shows up as dark haloes around bright
+                light sources, and the reconstruction can dip below zero, which is a negative amount of
+                light.
+            </p>
+            <p>
+                The window slider softens the cutoff instead. Each band gets scaled by
+                <code>(sin(πl/w) / (πl/w))⁴</code>, a sinc raised to the fourth power, which rolls the
+                higher bands off gradually rather than clipping them. Drag the window down toward 3 and
+                the reconstruction visibly loses contrast as band 3 gets crushed; push it toward 10 and it
+                approaches the unwindowed truncation with the ringing back. The per-band gains are printed
+                under the sliders, and they turn orange once the window is tight enough to zero out a band
+                you asked to keep.
+            </p>
+
+            <h2>Getting it into the browser</h2>
+            <p>
+                The desktop build gets raylib from vcpkg, which has no Emscripten triplet, so the web
+                branch of the CMake file fetches raylib 5.5 from source and builds it with
+                <code>PLATFORM=Web</code>. On that platform raylib swaps GLFW for Emscripten's own HTML5
+                input layer and targets GLES2, which maps onto WebGL.
+            </p>
+            <p>
+                Two things needed changing in the C++ itself. The main loop cannot be a
+                <code>while</code> loop, because the browser owns the frame clock, so the body moved into
+                its own function handed to <code>emscripten_set_main_loop</code> and everything it touched
+                between frames moved to file scope. Clang also rejected the table of basis constants that
+                MSVC had accepted: <code>sqrtf(x) * 0.5</code> is a double, and narrowing a non-constant
+                double into a <code>float</code> array in braces is an error rather than a warning. The
+                literals needed <code>f</code> suffixes.
+            </p>
+            <p>
+                The EXR is preloaded into Emscripten's virtual filesystem with
+                <code>--preload-file</code> so <code>LoadEXR</code> finds it at the path it already
+                expected. That is the 5.7&nbsp;MB the page downloads before anything appears. The 4k
+                source that the desktop build uses is far too heavy for this, both to ship and to project
+                on a single thread, so the web build ships the 1k version. Projection still blocks for a
+                few seconds, and since it happens before <code>InitWindow</code> there is no window to
+                draw a progress bar into. The loading overlay lives in the Emscripten shell page instead
+                and hides itself when raylib logs that the graphics device is up.
+            </p>
+
+            <h2>Source</h2>
+            <p>
+                <code>projects/project15-sphereical-harmonics/</code>. Build the web version with:
+            </p>
+            <pre><code>emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-web</code></pre>
+            <p>
+                which drops <code>SphericalHarmonics.{html,js,wasm,data}</code> into
+                <code>build-web/</code>. The copies served here live in
+                <code>site/demos/spherical-harmonics/</code>.
+            </p>
+
+        </div>
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="index.html">&larr; Home</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

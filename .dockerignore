@@ -1,0 +1,7 @@
+# Runner builds with the repo root as context so it can COPY projects/.
+# Keep the C++ build trees out of that context.
+**/build-web/
+**/build/
+**/.git
+**/__pycache__
+site/demos/
