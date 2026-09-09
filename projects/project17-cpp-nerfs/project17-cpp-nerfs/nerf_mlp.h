@@ -65,6 +65,13 @@ namespace nerf {
     void            MlpSetOptimizerAdam( NetworkMlp * m, f32 beta1 = 0.9f, f32 beta2 = 0.999f, f32 eps = 1e-8f );
 
     void            MlpForward( NetworkMlp * m, const f32 * in, f32 * out );
+
+    // Mean squared error between the outputs the last MlpForward left in the net and target,
+    // averaged over the output width. Returns the loss and writes dL/dOut, which is exactly what
+    // MlpBackward wants, so the usual sequence is forward -> loss -> backward. target and dLdOut
+    // are both sizes[layerCount - 1] wide; dLdOut may be null if you only want the number.
+    f32             MlpLossMSE( NetworkMlp * m, const f32 * target, f32 * dLdOut );
+
     void            MlpBackward( NetworkMlp * m, const f32 * dLdOut );
     void            MlpApplyGrads( NetworkMlp * m, f32 lr );
     void            MlpZeroGrads( NetworkMlp * m );

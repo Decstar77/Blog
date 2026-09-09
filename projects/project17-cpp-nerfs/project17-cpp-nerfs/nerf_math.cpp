@@ -105,4 +105,37 @@ namespace nerf {
     f32 FocalLengthFromFovX( f32 fovX, i32 imageWidth ) {
         return 0.5f * (f32)imageWidth / tanf( 0.5f * fovX );
     }
+
+    RandomSeries RandomSeed( u32 seed ) {
+        RandomSeries rng = {};
+        rng.state = seed != 0 ? seed : 0x9e3779b9u;
+        return rng;
+    }
+
+    u32 RandomNextU32( RandomSeries * rng ) {
+        u32 x = rng->state;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        rng->state = x;
+        return x;
+    }
+
+    i32 RandomBelow( RandomSeries * rng, i32 bound ) {
+        if( bound <= 1 ) {
+            return 0;
+        }
+        // Modulo bias is on the order of bound / 2^32 here, far below anything that matters for
+        // picking pixels, so it is not worth a rejection loop.
+        return (i32)( RandomNextU32( rng ) % (u32)bound );
+    }
+
+    f32 RandomUnilateral( RandomSeries * rng ) {
+        // 24 bits, the most a f32 can hold exactly.
+        return (f32)( RandomNextU32( rng ) >> 8 ) * ( 1.0f / 16777216.0f );
+    }
+
+    f32 RandomBilateral( RandomSeries * rng ) {
+        return RandomUnilateral( rng ) * 2.0f - 1.0f;
+    }
 }

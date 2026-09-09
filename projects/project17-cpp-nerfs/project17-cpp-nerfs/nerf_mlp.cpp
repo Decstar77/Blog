@@ -1,29 +1,9 @@
 #include "nerf_mlp.h"
+#include "nerf_math.h"
 
 #include <cmath>
 
 namespace nerf {
-    // xorshift32. Seeded per net so the same seed gives the same starting weights, and 0 is folded
-    // to a non zero constant because a zero state gets stuck.
-    struct RandomSeries {
-        u32 state;
-    };
-
-    static u32 RandomNextU32( RandomSeries * rng ) {
-        u32 x = rng->state;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
-        rng->state = x;
-        return x;
-    }
-
-    // Uniform in [ -1, 1 ].
-    static f32 RandomBilateral( RandomSeries * rng ) {
-        const f32 unit = (f32)( RandomNextU32( rng ) >> 8 ) * ( 1.0f / 16777216.0f );
-        return unit * 2.0f - 1.0f;
-    }
-
     static f32 ApplyActivation( ActivationFunction func, f32 x ) {
         switch( func ) {
             case ACTIVATION_FUNCTION_RELU:      return Max( 0.0f, x );
@@ -65,8 +45,7 @@ namespace nerf {
             mlp->sizes[i] = sizes[i];
         }
 
-        RandomSeries rng = {};
-        rng.state = seed != 0 ? seed : 0x9e3779b9u;
+        RandomSeries rng = RandomSeed( seed );
 
         for( i32 l = 0; l < layers - 1; l++ ) {
             const i32 inCount = mlp->sizes[l];
@@ -141,6 +120,26 @@ namespace nerf {
                 out[i] = m->activations[last][i];
             }
         }
+    }
+
+    f32 MlpLossMSE( NetworkMlp * m, const f32 * target, f32 * dLdOut ) {
+        const i32 last = m->layerCount - 1;
+        const i32 count = m->sizes[last];
+        const f32 invCount = 1.0f / (f32)count;
+
+        // L = mean( ( out - target )^2 ), so dL/dOut_i = 2 * ( out_i - target_i ) / count. The 2
+        // and the 1/count stay in here rather than being folded into the learning rate, so a net
+        // with a different output width keeps the same gradient scale.
+        f32 loss = 0.0f;
+        for( i32 i = 0; i < count; i++ ) {
+            const f32 diff = m->activations[last][i] - target[i];
+            loss += diff * diff;
+            if( dLdOut != nullptr ) {
+                dLdOut[i] = 2.0f * diff * invCount;
+            }
+        }
+
+        return loss * invCount;
     }
 
     void MlpBackward( NetworkMlp * m, const f32 * dLdOut ) {

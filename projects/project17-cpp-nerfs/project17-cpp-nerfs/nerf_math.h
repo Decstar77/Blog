@@ -50,4 +50,16 @@ namespace nerf {
 
     f32     FocalLengthFromFovX( f32 fovX, i32 imageWidth );
 
+    // xorshift32. Seeded explicitly so a given seed always replays the same stream, and 0 is
+    // folded to a non zero constant because a zero state gets stuck at zero.
+    struct RandomSeries {
+        u32 state;
+    };
+
+    RandomSeries    RandomSeed( u32 seed );
+    u32             RandomNextU32( RandomSeries * rng );
+    i32             RandomBelow( RandomSeries * rng, i32 bound );  // uniform in [ 0, bound )
+    f32             RandomUnilateral( RandomSeries * rng );        // uniform in [ 0, 1 )
+    f32             RandomBilateral( RandomSeries * rng );         // uniform in [ -1, 1 )
+
 }
