@@ -46,6 +46,9 @@ namespace nerf {
         char    data[64];
         i32     count;
     };
+    
+    inline f32 Max( f32 a, f32 b ) { return a > b ? a : b; }
+
 } // namespace nerf
 
 #define SPLATS_ARRAY_COUNT( arr ) ( sizeof( arr ) / sizeof( ( arr )[0] ) )
@@ -54,3 +57,4 @@ namespace nerf {
 #define SPLATS_KB( n ) ( ( n ) * 1024ull )
 #define SPLATS_MB( n ) ( ( n ) * 1024ull * 1024ull )
 #define SPLATS_GB( n ) ( ( n ) * 1024ull * 1024ull * 1024ull )
+
