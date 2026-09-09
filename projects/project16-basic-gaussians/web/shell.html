@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spherical Harmonics</title>
+<title>Basic Gaussians</title>
 <style>
   html, body {
       margin: 0; padding: 0; width: 100%; height: 100%;
@@ -13,12 +13,21 @@
   }
   #app { display: flex; flex-direction: column; height: 100%; }
 
-  #stage { position: relative; flex: 1 1 auto; min-height: 0; background: #000; }
-  /* raylib sets the backing size to 1280x720 in InitWindow; letting CSS scale
-     that keeps the aspect uniform and avoids fighting it over canvas size. */
+  /* The render target is square. Centring a square box inside the stage keeps
+     the canvas aspect uniform, which also keeps the pointer mapping below a
+     straight divide by the element size. */
+  #stage {
+      position: relative; flex: 1 1 auto; min-height: 0; background: #000;
+      display: flex; align-items: center; justify-content: center;
+  }
+  /* Both dimensions left auto so the 800x800 backing store is the intrinsic
+     size and the max-* pair scales it down proportionally. Pinning height to
+     100% instead would let max-width squash the square on a narrow screen. */
   canvas.emscripten {
-      display: block; width: 100%; height: 100%;
+      display: block; width: auto; height: auto;
+      max-width: 100%; max-height: 100%;
       border: 0; outline: none; background: #000;
+      cursor: crosshair; touch-action: none;
   }
 
   #loading {
@@ -38,7 +47,7 @@
       background: #131313;
       padding: 12px 16px;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
       gap: 12px 22px;
       align-items: start;
       font-size: 0.8rem;
@@ -57,6 +66,17 @@
       background: transparent; cursor: pointer;
   }
 
+  .row { display: flex; gap: 8px; align-items: center; }
+  input[type=color] {
+      flex: 0 0 auto; width: 38px; height: 26px; padding: 0;
+      background: #1e1e1e; border: 1px solid #333; border-radius: 4px; cursor: pointer;
+  }
+  .swatches { display: flex; gap: 4px; flex: 1 1 auto; }
+  .swatches button {
+      flex: 1 1 0; height: 26px; min-width: 0; padding: 0;
+      border: 1px solid #333; border-radius: 4px; cursor: pointer;
+  }
+
   .seg { display: flex; gap: 0; }
   .seg button {
       flex: 1 1 0; min-width: 0;
@@ -72,14 +92,16 @@
   .seg button[aria-pressed=true] {
       background: #6ab8ff; border-color: #6ab8ff; color: #06243b; font-weight: 600;
   }
+  .seg button:disabled { color: #555; cursor: default; }
+  .seg button:disabled:hover { background: #1e1e1e; color: #555; }
 
-  #gains {
+  #status {
       grid-column: 1 / -1;
       margin: 0; color: #7d7d7d; font-size: 0.74rem;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       white-space: nowrap; overflow-x: auto;
   }
-  #gains.clipped { color: #e0913f; }
+  #status.full { color: #e0913f; }
 </style>
 </head>
 <body>
@@ -88,38 +110,63 @@
     <div id="stage">
         <canvas class="emscripten" id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
         <div id="loading">
-            <div id="msg">Downloading environment map…</div>
+            <div id="msg">Loading…</div>
             <div id="bar"><div id="barFill"></div></div>
-            <div id="note">5&nbsp;MB of HDR, then the SH projection runs on the main thread. Give it a few seconds.</div>
+            <div id="note">Click the canvas to place a splat, drag one to move it.</div>
         </div>
     </div>
 
     <div id="controls" hidden>
         <div class="ctl">
-            <span class="ctl-label">view</span>
-            <div class="seg" id="viewSeg">
-                <button type="button" data-view="0">Raw HDR</button>
-                <button type="button" data-view="1">SH cube</button>
-                <button type="button" data-view="2" aria-pressed="true">SH equirect</button>
-            </div>
+            <label class="ctl-label" for="sxRange">&sigma;<sub>x</sub> <b id="sxVal">60</b></label>
+            <input type="range" id="sxRange" min="4" max="220" step="1" value="60">
         </div>
 
         <div class="ctl">
-            <label class="ctl-label" for="lRange">bands kept <b><span id="lVal">3</span> &middot; <span id="coefVal">16</span> coef</b></label>
-            <input type="range" id="lRange" min="0" max="3" step="1" value="3">
+            <label class="ctl-label" for="syRange">&sigma;<sub>y</sub> <b id="syVal">60</b></label>
+            <input type="range" id="syRange" min="4" max="220" step="1" value="60">
         </div>
 
         <div class="ctl">
-            <label class="ctl-label" for="wRange">window <b id="wVal">6.0</b></label>
-            <input type="range" id="wRange" min="3" max="10" step="0.1" value="6">
+            <label class="ctl-label" for="rotRange">rotation <b id="rotVal">0&deg;</b></label>
+            <input type="range" id="rotRange" min="-90" max="90" step="1" value="0">
+        </div>
+
+        <div class="ctl">
+            <label class="ctl-label" for="wRange">weight <b id="wVal">1.00</b></label>
+            <input type="range" id="wRange" min="0.05" max="3" step="0.05" value="1">
         </div>
 
         <div class="ctl">
             <label class="ctl-label" for="eRange">exposure <b id="eVal">1.00</b></label>
-            <input type="range" id="eRange" min="-3" max="3" step="0.05" value="0">
+            <input type="range" id="eRange" min="-2" max="2" step="0.05" value="0">
         </div>
 
-        <p id="gains">band gain:</p>
+        <div class="ctl">
+            <span class="ctl-label">colour</span>
+            <div class="row">
+                <input type="color" id="colorPick" value="#ff00ff">
+                <div class="swatches" id="swatches">
+                    <button type="button" data-color="#ff00ff" style="background:#ff00ff" title="magenta"></button>
+                    <button type="button" data-color="#ffff00" style="background:#ffff00" title="yellow"></button>
+                    <button type="button" data-color="#00ff88" style="background:#00ff88" title="green"></button>
+                    <button type="button" data-color="#3399ff" style="background:#3399ff" title="blue"></button>
+                    <button type="button" data-color="#ff5522" style="background:#ff5522" title="orange"></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="ctl">
+            <span class="ctl-label">scene</span>
+            <div class="seg">
+                <button type="button" id="btnOutlines" aria-pressed="true">Outlines</button>
+                <button type="button" id="btnDelete" disabled>Delete</button>
+                <button type="button" id="btnClear">Clear</button>
+                <button type="button" id="btnReset">Reset</button>
+            </div>
+        </div>
+
+        <p id="status">no selection</p>
     </div>
 </div>
 
@@ -136,14 +183,12 @@
       canvas: canvasEl,
       print: function (text) {
           console.log(text);
-          // main() runs the whole SH projection *before* InitWindow, so
-          // onRuntimeInitialized fires far too early to use as the ready
-          // signal. raylib's init log is the first point there is a frame.
+          // raylib's init log is the first point at which there is a frame and
+          // the exports are safe to call.
           if (!ready && /initialized successfully/i.test(text)) onReady();
       },
       printErr: function (text) { console.error(text); },
       setStatus: function (text) {
-          // emscripten reports "Downloading data... (x/y)" while preloading
           var m = text.match(/([\d.]+)\s*\/\s*([\d.]+)/);
           if (m) {
               barFill.style.width = (parseFloat(m[1]) / parseFloat(m[2]) * 100) + '%';
@@ -152,101 +197,202 @@
           }
       },
       onRuntimeInitialized: function () {
-          msgEl.textContent = 'Projecting into spherical harmonics…';
+          msgEl.textContent = 'Starting…';
           barFill.style.width = '100%';
       }
   };
 
-  // ── exported setters ──────────────────────────────────────
-  function callSet(name, type, value) {
-      if (!ready) return;
+  // ── exported calls ────────────────────────────────────────
+  function call(name, ret, types, args) {
+      if (!ready) return 0;
       try {
-          Module.ccall(name, null, [type], [value]);
+          return Module.ccall(name, ret, types, args);
       } catch (e) {
           console.error(name + ' failed', e);
+          return 0;
       }
   }
-  var setView     = function (v) { callSet('SH_SetView', 'number', v); };
-  var setL        = function (l) { callSet('SH_SetL', 'number', l); };
-  var setWindow   = function (w) { callSet('SH_SetWindow', 'number', w); };
-  var setExposure = function (e) { callSet('SH_SetExposure', 'number', e); };
-  function bandGain(b) {
-      if (!ready) return 1;
-      return Module.ccall('SH_BandGain', 'number', ['number'], [b]);
+  function setF(name, v) { call(name, null, ['number'], [v]); }
+  function getF(name)    { return call(name, 'number', [], []); }
+
+  // ── pointer ───────────────────────────────────────────────
+  // The canvas is CSS scaled, so the C++ takes normalised coordinates and does
+  // the multiply against its own render size. Pointer events rather than mouse
+  // events, so a finger on a phone works the same as a cursor.
+  function sendPointer(e, down) {
+      if (!ready) return;
+      var r = canvasEl.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      call('BG_Pointer', null, ['number', 'number', 'number'],
+           [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, down ? 1 : 0]);
   }
 
+  canvasEl.addEventListener('pointerdown', function (e) {
+      canvasEl.setPointerCapture(e.pointerId);
+      sendPointer(e, true);
+      e.preventDefault();
+      // The C++ acts on the press during its next frame, so read back after it.
+      requestAnimationFrame(syncFromModule);
+  });
+  canvasEl.addEventListener('pointermove', function (e) {
+      // Buttons is a bitmask; 1 is the primary button still held.
+      sendPointer(e, (e.buttons & 1) !== 0);
+  });
+  function release(e) {
+      sendPointer(e, false);
+      requestAnimationFrame(syncFromModule);
+  }
+  canvasEl.addEventListener('pointerup', release);
+  canvasEl.addEventListener('pointercancel', release);
+  canvasEl.addEventListener('pointerleave', release);
+
   // ── control wiring ────────────────────────────────────────
-  var viewSeg = document.getElementById('viewSeg');
-  var lRange  = document.getElementById('lRange');
-  var wRange  = document.getElementById('wRange');
-  var eRange  = document.getElementById('eRange');
-  var lVal    = document.getElementById('lVal');
-  var coefVal = document.getElementById('coefVal');
-  var wVal    = document.getElementById('wVal');
-  var eVal    = document.getElementById('eVal');
-  var gainsEl = document.getElementById('gains');
+  var sxRange   = document.getElementById('sxRange');
+  var syRange   = document.getElementById('syRange');
+  var rotRange  = document.getElementById('rotRange');
+  var wRange    = document.getElementById('wRange');
+  var eRange    = document.getElementById('eRange');
+  var colorPick = document.getElementById('colorPick');
+  var sxVal     = document.getElementById('sxVal');
+  var syVal     = document.getElementById('syVal');
+  var rotVal    = document.getElementById('rotVal');
+  var wVal      = document.getElementById('wVal');
+  var eVal      = document.getElementById('eVal');
+  var statusEl  = document.getElementById('status');
+  var btnOutlines = document.getElementById('btnOutlines');
+  var btnDelete   = document.getElementById('btnDelete');
 
   // Exposure is a stop slider so the useful range is not crammed into the
   // bottom tenth of the track; the C++ side takes a plain multiplier.
   function exposureValue() { return Math.pow(2, parseFloat(eRange.value)); }
 
-  function refreshGains() {
-      var l = parseInt(lRange.value, 10);
-      var w = parseFloat(wRange.value);
-      var parts = [];
-      var clipped = false;
-      for (var b = 0; b <= l; b++) {
-          var g = bandGain(b);
-          if (g === 0) clipped = true;
-          parts.push(b + ':' + g.toFixed(2));
+  function hexToRgb(hex) {
+      return [parseInt(hex.slice(1, 3), 16) / 255,
+              parseInt(hex.slice(3, 5), 16) / 255,
+              parseInt(hex.slice(5, 7), 16) / 255];
+  }
+  function rgbToHex(r, g, b) {
+      function part(v) {
+          var s = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16);
+          return s.length < 2 ? '0' + s : s;
       }
-      gainsEl.textContent = 'band gain:  ' + parts.join('   ');
-      // a band you asked to keep is being zeroed by the window
-      gainsEl.classList.toggle('clipped', clipped || w <= l);
+      return '#' + part(r) + part(g) + part(b);
   }
 
-  viewSeg.addEventListener('click', function (e) {
-      var btn = e.target.closest('button[data-view]');
+  function pushColor() {
+      var c = hexToRgb(colorPick.value);
+      call('BG_SetColor', null, ['number', 'number', 'number'], c);
+  }
+
+  function bind(el, fmt, apply) {
+      el.addEventListener('input', function () { fmt(); apply(); refreshStatus(); });
+  }
+  bind(sxRange,  function () { sxVal.textContent = sxRange.value; },
+                 function () { setF('BG_SetSizeX', parseFloat(sxRange.value)); });
+  bind(syRange,  function () { syVal.textContent = syRange.value; },
+                 function () { setF('BG_SetSizeY', parseFloat(syRange.value)); });
+  bind(rotRange, function () { rotVal.textContent = rotRange.value + '°'; },
+                 function () { setF('BG_SetRotation', parseFloat(rotRange.value)); });
+  bind(wRange,   function () { wVal.textContent = parseFloat(wRange.value).toFixed(2); },
+                 function () { setF('BG_SetWeight', parseFloat(wRange.value)); });
+  bind(eRange,   function () { eVal.textContent = exposureValue().toFixed(2); },
+                 function () { setF('BG_SetExposure', exposureValue()); });
+
+  colorPick.addEventListener('input', function () { pushColor(); refreshStatus(); });
+
+  document.getElementById('swatches').addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-color]');
       if (!btn) return;
-      var buttons = viewSeg.querySelectorAll('button');
-      for (var i = 0; i < buttons.length; i++) {
-          buttons[i].setAttribute('aria-pressed', String(buttons[i] === btn));
+      colorPick.value = btn.dataset.color;
+      pushColor();
+      refreshStatus();
+  });
+
+  btnOutlines.addEventListener('click', function () {
+      var on = btnOutlines.getAttribute('aria-pressed') !== 'true';
+      btnOutlines.setAttribute('aria-pressed', String(on));
+      call('BG_SetShowOutlines', null, ['number'], [on ? 1 : 0]);
+  });
+  btnDelete.addEventListener('click', function () {
+      call('BG_DeleteSelected', null, [], []);
+      syncFromModule();
+  });
+  document.getElementById('btnClear').addEventListener('click', function () {
+      call('BG_Clear', null, [], []);
+      syncFromModule();
+  });
+  document.getElementById('btnReset').addEventListener('click', function () {
+      call('BG_LoadDefaultScene', null, [], []);
+      syncFromModule();
+  });
+
+  // ── read back ─────────────────────────────────────────────
+  // Clicking the canvas can select a different splat, which the page has no way
+  // of knowing about. The C++ bumps a version whenever that happens, so this
+  // only rebuilds the controls when something actually changed.
+  var lastVersion = -1;
+
+  function syncFromModule() {
+      if (!ready) return;
+      var v = getF('BG_Version');
+      if (v === lastVersion) return;
+      lastVersion = v;
+
+      sxRange.value = getF('BG_GetSizeX');
+      syRange.value = getF('BG_GetSizeY');
+      rotRange.value = Math.round(getF('BG_GetRotation'));
+      wRange.value = getF('BG_GetWeight');
+      colorPick.value = rgbToHex(call('BG_GetColor', 'number', ['number'], [0]),
+                                 call('BG_GetColor', 'number', ['number'], [1]),
+                                 call('BG_GetColor', 'number', ['number'], [2]));
+
+      sxVal.textContent = Math.round(parseFloat(sxRange.value));
+      syVal.textContent = Math.round(parseFloat(syRange.value));
+      rotVal.textContent = rotRange.value + '°';
+      wVal.textContent = parseFloat(wRange.value).toFixed(2);
+
+      refreshStatus();
+  }
+
+  function refreshStatus() {
+      if (!ready) return;
+      var count = getF('BG_Count');
+      var max = getF('BG_MaxCount');
+      var sel = getF('BG_Selected');
+
+      btnDelete.disabled = sel < 0;
+
+      function sig(r, c) {
+          return call('BG_GetSigma', 'number', ['number', 'number'], [r, c]).toFixed(0);
       }
-      setView(parseInt(btn.dataset.view, 10));
-  });
+      var where = sel < 0 ? 'brush' : 'splat ' + sel;
+      statusEl.textContent = count + '/' + max + ' splats   ' + where +
+          '   sigma = [' + sig(0, 0) + ' ' + sig(0, 1) + '; ' + sig(1, 0) + ' ' + sig(1, 1) + ']';
+      statusEl.classList.toggle('full', count >= max);
+  }
 
-  lRange.addEventListener('input', function () {
-      var l = parseInt(lRange.value, 10);
-      lVal.textContent = l;
-      coefVal.textContent = (l + 1) * (l + 1);
-      setL(l);
-      refreshGains();
-  });
-
-  wRange.addEventListener('input', function () {
-      var w = parseFloat(wRange.value);
-      wVal.textContent = w.toFixed(1);
-      setWindow(w);
-      refreshGains();
-  });
-
-  eRange.addEventListener('input', function () {
-      var e = exposureValue();
-      eVal.textContent = e.toFixed(2);
-      setExposure(e);
-  });
+  // A drag moves a splat inside the C++ without touching the version, and the
+  // selection can change on any frame, so the status line is refreshed on a
+  // slow tick rather than trying to mirror every frame.
+  setInterval(function () { if (ready) { syncFromModule(); refreshStatus(); } }, 200);
 
   function onReady() {
       ready = true;
       loadingEl.classList.add('done');
       controlsEl.hidden = false;
-      // Push the initial slider positions so the page and the C++ defaults
-      // cannot disagree if either side's starting value is ever changed.
-      setView(parseInt(viewSeg.querySelector('[aria-pressed=true]').dataset.view, 10));
-      setL(parseInt(lRange.value, 10));
-      setWindow(parseFloat(wRange.value));
-      setExposure(exposureValue());
-      refreshGains();
+      // Push the initial positions so the page and the C++ defaults cannot
+      // disagree if either side's starting value is ever changed.
+      setF('BG_SetSizeX', parseFloat(sxRange.value));
+      setF('BG_SetSizeY', parseFloat(syRange.value));
+      setF('BG_SetRotation', parseFloat(rotRange.value));
+      setF('BG_SetWeight', parseFloat(wRange.value));
+      setF('BG_SetExposure', exposureValue());
+      call('BG_SetShowOutlines', null, ['number'], [1]);
+      pushColor();
+      // Placing the defaults left nothing selected; the brush values above are
+      // what the controls describe until something is clicked.
+      lastVersion = -1;
+      syncFromModule();
   }
 </script>
 

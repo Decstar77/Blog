@@ -16,6 +16,10 @@ namespace nerf {
     Image           ReadEntireImage( const char * path );
     void            FreeImage( Image * image );
 
+    // Writes linear-space float pixels back out as an 8-bit png, undoing the gamma
+    // that stbi_loadf applied on the way in so a round trip matches the source.
+    bool            WriteImagePng( const char * path, const Image * image );
+
     Vec4            Fetch( Image * image, i32 x, i32 y );
 
     // One entry of the "frames" array in a NeRF-synthetic transforms_*.json.

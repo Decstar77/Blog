@@ -3,8 +3,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
 #include "stb_image.h"
+#include "stb_image_write.h"
 #include "json.hpp"
 
 using json = nlohmann::json;
@@ -76,6 +78,37 @@ namespace nerf {
         }
         stbi_image_free( image->pixels );
         *image = {};
+    }
+
+    bool WriteImagePng( const char * path, const Image * image ) {
+        if( image == nullptr || image->pixels == nullptr || image->channels <= 0 ) {
+            return false;
+        }
+
+        const i32 count = image->width * image->height * image->channels;
+        u8 * bytes = (u8 *)malloc( (size_t)count );
+        if( bytes == nullptr ) {
+            return false;
+        }
+
+        for( i32 i = 0; i < count; i++ ) {
+            f32 v = image->pixels[i];
+            v = v < 0.0f ? 0.0f : ( v > 1.0f ? 1.0f : v );
+            // stbi_loadf raises 8-bit pngs to gamma 2.2 on load, so go back the other way here.
+            // Alpha is stored linearly by stb, so it is written straight through.
+            const bool isAlpha = ( image->channels == 4 || image->channels == 2 ) && ( i % image->channels ) == image->channels - 1;
+            const f32 encoded = isAlpha ? v : powf( v, 1.0f / 2.2f );
+            bytes[i] = (u8)( encoded * 255.0f + 0.5f );
+        }
+
+        const i32 ok = stbi_write_png( path, image->width, image->height, image->channels, bytes, image->width * image->channels );
+        free( bytes );
+
+        if( ok == 0 ) {
+            printf( "WriteImagePng: could not write '%s'\n", path );
+            return false;
+        }
+        return true;
     }
 
     Vec4 Fetch( Image * image, i32 x, i32 y ) {

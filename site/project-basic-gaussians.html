@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Gaussians — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* The render target is square rather than 16:9, so the frame is sized
+           off the viewport height instead of the column width. Otherwise a wide
+           column gives a square demo taller than the screen. The demo's own
+           controls sit under the canvas inside the frame, and the canvas
+           shrinks to make room for them rather than the strip getting clipped. */
+        .wasm-demo-wrap {
+            position: relative;
+            width: 100%;
+            height: clamp(540px, 82vh, 860px);
+        }
+        .wasm-demo-frame {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #000;
+            display: block;
+        }
+        .sh-controls {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 10px 24px;
+        }
+        .sh-controls li {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Graphics</span>
+            <h1 style="text-align: center;">Basic Gaussians</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-tag"></i> C++ · raylib · WebAssembly</span>
+                <span><i class="fas fa-hashtag"></i> Project 16</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                The splat, on its own, before any of the training. A 2D gaussian is a centre, a
+                2&times;2 covariance and a colour, and rendering one is a single exponential per
+                pixel. Place a few and they add together into something that looks nothing like the
+                blurry blobs it is made of. Article coming soon.
+            </p>
+        </div>
+        <br/>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <h2 style="text-align: center; margin: 0;">Live demo</h2>
+
+            <div class="wasm-demo-wrap">
+                <iframe class="wasm-demo-frame"
+                        src="demos/basic-gaussians/index.html"
+                        title="2D gaussian splat editor"
+                        loading="lazy"></iframe>
+            </div>
+
+            <p class="demo-canvas-hint" style="margin: 0;">
+                Click empty space to drop a splat, click one to select it, drag to move. The sliders
+                retune whatever is selected, and whatever they are left on is what the next click
+                places.
+            </p>
+
+            <ul class="sh-controls">
+                <li><b>&sigma;<sub>x</sub>, &sigma;<sub>y</sub></b> the two axis lengths of the covariance, in pixels</li>
+                <li><b>rotation</b> spins those axes, which is the off-diagonal term</li>
+                <li><b>weight</b> peak amplitude, before anything overlaps</li>
+                <li><b>colour</b> what the splat contributes where it lands</li>
+                <li><b>exposure</b> tone mapping only, applied after the splats are summed</li>
+                <li><b>outlines</b> the one-sigma ellipse of every splat, and the hit region for a click</li>
+            </ul>
+        </div>
+
+        <div class="article-body">
+            <h2>What is actually running</h2>
+            <p>
+                Each splat is evaluated as <code>exp(-0.5 (p - mu)^T sigma^-1 (p - mu))</code> into a
+                float buffer that the splats add into, and the sum is Reinhard tone mapped down to 8
+                bit for display. That is why overlaps go pale rather than clipping to white. The
+                sliders never touch <code>sigma</code> directly: three free numbers in a symmetric
+                matrix is not something anyone can aim, so the controls edit two axis lengths and an
+                angle, and the C++ composes <code>sigma = R S R^T</code> from them. The status line
+                under the controls prints the matrix that comes out.
+            </p>
+            <p>
+                Splatting only runs over a four standard deviation box around the centre. Past that
+                the exponential is under a thousandth of the peak, and covering the full 800&times;800
+                for every splat is the difference between a drag that tracks the cursor and one that
+                does not.
+            </p>
+        </div>
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="index.html">&larr; Home</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
