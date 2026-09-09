@@ -78,6 +78,15 @@ namespace nerf {
         *image = {};
     }
 
+    Vec4 Fetch( Image * image, i32 x, i32 y ) {
+        i32 idx = ( y * image->width + x ) * image->channels;
+        f32 a = 1;
+        if ( image->channels == 4 ) {
+            a = image->pixels[idx + 3];
+        }
+        return Vec4 { image->pixels[idx], image->pixels[idx + 1], image->pixels[idx + 2], a };
+    }
+
     bool ReadNerfScene( const char * path, NerfScene * outScene ) {
         if( outScene == nullptr ) {
             return false;

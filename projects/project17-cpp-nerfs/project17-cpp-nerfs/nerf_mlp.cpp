@@ -47,12 +47,12 @@ namespace nerf {
     }
 
     NetworkMlp * MlpCreate( const i32 * sizes, const i32 layers, ActivationFunction actHidden, ActivationFunction actOut, u32 seed ) {
-        if( sizes == nullptr || layers < 2 || layers > MlpMaxLayers ) {
+        if( sizes == nullptr || layers < 2 || layers > kMlpMaxLayers ) {
             return nullptr;
         }
 
         for( i32 i = 0; i < layers; i++ ) {
-            if( sizes[i] < 1 || sizes[i] > MlpMaxWidth ) {
+            if( sizes[i] < 1 || sizes[i] > kMlpMaxWidth ) {
                 return nullptr;
             }
         }
@@ -105,6 +105,10 @@ namespace nerf {
             delete[] mlp->biases[l];
             delete[] mlp->weightGrads[l];
             delete[] mlp->biasGrads[l];
+            delete[] mlp->weightM[l];
+            delete[] mlp->weightV[l];
+            delete[] mlp->biasM[l];
+            delete[] mlp->biasV[l];
         }
         delete mlp;
     }
@@ -141,6 +145,7 @@ namespace nerf {
 
     void MlpBackward( NetworkMlp * m, const f32 * dLdOut ) {
         const i32 last = m->layerCount - 1;
+        m->gradAccumCount++;
 
         for( i32 o = 0; o < m->sizes[last]; o++ ) {
             const f32 d = ActivationDerivative( m->actOutput, m->preActivations[last][o], m->activations[last][o] );
@@ -177,23 +182,94 @@ namespace nerf {
         }
     }
 
+    void MlpSetOptimizerAdam( NetworkMlp * m, f32 beta1, f32 beta2, f32 eps ) {
+        if( m == nullptr || m->optimizer == OPTIMIZER_ADAM ) {
+            return;
+        }
+
+        m->optimizer = OPTIMIZER_ADAM;
+        m->beta1 = beta1;
+        m->beta2 = beta2;
+        m->adamEps = eps;
+        m->beta1Pow = 1.0f;
+        m->beta2Pow = 1.0f;
+
+        for( i32 l = 0; l < m->layerCount - 1; l++ ) {
+            const i32 outCount = m->sizes[l + 1];
+            const i32 weightCount = m->sizes[l] * outCount;
+
+            m->weightM[l] = new f32[weightCount]();
+            m->weightV[l] = new f32[weightCount]();
+            m->biasM[l] = new f32[outCount]();
+            m->biasV[l] = new f32[outCount]();
+        }
+    }
+
+    // One Adam parameter update. The caller folds bias correction into the step size and passes the
+    // already averaged gradient, so this stays a straight read-modify-write.
+    static void AdamStep( f32 * param, f32 * moment1, f32 * moment2, const f32 * grads, i32 count, f32 lr, f32 beta1, f32 beta2, f32 eps, f32 bias1, f32 bias2 ) {
+        for( i32 i = 0; i < count; i++ ) {
+            const f32 g = grads[i];
+            moment1[i] = beta1 * moment1[i] + ( 1.0f - beta1 ) * g;
+            moment2[i] = beta2 * moment2[i] + ( 1.0f - beta2 ) * g * g;
+
+            const f32 mHat = moment1[i] / bias1;
+            const f32 vHat = moment2[i] / bias2;
+            param[i] -= lr * mHat / ( sqrtf( vHat ) + eps );
+        }
+    }
+
     void MlpApplyGrads( NetworkMlp * m, f32 lr ) {
+        // Nothing accumulated means no step to take, and it keeps the averaging below off zero.
+        if( m->gradAccumCount == 0 ) {
+            return;
+        }
+
+        // Gradients are summed over the mini batch, so average them here. Without this the
+        // effective learning rate would scale with however many samples went into the batch.
+        const f32 invBatch = 1.0f / (f32)m->gradAccumCount;
+
+        f32 bias1 = 1.0f;
+        f32 bias2 = 1.0f;
+        if( m->optimizer == OPTIMIZER_ADAM ) {
+            // Tracked incrementally rather than with powf( beta, t ): same value, and it cannot
+            // overflow the step counter on a long training run.
+            m->beta1Pow *= m->beta1;
+            m->beta2Pow *= m->beta2;
+            bias1 = 1.0f - m->beta1Pow;
+            bias2 = 1.0f - m->beta2Pow;
+        }
+
         for( i32 l = 0; l < m->layerCount - 1; l++ ) {
             const i32 inCount = m->sizes[l];
             const i32 outCount = m->sizes[l + 1];
             const i32 weightCount = inCount * outCount;
 
             for( i32 i = 0; i < weightCount; i++ ) {
-                m->weights[l][i] -= lr * m->weightGrads[l][i];
+                m->weightGrads[l][i] *= invBatch;
             }
             for( i32 o = 0; o < outCount; o++ ) {
-                m->biases[l][o] -= lr * m->biasGrads[l][o];
+                m->biasGrads[l][o] *= invBatch;
+            }
+
+            if( m->optimizer == OPTIMIZER_ADAM ) {
+                AdamStep( m->weights[l], m->weightM[l], m->weightV[l], m->weightGrads[l], weightCount, lr, m->beta1, m->beta2, m->adamEps, bias1, bias2 );
+                AdamStep( m->biases[l], m->biasM[l], m->biasV[l], m->biasGrads[l], outCount, lr, m->beta1, m->beta2, m->adamEps, bias1, bias2 );
+            } else {
+                for( i32 i = 0; i < weightCount; i++ ) {
+                    m->weights[l][i] -= lr * m->weightGrads[l][i];
+                }
+                for( i32 o = 0; o < outCount; o++ ) {
+                    m->biases[l][o] -= lr * m->biasGrads[l][o];
+                }
             }
         }
+
         MlpZeroGrads( m );
     }
 
     void MlpZeroGrads( NetworkMlp * m ) {
+        m->gradAccumCount = 0;
         for( i32 l = 0; l < m->layerCount - 1; l++ ) {
             const i32 inCount = m->sizes[l];
             const i32 outCount = m->sizes[l + 1];

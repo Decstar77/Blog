@@ -16,6 +16,8 @@ namespace nerf {
     Image           ReadEntireImage( const char * path );
     void            FreeImage( Image * image );
 
+    Vec4            Fetch( Image * image, i32 x, i32 y );
+
     // One entry of the "frames" array in a NeRF-synthetic transforms_*.json.
     struct NerfFrame {
         LargeString filePath;           // relative to the transforms file, e.g. "./train/r_0" (no extension)
