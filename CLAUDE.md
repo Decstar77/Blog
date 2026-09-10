@@ -16,9 +16,9 @@ Three services, composed via `docker-compose.yml`:
 - **`site/`** — static nginx site. Every page (`project-*.html`, article pages) is standalone HTML
   with inline `<script>` blocks, no bundler/framework. `nginx.conf` proxies `/api/` to the runner
   service and `/tracker/` to the tracker service, so client JS calls those paths directly (see
-  `const RUNNER = '/api'` in project pages). `articles.js` holds the article index (an array of
-  `{title, summary, category, readTime, url}`) rendered into `articles.html` / `index.html` — add
-  new posts there, don't hardcode article cards into the HTML.
+  `const RUNNER = '/api'` in project pages). The article index is static HTML in `articles.html`
+  (one `<li class="post-list-item">` per post, newest first). Add new posts there by hand; it is
+  deliberately not JS-rendered so crawlers and agents can read it.
 - **`runner/app.py`** — single FastAPI app that loads *every* trained project's weights at startup
   and exposes inference endpoints (`/run/parabola`, `/run/circle-classifier`, `/run/mnist`,
   `/run/diffusion-circle`, `/run/diffusion-mnist`, `/run/vae-colors`, plus matching `/data/*`

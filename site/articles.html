@@ -24,8 +24,58 @@
 
     <section class="posts-section">
         <h2 style="text-align: center;">All Posts</h2>
+        <!-- Newest first. Add new posts at the top by copying an <li> block. -->
         <ul class="post-list" id="articlesList">
-            <!-- Populated by articles.js -->
+            <li class="post-list-item">
+                <div class="post-list-row">
+                    <a href="discrete-differential-geometry-01.html" class="post-list-title">Notes on Discrete Differential Geometry</a>
+                </div>
+                <div class="post-list-summary">Simplices, simplicial complexes, star, closure and link, k-vectors, k-forms, the Hodge star, and the musical isomorphisms.</div>
+                <div class="post-list-meta">
+                    <span class="post-category">Mathematics</span>
+                    <span class="post-readtime">10 min read</span>
+                </div>
+            </li>
+            <li class="post-list-item">
+                <div class="post-list-row">
+                    <a href="cpp26-reflection-json.html" class="post-list-title">C++26 Reflection, A Quick Exploration</a>
+                </div>
+                <div class="post-list-summary">Building a struct-to-JSON writer with the ^^ reflection operator, splicers and template for.</div>
+                <div class="post-list-meta">
+                    <span class="post-category">C++</span>
+                    <span class="post-readtime">14 min read</span>
+                </div>
+            </li>
+            <li class="post-list-item">
+                <div class="post-list-row">
+                    <a href="vae-math.html" class="post-list-title">The Math Behind Variational Autoencoders</a>
+                </div>
+                <div class="post-list-summary">From the intractable evidence integral to the ELBO, deriving the variational lower bound, the reparameterisation trick, and the closed-form KL.</div>
+                <div class="post-list-meta">
+                    <span class="post-category">Machine Learning</span>
+                    <span class="post-readtime">25 min read</span>
+                </div>
+            </li>
+            <li class="post-list-item">
+                <div class="post-list-row">
+                    <a href="diffusion-backward-pass.html" class="post-list-title">Diffusion #2: The Math Of The Gaussian Backward Pass</a>
+                </div>
+                <div class="post-list-summary">Deriving the reverse diffusion posterior from Bayes' theorem.</div>
+                <div class="post-list-meta">
+                    <span class="post-category">Machine Learning</span>
+                    <span class="post-readtime">20 min read</span>
+                </div>
+            </li>
+            <li class="post-list-item">
+                <div class="post-list-row">
+                    <a href="diffusion-forward-process.html" class="post-list-title">Diffusion #1: The Math Of The Gaussian Forward Pass</a>
+                </div>
+                <div class="post-list-summary">Deriving the closed-form forward process for diffusion models from first principles.</div>
+                <div class="post-list-meta">
+                    <span class="post-category">Machine Learning</span>
+                    <span class="post-readtime">15 min read</span>
+                </div>
+            </li>
         </ul>
     </section>
 
@@ -38,7 +88,6 @@
     </div>
 </footer>
 
-<script src="articles.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
