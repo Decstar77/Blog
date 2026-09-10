@@ -8,7 +8,28 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        })"></script>
     <style>
+        /* KaTeX display-mode — horizontal padding prevents the phantom
+           scrollbar caused by KaTeX's internal spacing slightly exceeding
+           the container edge. overflow-y: hidden stops that from producing
+           a compound scrollbar. */
+        .katex-display {
+            margin: 1.6rem 0;
+            padding: 0 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .katex { font-size: 1.05em; }
         /* The render target is square rather than 16:9, so the frame is sized
            off the viewport height instead of the column width. Otherwise a wide
            column gives a square demo taller than the screen. The demo's own
@@ -70,32 +91,34 @@
 
         <div class="article-body">
             <p class="lead">
-                I've been working towards creating a Gaussians splat renderer. But first I wanted to create a basic 2D application for learning.
-                It's actually remarkably simple. A gaussian, by definition is e^(-x^2). Translating into 2D we just get one equation per coordinate. 
-                It's controlalbe but shifting and multiplying be constants, eg 2e^(-(x + 5)^2). Or the classic normal distrubition. 
-                In code this translates to a very simple
+                I've been working towards a Gaussian splat renderer. But first I wanted a basic 2D version to learn on.
+                It's actually remarkably simple. A Gaussian, by definition, is $e^{-x^2}$. Moving into 2D just gives you one term per coordinate.
+                You control it by shifting and scaling with constants, e.g. $2e^{-(x + 5)^2}$, or the classic normal distribution.
+                In code this translates to something very simple:
             </p>
-            <code>
-                struct Gaussian2D {
-                    glm::vec2 mu;
-                    glm::mat2 sigma;
-                    glm::vec4 color;
-                };
-            </code>
-            <p> 
-                The fancy statitical variable names can be renamed to, mu = position, sigma = rotationScale.
-                The full mathematical formula is ** Show math formula ** 
-                And translated into code <code>exp(-0.5 (p - mu)^T sigma^-1 (p - mu))</code> 
-                The -0.5f comes from ** add explincation ** 
+<pre><code>struct Gaussian2D {
+    glm::vec2 mu;
+    glm::mat2 sigma;
+    glm::vec4 color;
+};</code></pre>
+            <p>
+                The fancy statistical names map onto plainer ones: $\boldsymbol{\mu}$ (<code>mu</code>) is the position,
+                $\Sigma$ (<code>sigma</code>) is the rotation and scale. The full formula is
+                $$ G(\mathbf{p}) = \exp\!\left( -\tfrac{1}{2}\,(\mathbf{p} - \boldsymbol{\mu})^{\top}\, \Sigma^{-1}\, (\mathbf{p} - \boldsymbol{\mu}) \right) $$
+                with an optional $\frac{1}{2\pi\sqrt{|\Sigma|}}$ out front if you want it to integrate to 1. For rendering
+                we don't care about that, so it's dropped. In code that's:
             </p>
-             <code>
-                glm::vec2 p = glm::vec2( x, y );
-                glm::vec2 diff = p - g.mu;
-                float res = glm::exp( -0.5f * glm::dot( diff, sigmaInv * diff ) );
-                AddPixel( image, x, y, g.color * res );
-             </code>
-             <p> 
-                That's it, suprising very simple. The difficulty comes in making these perforamnce and training these gaussians in the first place. A topic for another day. 
+<pre><code>glm::vec2 p    = glm::vec2( x, y );
+glm::vec2 diff = p - g.mu;
+float res      = glm::exp( -0.5f * glm::dot( diff, sigmaInv * diff ) );
+AddPixel( image, x, y, g.color * res );</code></pre>
+             <p>
+                The <code>-0.5f</code> comes straight from the normal distribution's $e^{-x^2 / (2\sigma^2)}$. Pulling
+                the $\tfrac{1}{2}$ out is what keeps sigma behaving like a variance instead of half of one.
+            </p>
+             <p>
+                That's it, surprisingly simple. The hard part is making it fast and training the Gaussians in the
+                first place. A topic for another day.
             </p>
         </div>
         <br/>
@@ -118,7 +141,7 @@
             </p>
 
             <ul class="sh-controls">
-                <li><b>&sigma;<sub>x</sub>, &sigma;<sub>y</sub></b> the two axis lengths of the covariance, in pixels</li>
+                <li><b>$\sigma_x$, $\sigma_y$</b> the two axis lengths of the covariance, in pixels</li>
                 <li><b>rotation</b> spins those axes, which is the off-diagonal term</li>
                 <li><b>weight</b> peak amplitude, before anything overlaps</li>
                 <li><b>colour</b> what the splat contributes where it lands</li>
