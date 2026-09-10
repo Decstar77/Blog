@@ -4,6 +4,8 @@ WORKDIR /app
 
 # Install dependencies
 COPY runner/requirements.txt .
+# CPU-only torch: the server has no GPU, and the default wheel pulls ~3GB of CUDA libs
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy runner source and all project files (weights live alongside project scripts)

@@ -37,7 +37,8 @@ def load_project(py_path: str, weights_path: str, return_module: bool = False):
         raise AttributeError(f"{py_path} must define a class named `Model`")
 
     model = module.Model()
-    model.load_state_dict(torch.load(weights_path, weights_only=True))
+    # map_location: some weights were saved from a GPU; the server is CPU-only
+    model.load_state_dict(torch.load(weights_path, weights_only=True, map_location="cpu"))
     model.eval()
     if return_module:
         return model, module
