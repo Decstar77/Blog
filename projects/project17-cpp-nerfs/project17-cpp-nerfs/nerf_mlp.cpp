@@ -26,6 +26,44 @@ namespace nerf {
         }
     }
 
+    PositionalEncoding EncodingCreate( i32 inputCount, i32 frequencyCount, bool includeInput ) {
+        PositionalEncoding enc = {};
+        enc.inputCount = inputCount > 0 ? inputCount : 0;
+        enc.frequencyCount = frequencyCount > 0 ? frequencyCount : 0;
+        enc.includeInput = includeInput;
+        return enc;
+    }
+
+    i32 EncodingOutputCount( const PositionalEncoding & enc ) {
+        const i32 raw = enc.includeInput ? enc.inputCount : 0;
+        return raw + enc.inputCount * enc.frequencyCount * 2;
+    }
+
+    void EncodingApply( const PositionalEncoding & enc, const f32 * in, f32 * out ) {
+        if( in == nullptr || out == nullptr ) {
+            return;
+        }
+
+        i32 w = 0;
+        if( enc.includeInput ) {
+            for( i32 i = 0; i < enc.inputCount; i++ ) {
+                out[w++] = in[i];
+            }
+        }
+
+        // freq doubles per band rather than being recomputed with powf, so the whole thing stays a
+        // couple of multiplies plus the trig per output pair.
+        f32 freq = kPi;
+        for( i32 k = 0; k < enc.frequencyCount; k++ ) {
+            for( i32 i = 0; i < enc.inputCount; i++ ) {
+                const f32 a = in[i] * freq;
+                out[w++] = sinf( a );
+                out[w++] = cosf( a );
+            }
+            freq *= 2.0f;
+        }
+    }
+
     NetworkMlp * MlpCreate( const i32 * sizes, const i32 layers, ActivationFunction actHidden, ActivationFunction actOut, u32 seed ) {
         if( sizes == nullptr || layers < 2 || layers > kMlpMaxLayers ) {
             return nullptr;

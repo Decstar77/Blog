@@ -17,6 +17,30 @@ namespace nerf {
         OPTIMIZER_ADAM
     };
 
+    // NeRF style frequency encoding. Each raw input value x is replaced by the sines and cosines of
+    // x scaled by 2^0 .. 2^(frequencyCount - 1), which gives the net a set of high frequency
+    // features to work with. Without it a plain relu/tanh mlp is heavily biased towards smooth
+    // functions and an image regression comes out as a blurry blob.
+    //
+    // Inputs are expected in [ -1, 1 ]. The scale is pi * 2^k, so the lowest band goes through one
+    // half period across that range and the highest resolves detail about 2^(frequencyCount - 1)
+    // times finer.
+    struct PositionalEncoding {
+        i32     inputCount;         // raw values per sample, e.g. 2 for a uv, 3 for a position
+        i32     frequencyCount;     // L in the paper, 0 disables the bands entirely
+        bool    includeInput;       // prepend the raw values, which the paper does
+    };
+
+    PositionalEncoding  EncodingCreate( i32 inputCount, i32 frequencyCount, bool includeInput = true );
+
+    // Width of the vector EncodingApply writes, which is what the net's sizes[0] has to be.
+    i32                 EncodingOutputCount( const PositionalEncoding & enc );
+
+    // out is EncodingOutputCount wide. Layout is the raw values first (when includeInput), then for
+    // each frequency band, sin and cos of every input value, so band k of input i lands at
+    // [ ( k * inputCount + i ) * 2 ].
+    void                EncodingApply( const PositionalEncoding & enc, const f32 * in, f32 * out );
+
     // A plain fully connected net. sizes[0] is the input width, sizes[layerCount - 1] the output
     // width, so there are layerCount - 1 weight matrices. Everything is single sample, no batching:
     // MlpForward stashes the activations it needs, MlpBackward accumulates into the gradient
