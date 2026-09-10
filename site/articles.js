@@ -1,6 +1,13 @@
 // All articles, newest first
 const articles = [
     {
+        title: "Notes on Discrete Differential Geometry",
+        summary: "Simplices, simplicial complexes, star, closure and link, k-vectors, k-forms, the Hodge star, and the musical isomorphisms.",
+        category: "Mathematics",
+        readTime: "10 min read",
+        url: "discrete-differential-geometry-01.html"
+    },
+    {
         title: "C++26 Reflection, A Quick Exploration",
         summary: "Building a struct-to-JSON writer with the ^^ reflection operator, splicers and template for.",
         category: "C++",
