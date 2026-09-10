@@ -81,10 +81,6 @@ struct Gaussian2D {
 
 /*
 ===================
-The editable form of a splat. sigma is a symmetric 2x2 matrix, which is three
-free numbers, but nudging those directly is not something anyone can aim. The
-same ellipse written as two axis lengths plus a rotation is, so that is what the
-controls edit and what gets composed back into sigma below.
 ===================
 */
 struct GaussianParams {
@@ -98,9 +94,6 @@ struct GaussianParams {
 
 /*
 ===================
-sigma = R S R^T, with S the axis aligned covariance. Conjugating by the rotation
-keeps it symmetric positive definite, so the inverse the splat needs always
-exists.
 ===================
 */
 Gaussian2D BuildGaussian( const GaussianParams & p ) {
@@ -118,9 +111,6 @@ Gaussian2D BuildGaussian( const GaussianParams & p ) {
 
 /*
 ===================
-Squared Mahalanobis distance: how far p sits from the centre measured in
-standard deviations, in the gaussian's own stretched and rotated frame. 1.0 is
-the ellipse the outline draws.
 ===================
 */
 float MahalanobisSq( const Gaussian2D & g, glm::vec2 p ) {
@@ -130,10 +120,6 @@ float MahalanobisSq( const Gaussian2D & g, glm::vec2 p ) {
 
 /*
 ===================
-The tail past four standard deviations is under a thousandth of the peak, so the
-loop runs over that box rather than the whole image. Splatting every pixel per
-gaussian was fine for three of them baked once at startup; it is not fine while
-a slider is being dragged.
 ===================
 */
 void SplatGaussian( OutputImage & image, const Gaussian2D & g ) {
@@ -184,17 +170,12 @@ const float MAX_SIZE = 220.0f;
 static std::vector<GaussianParams> scene;
 static int selected = -1;
 
-// What a click drops. The sliders write here as well as into the selection, so
-// the next splat continues from wherever the last one was left.
 static GaussianParams brush = {};
 
 static bool sceneDirty = true;
 static bool showOutlines = true;
 static float exposure = 1.0f;
 
-// Bumped whenever the selection or its values change from this side, so the
-// page can notice that a click picked a different splat and re-read the values
-// instead of keeping a second copy that drifts out of step.
 static int stateVersion = 0;
 
 /*
@@ -223,8 +204,6 @@ void RenderScene( OutputImage & image ) {
 
 /*
 ===================
-Topmost first, so the splat added last is the one a click grabs. The 1.0 cutoff
-is the drawn outline, which makes the hit region exactly what is on screen.
 ===================
 */
 int PickGaussian( glm::vec2 p ) {
@@ -298,8 +277,6 @@ void ClearScene() {
 
 /*
 ===================
-The three overlapping splats the demo used to bake once at startup, now just a
-starting point to drag around.
 ===================
 */
 void LoadDefaultScene( int screenWidth, int screenHeight ) {
@@ -328,10 +305,6 @@ void LoadDefaultScene( int screenWidth, int screenHeight ) {
 
 /*
 ===================
-The accumulation buffer is unbounded, three splats at full weight on the same
-pixel land at 3.0, so it gets exposed and Reinhard tone mapped down to 8 bit
-rather than clipped. Float textures are also an extension away from being
-guaranteed under WebGL, and this side steps that.
 ===================
 */
 void HdrToBytes( const OutputImage & src, unsigned char * rgba, float exposureScale ) {
@@ -365,9 +338,6 @@ Texture2D CreateDisplayTexture( int width, int height ) {
 
 /*
 ===================
-The one sigma ellipse, drawn as the unit circle pushed through the same rotation
-and scale that built sigma. Without it a low weight splat is a faint smudge with
-no handle to grab, and nothing shows which one the sliders are driving.
 ===================
 */
 void DrawGaussianOutline( const GaussianParams & p, Color tint ) {
@@ -404,8 +374,6 @@ float ClampF( float v, float lo, float hi ) {
 
 /*
 ===================
-Every control ends up here. The selection and the brush move together, so an
-edit retunes the highlighted splat and the next click inherits the result.
 ===================
 */
 void ApplyBrushToSelection() {
@@ -423,10 +391,6 @@ void ApplyBrushToSelection() {
 ===================================================
 */
 
-// Pointer state. The desktop build reads raylib's mouse directly; the browser
-// build takes it from the page instead, because the canvas is CSS scaled to fit
-// the article column and only the page knows the element's real size. Feeding
-// normalised coordinates through here means this side never guesses at that.
 static glm::vec2 pointerNorm = glm::vec2( 0.0f, 0.0f );
 static bool pointerDown = false;
 static bool pointerWasDown = false;
@@ -434,9 +398,6 @@ static bool dragging = false;
 
 #if defined( PLATFORM_WEB )
 
-// Everything below only touches plain state and the dirty flag, so there is
-// nothing to synchronise against the main loop: the next frame picks the change
-// up and re-splats whatever went stale.
 extern "C" {
 
 // nx, ny are 0..1 across the canvas; the frame loop turns them into pixels.
@@ -656,8 +617,7 @@ static void UpdateDrawFrame() {
 
 #if !defined( PLATFORM_WEB )
     // The browser build has the page's controls for all of this.
-    DrawText( TextFormat( "%d splats  |  click to place, drag to move, DEL delete, C clear, R reset",
-                  (int) scene.size() ),
+    DrawText( TextFormat( "%d splats  |  click to place, drag to move, DEL delete, C clear, R reset", (int) scene.size() ),
         10, 10, 14, Color{ 200, 200, 200, 180 } );
 #endif
 

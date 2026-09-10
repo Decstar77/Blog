@@ -70,10 +70,32 @@
 
         <div class="article-body">
             <p class="lead">
-                The splat, on its own, before any of the training. A 2D gaussian is a centre, a
-                2&times;2 covariance and a colour, and rendering one is a single exponential per
-                pixel. Place a few and they add together into something that looks nothing like the
-                blurry blobs it is made of. Article coming soon.
+                I've been working towards creating a Gaussians splat renderer. But first I wanted to create a basic 2D application for learning.
+                It's actually remarkably simple. A gaussian, by definition is e^(-x^2). Translating into 2D we just get one equation per coordinate. 
+                It's controlalbe but shifting and multiplying be constants, eg 2e^(-(x + 5)^2). Or the classic normal distrubition. 
+                In code this translates to a very simple
+            </p>
+            <code>
+                struct Gaussian2D {
+                    glm::vec2 mu;
+                    glm::mat2 sigma;
+                    glm::vec4 color;
+                };
+            </code>
+            <p> 
+                The fancy statitical variable names can be renamed to, mu = position, sigma = rotationScale.
+                The full mathematical formula is ** Show math formula ** 
+                And translated into code <code>exp(-0.5 (p - mu)^T sigma^-1 (p - mu))</code> 
+                The -0.5f comes from ** add explincation ** 
+            </p>
+             <code>
+                glm::vec2 p = glm::vec2( x, y );
+                glm::vec2 diff = p - g.mu;
+                float res = glm::exp( -0.5f * glm::dot( diff, sigmaInv * diff ) );
+                AddPixel( image, x, y, g.color * res );
+             </code>
+             <p> 
+                That's it, suprising very simple. The difficulty comes in making these perforamnce and training these gaussians in the first place. A topic for another day. 
             </p>
         </div>
         <br/>
@@ -103,25 +125,6 @@
                 <li><b>exposure</b> tone mapping only, applied after the splats are summed</li>
                 <li><b>outlines</b> the one-sigma ellipse of every splat, and the hit region for a click</li>
             </ul>
-        </div>
-
-        <div class="article-body">
-            <h2>What is actually running</h2>
-            <p>
-                Each splat is evaluated as <code>exp(-0.5 (p - mu)^T sigma^-1 (p - mu))</code> into a
-                float buffer that the splats add into, and the sum is Reinhard tone mapped down to 8
-                bit for display. That is why overlaps go pale rather than clipping to white. The
-                sliders never touch <code>sigma</code> directly: three free numbers in a symmetric
-                matrix is not something anyone can aim, so the controls edit two axis lengths and an
-                angle, and the C++ composes <code>sigma = R S R^T</code> from them. The status line
-                under the controls prints the matrix that comes out.
-            </p>
-            <p>
-                Splatting only runs over a four standard deviation box around the centre. Past that
-                the exponential is under a thousandth of the peak, and covering the full 800&times;800
-                for every splat is the difference between a drag that tracks the cursor and one that
-                does not.
-            </p>
         </div>
     </article>
 
