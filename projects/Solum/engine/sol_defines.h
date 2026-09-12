@@ -30,25 +30,9 @@ namespace sol {
     constexpr f32 kInvPi = 1.0f / kPi;
     constexpr f32 kDeg2Rad = kPi / 180.0f;
     constexpr f32 kRad2Deg = 180.0f / kPi;
-
-    struct StringBuffer {
-        char *  data;
-        i32     count;
-        i32     cap;
-    };
-
-    struct LargeString {
-        char    data[256];
-        i32     count;
-    };
-
-    struct SmallString {
-        char    data[64];
-        i32     count;
-    };
     
     inline f32 Max( f32 a, f32 b ) { return a > b ? a : b; }
-
+    inline f32 Min( f32 a, f32 b ) { return a < b ? a : b; }
 } // namespace nerf
 
 #define SPLATS_ARRAY_COUNT( arr ) ( sizeof( arr ) / sizeof( ( arr )[0] ) )

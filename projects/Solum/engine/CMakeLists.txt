@@ -30,7 +30,7 @@ set_source_files_properties (${SOLUM_SHADER_HEADERS} PROPERTIES HEADER_FILE_ONLY
 
 # The renderer knows nothing about the window system, so the GLFW runtime and
 # the Qt editor can both drive it.
-add_library (solum STATIC "sol_list.h" "sol_math.cpp" "sol_world.h" "sol_render.cpp" ${SOLUM_SHADER_HEADERS})
+add_library (solum STATIC "sol_list.h" "sol_string.h" "sol_string.cpp" "sol_math.cpp" "sol_world.h" "sol_render.cpp" ${SOLUM_SHADER_HEADERS})
 target_include_directories (solum PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories (solum PRIVATE "${SOLUM_SHADER_OUT_DIR}")
 target_link_libraries (solum PUBLIC Vulkan::Vulkan)
