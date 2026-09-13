@@ -11,8 +11,8 @@ endif ()
 
 set (CMAKE_AUTOMOC ON)
 
-add_executable (editor "sol_editor_main.cpp" "sol_editor_view.cpp")
-target_link_libraries (editor PRIVATE solum Qt6::Widgets Qt6::Gui Qt6::Core)
+add_executable (editor "sol_editor_main.cpp" "sol_editor_view.cpp" "sol_editor_import.cpp")
+target_link_libraries (editor PRIVATE solum stb Qt6::Widgets Qt6::Gui Qt6::Core)
 set_property (TARGET editor PROPERTY CXX_STANDARD 20)
 
 # Qt's DLLs live outside the build tree, so stage them next to the exe.

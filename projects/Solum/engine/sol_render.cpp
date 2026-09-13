@@ -660,6 +660,39 @@ namespace sol {
         return true;
     }
 
+    static bool CreateTextureSetLayout( Renderer * r ) {
+        VkDescriptorSetLayoutBinding binding = {};
+        binding.binding = 0;
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &binding;
+        VK_CHECK( vkCreateDescriptorSetLayout( r->device, &layoutInfo, nullptr, &r->textureSetLayout ) );
+        return true;
+    }
+
+    // Sized generously relative to what this renderer currently loads; a real
+    // asset system would grow this or suballocate per batch of textures.
+    constexpr u32 kMaxDescriptorSets = 256;
+
+    static bool CreateDescriptorPool( Renderer * r ) {
+        VkDescriptorPoolSize poolSize = {};
+        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSize.descriptorCount = kMaxDescriptorSets;
+
+        VkDescriptorPoolCreateInfo poolInfo = {};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.maxSets = kMaxDescriptorSets;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        VK_CHECK( vkCreateDescriptorPool( r->device, &poolInfo, nullptr, &r->descriptorPool ) );
+        return true;
+    }
+
     static bool CreateStaticMeshPipeline( Renderer * r ) {
         VkShaderModule vertModule = VK_NULL_HANDLE;
         VkShaderModule fragModule = VK_NULL_HANDLE;
@@ -683,7 +716,7 @@ namespace sol {
         binding.stride = (u32)sizeof( StaticMeshVertex );
         binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-        VkVertexInputAttributeDescription attributes[3] = {};
+        VkVertexInputAttributeDescription attributes[4] = {};
         attributes[0].location = 0;
         attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributes[0].offset = (u32)offsetof( StaticMeshVertex, position );
@@ -693,6 +726,9 @@ namespace sol {
         attributes[2].location = 2;
         attributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributes[2].offset = (u32)offsetof( StaticMeshVertex, color );
+        attributes[3].location = 3;
+        attributes[3].format = VK_FORMAT_R32G32_SFLOAT;
+        attributes[3].offset = (u32)offsetof( StaticMeshVertex, uv );
 
         VkPipelineVertexInputStateCreateInfo vertexInput = {};
         vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -759,6 +795,8 @@ namespace sol {
 
         VkPipelineLayoutCreateInfo layoutInfo = {};
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = 1;
+        layoutInfo.pSetLayouts = &r->textureSetLayout;
         layoutInfo.pushConstantRangeCount = 1;
         layoutInfo.pPushConstantRanges = &pushRange;
 
@@ -844,6 +882,40 @@ namespace sol {
         return true;
     }
 
+    // One-shot command buffer pattern shared by every blocking upload below:
+    // allocate, record, submit, wait, free. Fine for load-time work; nothing
+    // here is meant for a per-frame streaming path.
+    static bool BeginOneShotCommands( Renderer * r, VkCommandBuffer * outCmd ) {
+        VkCommandBufferAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = r->commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+        VK_CHECK( vkAllocateCommandBuffers( r->device, &allocInfo, outCmd ) );
+
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        VK_CHECK( vkBeginCommandBuffer( *outCmd, &beginInfo ) );
+        return true;
+    }
+
+    static bool EndOneShotCommands( Renderer * r, VkCommandBuffer cmd ) {
+        VK_CHECK( vkEndCommandBuffer( cmd ) );
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+        bool ok = vkQueueSubmit( r->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE ) == VK_SUCCESS;
+        if( ok ) {
+            vkQueueWaitIdle( r->graphicsQueue );
+        }
+
+        vkFreeCommandBuffers( r->device, r->commandPool, 1, &cmd );
+        return ok;
+    }
+
     // Stages through host-visible memory and blocks on the copy.
     static bool UploadBuffer( Renderer * r, VkBuffer dst, const void * data, u64 size ) {
         VkBuffer staging = VK_NULL_HANDLE;
@@ -863,34 +935,14 @@ namespace sol {
 
         VkCommandBuffer cmd = VK_NULL_HANDLE;
         if( ok ) {
-            VkCommandBufferAllocateInfo allocInfo = {};
-            allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-            allocInfo.commandPool = r->commandPool;
-            allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-            allocInfo.commandBufferCount = 1;
-            ok = vkAllocateCommandBuffers( r->device, &allocInfo, &cmd ) == VK_SUCCESS;
+            ok = BeginOneShotCommands( r, &cmd );
         }
 
         if( ok ) {
-            VkCommandBufferBeginInfo beginInfo = {};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            vkBeginCommandBuffer( cmd, &beginInfo );
-
             VkBufferCopy region = {};
             region.size = size;
             vkCmdCopyBuffer( cmd, staging, dst, 1, &region );
-            vkEndCommandBuffer( cmd );
-
-            VkSubmitInfo submitInfo = {};
-            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &cmd;
-            ok = vkQueueSubmit( r->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE ) == VK_SUCCESS;
-            if( ok ) {
-                vkQueueWaitIdle( r->graphicsQueue );
-            }
-            vkFreeCommandBuffers( r->device, r->commandPool, 1, &cmd );
+            ok = EndOneShotCommands( r, cmd );
         }
 
         vkDestroyBuffer( r->device, staging, nullptr );
@@ -902,12 +954,279 @@ namespace sol {
         return ok;
     }
 
+    static bool CreateImage( Renderer * r, i32 width, i32 height, VkFormat format,
+                             VkImageUsageFlags usage, VkImage * outImage, VkDeviceMemory * outMemory ) {
+        VkImageCreateInfo imageInfo = {};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = format;
+        imageInfo.extent.width = (u32)width;
+        imageInfo.extent.height = (u32)height;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.usage = usage;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VK_CHECK( vkCreateImage( r->device, &imageInfo, nullptr, outImage ) );
+
+        VkMemoryRequirements requirements = {};
+        vkGetImageMemoryRequirements( r->device, *outImage, &requirements );
+
+        u32 memoryType = 0;
+        if( !FindMemoryType( r, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                             &memoryType ) ) {
+            vkDestroyImage( r->device, *outImage, nullptr );
+            *outImage = VK_NULL_HANDLE;
+            return false;
+        }
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = requirements.size;
+        allocInfo.memoryTypeIndex = memoryType;
+        VK_CHECK( vkAllocateMemory( r->device, &allocInfo, nullptr, outMemory ) );
+        VK_CHECK( vkBindImageMemory( r->device, *outImage, *outMemory, 0 ) );
+        return true;
+    }
+
+    // Only the two transitions the texture upload path actually needs; anything
+    // else falls through to the error case rather than guessing stage masks.
+    static bool TransitionImageLayout( Renderer * r, VkImage image,
+                                       VkImageLayout oldLayout, VkImageLayout newLayout ) {
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        if( !BeginOneShotCommands( r, &cmd ) ) {
+            return false;
+        }
+
+        VkImageMemoryBarrier barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.layerCount = 1;
+
+        VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+        if( oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+            newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        } else if( oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                   newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ) {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        } else {
+            fprintf( stderr, "Unsupported image layout transition\n" );
+            vkFreeCommandBuffers( r->device, r->commandPool, 1, &cmd );
+            return false;
+        }
+
+        vkCmdPipelineBarrier( cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier );
+        return EndOneShotCommands( r, cmd );
+    }
+
+    static bool CopyBufferToImage( Renderer * r, VkBuffer buffer, VkImage image, i32 width, i32 height ) {
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        if( !BeginOneShotCommands( r, &cmd ) ) {
+            return false;
+        }
+
+        VkBufferImageCopy region = {};
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.layerCount = 1;
+        region.imageExtent.width = (u32)width;
+        region.imageExtent.height = (u32)height;
+        region.imageExtent.depth = 1;
+
+        vkCmdCopyBufferToImage( cmd, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region );
+        return EndOneShotCommands( r, cmd );
+    }
+
+    bool RenderTextureCreate( Renderer * r, const TextureAsset & asset, RenderTexture * outTexture ) {
+        *outTexture = {};
+
+        if( asset.width <= 0 || asset.height <= 0 ) {
+            fprintf( stderr, "Texture asset has no pixels\n" );
+            return false;
+        }
+
+        const VkFormat format = asset.meta.format == TextureFormat_RGBA8_SRGB
+            ? VK_FORMAT_R8G8B8A8_SRGB
+            : VK_FORMAT_R8G8B8A8_UNORM;
+
+        if( !CreateImage( r, asset.width, asset.height, format,
+                          VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                          &outTexture->image, &outTexture->memory ) ) {
+            return false;
+        }
+
+        const u64 byteCount = (u64)asset.width * (u64)asset.height * 4;
+
+        VkBuffer staging = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        bool ok = CreateBuffer( r, byteCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                &staging, &stagingMemory );
+        if( ok ) {
+            void * mapped = nullptr;
+            ok = vkMapMemory( r->device, stagingMemory, 0, byteCount, 0, &mapped ) == VK_SUCCESS;
+            if( ok ) {
+                memcpy( mapped, asset.pixels.data, (size_t)byteCount );
+                vkUnmapMemory( r->device, stagingMemory );
+            }
+        }
+
+        ok = ok && TransitionImageLayout( r, outTexture->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL );
+        ok = ok && CopyBufferToImage( r, staging, outTexture->image, asset.width, asset.height );
+        ok = ok && TransitionImageLayout( r, outTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL );
+
+        if( staging != VK_NULL_HANDLE ) {
+            vkDestroyBuffer( r->device, staging, nullptr );
+        }
+        if( stagingMemory != VK_NULL_HANDLE ) {
+            vkFreeMemory( r->device, stagingMemory, nullptr );
+        }
+
+        if( !ok ) {
+            RenderTextureDestroy( r, outTexture );
+            return false;
+        }
+
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = outTexture->image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.layerCount = 1;
+        if( vkCreateImageView( r->device, &viewInfo, nullptr, &outTexture->view ) != VK_SUCCESS ) {
+            RenderTextureDestroy( r, outTexture );
+            return false;
+        }
+
+        const VkFilter filter = asset.meta.filter == TextureFilter_Linear
+            ? VK_FILTER_LINEAR
+            : VK_FILTER_NEAREST;
+
+        VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        if( asset.meta.wrap == TextureWrap_Clamp ) {
+            addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        } else if( asset.meta.wrap == TextureWrap_Mirror ) {
+            addressMode = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        }
+
+        VkSamplerCreateInfo samplerInfo = {};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = filter;
+        samplerInfo.minFilter = filter;
+        samplerInfo.addressModeU = addressMode;
+        samplerInfo.addressModeV = addressMode;
+        samplerInfo.addressModeW = addressMode;
+        // The device is created with no features enabled, so anisotropic
+        // filtering is not available - leave it off rather than request it.
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        if( vkCreateSampler( r->device, &samplerInfo, nullptr, &outTexture->sampler ) != VK_SUCCESS ) {
+            RenderTextureDestroy( r, outTexture );
+            return false;
+        }
+
+        VkDescriptorSetAllocateInfo setAllocInfo = {};
+        setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        setAllocInfo.descriptorPool = r->descriptorPool;
+        setAllocInfo.descriptorSetCount = 1;
+        setAllocInfo.pSetLayouts = &r->textureSetLayout;
+        if( vkAllocateDescriptorSets( r->device, &setAllocInfo, &outTexture->descriptorSet ) != VK_SUCCESS ) {
+            RenderTextureDestroy( r, outTexture );
+            return false;
+        }
+
+        VkDescriptorImageInfo descriptorImageInfo = {};
+        descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        descriptorImageInfo.imageView = outTexture->view;
+        descriptorImageInfo.sampler = outTexture->sampler;
+
+        VkWriteDescriptorSet write = {};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = outTexture->descriptorSet;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo = &descriptorImageInfo;
+        vkUpdateDescriptorSets( r->device, 1, &write, 0, nullptr );
+
+        outTexture->width = asset.width;
+        outTexture->height = asset.height;
+        return true;
+    }
+
+    void RenderTextureDestroy( Renderer * r, RenderTexture * texture ) {
+        if( r->device == VK_NULL_HANDLE ) {
+            return;
+        }
+
+        // Descriptor sets are not freed individually: the pool was not created
+        // with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, so destroying
+        // the pool at shutdown is what reclaims them.
+        if( texture->sampler != VK_NULL_HANDLE ) {
+            vkDestroySampler( r->device, texture->sampler, nullptr );
+        }
+        if( texture->view != VK_NULL_HANDLE ) {
+            vkDestroyImageView( r->device, texture->view, nullptr );
+        }
+        if( texture->image != VK_NULL_HANDLE ) {
+            vkDestroyImage( r->device, texture->image, nullptr );
+        }
+        if( texture->memory != VK_NULL_HANDLE ) {
+            vkFreeMemory( r->device, texture->memory, nullptr );
+        }
+
+        *texture = {};
+    }
+
+    static bool CreateWhiteTexture( Renderer * r ) {
+        u8 pixel[4] = { 255, 255, 255, 255 };
+
+        TextureAsset asset = {};
+        asset.width = 1;
+        asset.height = 1;
+        asset.meta.format = TextureFormat_RGBA8_UNORM;
+        asset.meta.filter = TextureFilter_Nearest;
+        asset.meta.wrap = TextureWrap_Repeat;
+        ListAddRange( asset.pixels, pixel, (i32)SPLATS_ARRAY_COUNT( pixel ) );
+
+        bool ok = RenderTextureCreate( r, asset, &r->whiteTexture );
+        ListFree( asset.pixels );
+        return ok;
+    }
+
     bool RenderStaticMeshCreate( Renderer * r,
                                  const StaticMeshVertex * vertices, i32 vertexCount,
                                  const u32 * indices, i32 indexCount,
+                                 const RenderTexture * texture,
                                  RenderStaticMesh * outMesh ) {
         *outMesh = {};
         outMesh->transform = Mat4Identity();
+        // Untextured meshes still need a populated descriptor, so they fall
+        // back to the renderer's 1x1 white texture.
+        outMesh->textureSet = texture != nullptr ? texture->descriptorSet : r->whiteTexture.descriptorSet;
 
         if( vertexCount <= 0 || indexCount <= 0 ) {
             fprintf( stderr, "Static mesh needs both vertices and indices\n" );
@@ -969,11 +1288,13 @@ namespace sol {
     }
 
     bool RendererAddDebugTriangle( Renderer * r ) {
-        // Counter-clockwise with +y up, sitting on the near plane.
+        // Counter-clockwise with +y up, sitting on the near plane. UVs are
+        // arbitrary here since these bind the white fallback texture, but they
+        // are filled in sanely rather than left at zero.
         const StaticMeshVertex vertices[] = {
-            { {  0.0f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-            { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-            { {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+            { {  0.0f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.5f, 0.0f } },
+            { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f } },
+            { {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
         };
         const u32 indices[] = { 0, 1, 2 };
 
@@ -988,7 +1309,7 @@ namespace sol {
         for( u64 i = 0; i < SPLATS_ARRAY_COUNT( offsets ); i++ ) {
             RenderStaticMesh mesh = {};
             if( !RenderStaticMeshCreate( r, vertices, (i32)SPLATS_ARRAY_COUNT( vertices ),
-                                         indices, (i32)SPLATS_ARRAY_COUNT( indices ), &mesh ) ) {
+                                         indices, (i32)SPLATS_ARRAY_COUNT( indices ), nullptr, &mesh ) ) {
                 return false;
             }
 
@@ -1001,6 +1322,33 @@ namespace sol {
                 RenderStaticMeshDestroy( r, &mesh );
                 return false;
             }
+        }
+        return true;
+    }
+
+    bool RendererAddTexturedPlane( Renderer * r, RenderTexture * texture, Vec3 center, f32 size ) {
+        const f32 half = size * 0.5f;
+        const Vec3 white = { 1.0f, 1.0f, 1.0f };
+        const Vec3 normal = { 0.0f, 0.0f, 1.0f };
+
+        // CCW as seen from +z, which is where the plane's normal points.
+        const StaticMeshVertex vertices[] = {
+            { { center.x - half, center.y - half, center.z }, normal, white, { 0.0f, 0.0f } },
+            { { center.x + half, center.y - half, center.z }, normal, white, { 1.0f, 0.0f } },
+            { { center.x + half, center.y + half, center.z }, normal, white, { 1.0f, 1.0f } },
+            { { center.x - half, center.y + half, center.z }, normal, white, { 0.0f, 1.0f } },
+        };
+        const u32 indices[] = { 0, 1, 2, 0, 2, 3 };
+
+        RenderStaticMesh mesh = {};
+        if( !RenderStaticMeshCreate( r, vertices, (i32)SPLATS_ARRAY_COUNT( vertices ),
+                                     indices, (i32)SPLATS_ARRAY_COUNT( indices ), texture, &mesh ) ) {
+            return false;
+        }
+
+        if( RendererAddStaticMesh( r, mesh ) == nullptr ) {
+            RenderStaticMeshDestroy( r, &mesh );
+            return false;
         }
         return true;
     }
@@ -1050,6 +1398,9 @@ namespace sol {
             vkCmdPushConstants( cmd, r->staticMeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
                                 0, (u32)sizeof( Mat4 ), &mvp );
 
+            vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
+                                     0, 1, &mesh.textureSet, 0, nullptr );
+
             VkDeviceSize offset = 0;
             vkCmdBindVertexBuffers( cmd, 0, 1, &mesh.vertexBuffer, &offset );
             vkCmdBindIndexBuffer( cmd, mesh.indexBuffer, 0, VK_INDEX_TYPE_UINT32 );
@@ -1090,7 +1441,12 @@ namespace sol {
                CreateFramebuffers( r ) &&
                CreatePerImageSemaphores( r ) &&
                CreateCommandsAndSync( r ) &&
-               CreateStaticMeshPipeline( r );
+               // Before the pipeline, whose layout embeds this set layout.
+               CreateTextureSetLayout( r ) &&
+               CreateDescriptorPool( r ) &&
+               CreateStaticMeshPipeline( r ) &&
+               // Needs the command pool and descriptor pool above.
+               CreateWhiteTexture( r );
     }
 
     void RendererSetSize( Renderer * r, i32 width, i32 height ) {
@@ -1221,6 +1577,11 @@ namespace sol {
         }
         ListFree( r->staticMeshes );
 
+        // Before the pool: destroying the pool implicitly frees every set
+        // allocated from it, but the image/view/sampler it points at are this
+        // texture's own and still need an explicit teardown.
+        RenderTextureDestroy( r, &r->whiteTexture );
+
         if( r->staticMeshPipeline != VK_NULL_HANDLE ) {
             vkDestroyPipeline( r->device, r->staticMeshPipeline, nullptr );
             r->staticMeshPipeline = VK_NULL_HANDLE;
@@ -1228,6 +1589,14 @@ namespace sol {
         if( r->staticMeshPipelineLayout != VK_NULL_HANDLE ) {
             vkDestroyPipelineLayout( r->device, r->staticMeshPipelineLayout, nullptr );
             r->staticMeshPipelineLayout = VK_NULL_HANDLE;
+        }
+        if( r->descriptorPool != VK_NULL_HANDLE ) {
+            vkDestroyDescriptorPool( r->device, r->descriptorPool, nullptr );
+            r->descriptorPool = VK_NULL_HANDLE;
+        }
+        if( r->textureSetLayout != VK_NULL_HANDLE ) {
+            vkDestroyDescriptorSetLayout( r->device, r->textureSetLayout, nullptr );
+            r->textureSetLayout = VK_NULL_HANDLE;
         }
 
         if( r->commandPool != VK_NULL_HANDLE ) {

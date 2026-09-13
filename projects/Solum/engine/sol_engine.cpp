@@ -1,6 +1,7 @@
 // sol_engine.cpp : Defines the entry point for the application.
 //
 
+#include "sol_asset.h"
 #include "sol_defines.h"
 #include "sol_math.h"
 #include "sol_render.h"
@@ -13,8 +14,6 @@
 
 namespace sol {
 
-    // WASD + QE fly camera. Lives here rather than in the renderer: the renderer
-    // only ever sees the matrix this produces.
     struct FlyCamera {
         Vec3    position;
         // Radians. yaw 0 / pitch 0 looks down -z, matching the math convention.
@@ -75,9 +74,8 @@ namespace sol {
         if( glfwGetKey( window, GLFW_KEY_S ) == GLFW_PRESS ) { move = move - forward; }
         if( glfwGetKey( window, GLFW_KEY_D ) == GLFW_PRESS ) { move = move + right; }
         if( glfwGetKey( window, GLFW_KEY_A ) == GLFW_PRESS ) { move = move - right; }
-        // World up, not camera up: E and Q rise and fall regardless of pitch.
-        if( glfwGetKey( window, GLFW_KEY_E ) == GLFW_PRESS ) { move.y += 1.0f; }
-        if( glfwGetKey( window, GLFW_KEY_Q ) == GLFW_PRESS ) { move.y -= 1.0f; }
+        if( glfwGetKey( window, GLFW_KEY_SPACE ) == GLFW_PRESS ) { move.y += 1.0f; }
+        if ( glfwGetKey( window, GLFW_KEY_LEFT_CONTROL ) == GLFW_PRESS ) { move.y -= 1.0f; }
 
         f32 speed = camera->moveSpeed;
         if( glfwGetKey( window, GLFW_KEY_LEFT_SHIFT ) == GLFW_PRESS ) {
@@ -116,6 +114,38 @@ namespace sol {
         if( renderer != nullptr ) {
             RendererSetSize( renderer, width, height );
         }
+    }
+
+    // Placeholder: there is no asset-path resolution yet, so this points
+    // straight at a location on the dev machine rather than anything relative
+    // to the build. Replace once assets resolve relative to the executable.
+    static const char * const kBrickTextureMetaPath =
+        "C:/Projects/2025/Blog/projects/Solum/assets/T_Bricks1_Color.meta";
+
+    // Built in memory so the textured plane always has something to draw even
+    // before a real brick asset exists on disk.
+    static TextureAsset MakeCheckerboardFallback() {
+        constexpr i32 kSize = 8;
+
+        TextureAsset asset = {};
+        asset.width = kSize;
+        asset.height = kSize;
+        asset.meta.format = TextureFormat_RGBA8_SRGB;
+        asset.meta.filter = TextureFilter_Nearest;
+        asset.meta.wrap = TextureWrap_Repeat;
+
+        ListResize( asset.pixels, kSize * kSize * 4 );
+        for( i32 y = 0; y < kSize; y++ ) {
+            for( i32 x = 0; x < kSize; x++ ) {
+                const bool magenta = ( ( x + y ) & 1 ) == 0;
+                u8 * texel = &asset.pixels[( y * kSize + x ) * 4];
+                texel[0] = magenta ? 255 : 0;
+                texel[1] = 0;
+                texel[2] = magenta ? 255 : 0;
+                texel[3] = 255;
+            }
+        }
+        return asset;
     }
 
 } // namespace sol
@@ -176,6 +206,34 @@ int main() {
         sol::RendererAddDebugTriangle( &renderer );
     }
 
+    sol::RenderTexture brickTexture = {};
+    bool haveBrickTexture = false;
+    if( started ) {
+        sol::TextureAsset textureAsset = {};
+        bool loadedFromDisk = sol::TextureAssetLoad( sol::kBrickTextureMetaPath, &textureAsset );
+        if( !loadedFromDisk ) {
+            fprintf( stderr, "Failed to load %s, falling back to a checkerboard\n",
+                     sol::kBrickTextureMetaPath );
+            textureAsset = sol::MakeCheckerboardFallback();
+        }
+
+        haveBrickTexture = sol::RenderTextureCreate( &renderer, textureAsset, &brickTexture );
+        if( !haveBrickTexture ) {
+            fprintf( stderr, "Failed to create the brick/checkerboard render texture\n" );
+        } else if( !sol::RendererAddTexturedPlane( &renderer, &brickTexture,
+                                                    sol::Vec3{ 0.0f, 0.0f, 0.0f }, 2.0f ) ) {
+            fprintf( stderr, "Failed to add the textured plane\n" );
+        }
+
+        // The CPU-side copy is only needed for the upload above; the renderer
+        // now owns a GPU-resident copy in brickTexture.
+        if( loadedFromDisk ) {
+            sol::TextureAssetFree( &textureAsset );
+        } else {
+            sol::ListFree( textureAsset.pixels );
+        }
+    }
+
     if( !started ) {
         fprintf( stderr, "Failed to start the renderer\n" );
         sol::RendererShutdown( &renderer );
@@ -218,6 +276,9 @@ int main() {
         sol::RendererDrawFrame( &renderer );
     }
 
+    if( haveBrickTexture ) {
+        sol::RenderTextureDestroy( &renderer, &brickTexture );
+    }
     sol::RendererShutdown( &renderer );
     glfwDestroyWindow( window );
     glfwTerminate();

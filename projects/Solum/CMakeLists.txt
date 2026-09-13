@@ -21,6 +21,18 @@ set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
 add_subdirectory ("vendor/glfw")
 
+# stb lives in its own target so only the editor links it. The engine must never
+# depend on this: decoding source art is the importer's job, not the runtime's.
+add_library (stb STATIC "vendor/stb_image_impl.cpp")
+target_include_directories (stb PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
+set_property (TARGET stb PROPERTY CXX_STANDARD 20)
+
+# stb_image_write uses sprintf, which MSVC deprecates. This is vendored code we
+# do not want to patch, so silence it for this target only.
+if (MSVC)
+  target_compile_definitions (stb PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif ()
+
 # Where find_package looks for Qt6 when the caller has not said otherwise.
 if (NOT DEFINED CMAKE_PREFIX_PATH AND EXISTS "C:/Qt/6.11.1/msvc2022_64")
   set(CMAKE_PREFIX_PATH "C:/Qt/6.11.1/msvc2022_64")

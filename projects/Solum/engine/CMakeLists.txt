@@ -30,9 +30,16 @@ set_source_files_properties (${SOLUM_SHADER_HEADERS} PROPERTIES HEADER_FILE_ONLY
 
 # The renderer knows nothing about the window system, so the GLFW runtime and
 # the Qt editor can both drive it.
-add_library (solum STATIC "sol_list.h" "sol_string.h" "sol_string.cpp" "sol_math.cpp" "sol_world.h" "sol_render.cpp" ${SOLUM_SHADER_HEADERS})
+add_library (solum STATIC "sol_list.h" "sol_string.h" "sol_string.cpp" "sol_asset.h" "sol_asset.cpp" "sol_math.cpp" "sol_world.h" "sol_render.cpp" ${SOLUM_SHADER_HEADERS})
 target_include_directories (solum PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories (solum PRIVATE "${SOLUM_SHADER_OUT_DIR}")
+
+# sol_asset.cpp uses fopen, which MSVC deprecates in favour of its own fopen_s.
+# The portable call is the right one to keep, so silence the deprecation rather
+# than write non-standard code.
+if (MSVC)
+  target_compile_definitions (solum PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif ()
 target_link_libraries (solum PUBLIC Vulkan::Vulkan)
 set_property (TARGET solum PROPERTY CXX_STANDARD 20)
 

@@ -1,6 +1,7 @@
 // sol_editor_main.cpp : Qt shell hosting the engine's Vulkan viewport.
 //
 
+#include "sol_editor_import.h"
 #include "sol_editor_view.h"
 #include "sol_render.h"
 
@@ -13,6 +14,7 @@
 #include <QWidget>
 
 #include <cstdio>
+#include <cstring>
 
 namespace {
 
@@ -24,9 +26,56 @@ namespace {
         "VK_KHR_win32_surface",
     };
 
+    // "editor.exe --import <sourcePath> <outputDirectory> <assetName>". A pure
+    // CLI path: it must run headlessly, so it is handled before QApplication
+    // (and the Vulkan instance) ever gets constructed.
+    int RunImportCommand( int argc, char ** argv ) {
+        if( argc != 5 ) {
+            fprintf( stderr, "usage: editor --import <sourcePath> <outputDirectory> <assetName>\n" );
+            return 1;
+        }
+
+        const sol::StringView sourcePath = argv[2];
+        const sol::StringView outputDirectory = argv[3];
+        const sol::StringView assetName = argv[4];
+
+        const bool ok = sol::ImportTexture( sourcePath, outputDirectory, assetName,
+                                            sol::TextureFormat_RGBA8_SRGB,
+                                            sol::TextureFilter_Linear,
+                                            sol::TextureWrap_Repeat );
+        if( ok == false ) {
+            fprintf( stderr, "Import failed for '%.*s'\n", assetName.count, assetName.data );
+            return 1;
+        }
+
+        sol::TextureAsset asset = {};
+        sol::FixedString<1024> metaPath = {};
+        sol::StringAppend( metaPath, outputDirectory );
+        sol::StringAppend( metaPath, "/" );
+        sol::StringAppend( metaPath, assetName );
+        sol::StringAppend( metaPath, ".meta" );
+
+        if( sol::TextureAssetLoad( metaPath, &asset ) ) {
+            printf( "Imported '%.*s' -> %.*s\n", sourcePath.count, sourcePath.data, metaPath.count, metaPath.data );
+            printf( "  dimensions: %d x %d\n", asset.width, asset.height );
+            printf( "  payload bytes: %d\n", asset.pixels.count );
+            sol::TextureAssetFree( &asset );
+        } else {
+            fprintf( stderr, "Import wrote files but round-trip load failed for '%.*s'\n", metaPath.count, metaPath.data );
+            return 1;
+        }
+
+        return 0;
+    }
+
 } // namespace
 
 int main( int argc, char ** argv ) {
+    if( argc >= 2 && strcmp( argv[1], "--import" ) == 0 ) {
+        // No QApplication, no Vulkan instance - importing is headless.
+        return RunImportCommand( argc, argv );
+    }
+
     QApplication app( argc, argv );
 
     sol::Renderer renderer = {};

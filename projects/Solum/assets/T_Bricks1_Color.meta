@@ -1,0 +1,9 @@
+# Solum texture asset
+version = 1
+type = texture
+source = C:/Projects/Assets/Textures/Yoge-Vol94-Bricks/Bricks1Textures/T_Bricks1_Color.png
+binary = T_Bricks1_Color.stex
+format = srgb
+filter = linear
+wrap = repeat
+mips = false

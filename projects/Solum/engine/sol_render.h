@@ -1,4 +1,5 @@
 #pragma once
+#include "sol_asset.h"
 #include "sol_defines.h"
 #include "sol_list.h"
 #include "sol_math.h"
@@ -11,6 +12,22 @@ namespace sol {
         Vec3    position;
         Vec3    normal;
         Vec3    color;
+        Vec2    uv;
+    };
+
+    // A GPU-resident, sampleable image plus the sampler that reads it. One of
+    // these per loaded texture; the descriptor set is baked in at creation time
+    // since nothing here ever changes which image a set points at.
+    struct RenderTexture {
+        VkImage             image;
+        VkDeviceMemory      memory;
+        VkImageView         view;
+        VkSampler           sampler;
+        i32                 width;
+        i32                 height;
+        // Set 0, binding 0 of staticMeshPipelineLayout, already pointed at
+        // view/sampler above. Allocated from Renderer::descriptorPool.
+        VkDescriptorSet     descriptorSet;
     };
 
     // One indexed draw out of device-local memory. Every mesh the renderer draws
@@ -25,6 +42,10 @@ namespace sol {
         // Model to world. The renderer premultiplies the camera onto this before
         // pushing it to the vertex shader.
         Mat4            transform;
+        // Every mesh must bind something here - Vulkan requires the combined
+        // image sampler at set 0 binding 0 to be populated. Meshes that do not
+        // care about a texture get the renderer's white 1x1 fallback.
+        VkDescriptorSet textureSet;
     };
 
     struct RenderMaterial {
@@ -74,6 +95,14 @@ namespace sol {
         VkRenderPass                renderPass;
         VkCommandPool               commandPool;
 
+        // Set 0 of staticMeshPipelineLayout: one combined image sampler, bound
+        // per mesh before its draw call.
+        VkDescriptorSetLayout       textureSetLayout;
+        VkDescriptorPool            descriptorPool;
+        // 1x1 opaque white, so a mesh with no real texture still satisfies the
+        // descriptor requirement and renders as if unlit by any texture at all.
+        RenderTexture               whiteTexture;
+
         // Viewport and scissor are dynamic, so a resize never rebuilds this.
         VkPipelineLayout            staticMeshPipelineLayout;
         VkPipeline                  staticMeshPipeline;
@@ -112,7 +141,9 @@ namespace sol {
 
     // Uploads through a staging buffer, so the mesh lands in device-local memory.
     // Blocks until the copy is done - fine for load-time geometry, not for streaming.
-    bool RenderStaticMeshCreate( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount, const u32 * indices, i32 indexCount, RenderStaticMesh * outMesh );
+    // texture may be null, in which case the mesh binds the renderer's white
+    // fallback so its descriptor is still valid.
+    bool RenderStaticMeshCreate( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount, const u32 * indices, i32 indexCount, const RenderTexture * texture, RenderStaticMesh * outMesh );
     void RenderStaticMeshDestroy( Renderer * r, RenderStaticMesh * mesh );
 
     // Hands the mesh to the renderer, which draws it every frame and owns it from
@@ -122,5 +153,15 @@ namespace sol {
     // Placeholder geometry so there is something on screen. Delete once real
     // meshes are being loaded.
     bool RendererAddDebugTriangle( Renderer * r );
+
+    // A two-triangle quad in the XY plane, facing +z, uvs spanning 0..1 across
+    // it, vertex colour white so the sampled texel comes through unmodified.
+    bool RendererAddTexturedPlane( Renderer * r, RenderTexture * texture, Vec3 center, f32 size );
+
+    // Uploads asset.pixels through a staging buffer into a sampled, shader-read-
+    // only-optimal image, and bakes a descriptor set pointing at it. Blocks
+    // until the upload completes, same as RenderStaticMeshCreate.
+    bool RenderTextureCreate( Renderer * r, const TextureAsset & asset, RenderTexture * outTexture );
+    void RenderTextureDestroy( Renderer * r, RenderTexture * texture );
 
 } // namespace sol
