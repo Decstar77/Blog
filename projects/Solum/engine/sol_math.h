@@ -39,6 +39,7 @@ namespace sol {
     Vec3    Vec3Normalize( Vec3 v );
 
     Mat4    Mat4Identity();
+    Mat4    Mat4Translate( Vec3 translation );
 
     // World to view. Right-handed: the camera looks down its own -z.
     Mat4    Mat4LookAt( Vec3 eye, Vec3 target, Vec3 up );

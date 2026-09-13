@@ -10,8 +10,20 @@ layout( location = 0 ) out vec4 outColor;
 // the renderer's white 1x1 fallback so this sample is always valid.
 layout( set = 0, binding = 0 ) uniform sampler2D texSampler;
 
+// A fixed key light, until there are real lights in the world. Without it a
+// solid-coloured box renders as one flat silhouette with no visible edges,
+// which makes modelling in the viewport impossible to judge.
+const vec3 kLightDirection = normalize( vec3( 0.4, 0.8, 0.35 ) );
+const float kAmbient = 0.35;
+
 void main() {
-    // Normals ride through unused until there is a light to shade against.
     vec4 texel = texture( texSampler, fragUv );
-    outColor = vec4( fragColor, 1.0 ) * texel;
+
+    // Faces pointing away from the light keep the ambient term rather than
+    // going black, so geometry in shadow is still readable.
+    vec3 normal = normalize( fragNormal );
+    float diffuse = max( dot( normal, kLightDirection ), 0.0 );
+    float lighting = kAmbient + ( 1.0 - kAmbient ) * diffuse;
+
+    outColor = vec4( fragColor * lighting, 1.0 ) * texel;
 }

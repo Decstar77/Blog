@@ -2,6 +2,7 @@
 
 #include "sol_camera.h"
 #include "sol_render.h"
+#include "sol_world.h"
 
 #include <QElapsedTimer>
 #include <QPoint>
@@ -58,6 +59,9 @@ namespace sol {
         void EndDrag();
 
         Renderer *          renderer;
+        // The authored scene. Owns the half-meshes; the renderer owns the
+        // triangles built from them.
+        World               world;
         bool                started;
         bool                startFailed;
 

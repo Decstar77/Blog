@@ -49,9 +49,18 @@ namespace sol {
         VkDescriptorSet textureSet;
     };
 
+    // What a surface is made of, as far as the one pipeline currently cares:
+    // a tint multiplied into every vertex, and the texture it samples.
     struct RenderMaterial {
-
+        Vec3                    albedo;
+        // Null falls back to the renderer's white 1x1, so the tint comes
+        // through unmodified.
+        const RenderTexture *   texture;
     };
+
+    // Zeroing a RenderMaterial would give it a black albedo, so anything that
+    // wants a sane default has to start here rather than at {}.
+    RenderMaterial RenderMaterialDefault();
 
     // One rectangle of the surface, drawn with its own camera. The whole scene
     // is walked once per view, so a 3D pane and a top-down pane are two views

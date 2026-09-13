@@ -1548,6 +1548,13 @@ namespace sol {
         RendererSetViews( r, &view, 1 );
     }
 
+    RenderMaterial RenderMaterialDefault() {
+        RenderMaterial material = {};
+        material.albedo = Vec3{ 1.0f, 1.0f, 1.0f };
+        material.texture = nullptr;
+        return material;
+    }
+
     void RendererSetGridVisible( Renderer * r, bool visible ) {
         r->gridVisible = visible;
     }

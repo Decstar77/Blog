@@ -53,6 +53,15 @@ namespace sol {
         return r;
     }
 
+    Mat4 Mat4Translate( Vec3 translation ) {
+        // Row-major, so the translation is the last column.
+        Mat4 r = Mat4Identity();
+        r.m[0][3] = translation.x;
+        r.m[1][3] = translation.y;
+        r.m[2][3] = translation.z;
+        return r;
+    }
+
     Mat4 Mat4LookAt( Vec3 eye, Vec3 target, Vec3 up ) {
         const Vec3 f = Vec3Normalize( target - eye );
         const Vec3 s = Vec3Normalize( Vec3Cross( f, up ) );

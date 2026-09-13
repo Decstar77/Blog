@@ -17,7 +17,7 @@ namespace sol {
     constexpr f32 kSplitFraction = 0.5f;
 
     VulkanView::VulkanView( Renderer * renderer )
-        : renderer( renderer ), started( false ), startFailed( false ),
+        : renderer( renderer ), world(), started( false ), startFailed( false ),
           camera( FlyCameraDefault() ), topCamera( OrthoCameraDefault( OrthoAxis_Top ) ),
           input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
           dragAnchor(), frameTimer() {
@@ -25,6 +25,10 @@ namespace sol {
     }
 
     VulkanView::~VulkanView() {
+        // Authoring data first: it is plain heap memory, and the GPU meshes it
+        // was built into belong to the renderer being shut down below.
+        WorldFree( world );
+
         // Runs before the QWindow base destructor, so Qt's surface is still
         // alive while the swapchain that references it is torn down.
         RendererShutdownDevice( renderer );
@@ -59,7 +63,7 @@ namespace sol {
             return false;
         }
 
-        RendererAddDebugTriangle( renderer );
+        WorldCreateDefaultLevel( world, renderer );
 
         started = true;
         return true;
