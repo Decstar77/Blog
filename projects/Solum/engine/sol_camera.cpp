@@ -115,6 +115,29 @@ namespace sol {
         }
     }
 
+    Vec3 OrthoCameraScreenToWorld( const OrthoCamera & camera, f32 pixelX, f32 pixelY,
+                                   i32 pixelWidth, i32 pixelHeight ) {
+        Vec3 forward = {};
+        Vec3 up = {};
+        OrthoAxisBasis( camera.axis, &forward, &up );
+        const Vec3 right = Vec3Normalize( Vec3Cross( forward, up ) );
+
+        if( pixelHeight <= 0 ) {
+            return camera.center;
+        }
+
+        // Same world-units-per-pixel the pan uses, so a drag and a click agree
+        // about where the cursor is.
+        const f32 scale = ( 2.0f * camera.halfHeight ) / (f32)pixelHeight;
+        const f32 offsetX = pixelX - 0.5f * (f32)pixelWidth;
+        const f32 offsetY = pixelY - 0.5f * (f32)pixelHeight;
+
+        // Screen y grows downward and the up vector does not, hence the minus.
+        Vec3 world = camera.center + right * ( offsetX * scale );
+        world = world - up * ( offsetY * scale );
+        return world;
+    }
+
     Mat4 OrthoCameraViewProjection( const OrthoCamera & camera, i32 width, i32 height ) {
         Vec3 forward = {};
         Vec3 up = {};

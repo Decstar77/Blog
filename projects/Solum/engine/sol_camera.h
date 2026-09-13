@@ -57,4 +57,11 @@ namespace sol {
     void        OrthoCameraUpdate( OrthoCamera * camera, const OrthoCameraInput & input, i32 pixelHeight );
     Mat4        OrthoCameraViewProjection( const OrthoCamera & camera, i32 width, i32 height );
 
+    // Where a point in the pane sits in the world, on the plane the camera
+    // looks at. Pixels are measured from the pane's top left corner. Whatever
+    // unit the caller measures the pane in, the mouse position has to be in the
+    // same one - the conversion is a ratio between the two.
+    Vec3        OrthoCameraScreenToWorld( const OrthoCamera & camera, f32 pixelX, f32 pixelY,
+                                          i32 pixelWidth, i32 pixelHeight );
+
 } // namespace sol

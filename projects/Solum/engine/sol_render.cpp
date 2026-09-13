@@ -1193,11 +1193,11 @@ namespace sol {
         return ok;
     }
 
-    // How far the grid reaches from the origin, and how far apart its lines
-    // are. Fixed for now: an editor grid that subdivides as the orthographic
-    // camera zooms out is a separate piece of work.
-    constexpr f32 kGridExtent = 50.0f;
-    constexpr f32 kGridSpacing = 1.0f;
+    // Lines either side of the origin per axis. Held constant while the spacing
+    // changes, so the grid covers more ground as it coarsens rather than piling
+    // up more lines than the screen can resolve.
+    constexpr i32 kGridHalfLines = 50;
+    constexpr f32 kGridDefaultSpacing = 1.0f;
     // Every tenth line is brighter, the way a ruled sheet marks its decades.
     constexpr i32 kGridMajorEvery = 10;
 
@@ -1215,17 +1215,18 @@ namespace sol {
         ListAdd( vertices, vertex );
     }
 
-    static bool CreateGrid( Renderer * r ) {
+    static bool CreateGrid( Renderer * r, f32 spacing ) {
         const Vec3 minorColor = { 0.28f, 0.28f, 0.32f };
         const Vec3 majorColor = { 0.42f, 0.42f, 0.48f };
         const Vec3 axisXColor = { 0.75f, 0.25f, 0.30f };
         const Vec3 axisZColor = { 0.25f, 0.45f, 0.80f };
 
         List<StaticMeshVertex> vertices = {};
-        const i32 lineCount = (i32)( kGridExtent / kGridSpacing );
+        const i32 lineCount = kGridHalfLines;
+        const f32 kGridExtent = (f32)kGridHalfLines * spacing;
 
         for( i32 i = -lineCount; i <= lineCount; i++ ) {
-            const f32 offset = (f32)i * kGridSpacing;
+            const f32 offset = (f32)i * spacing;
             const bool major = ( i % kGridMajorEvery ) == 0;
 
             // Running along z, stepped across x. The one at x = 0 is the z axis.
@@ -1247,6 +1248,7 @@ namespace sol {
         if( ok ) {
             r->gridVertexCount = vertices.count;
             r->gridVisible = true;
+            r->gridSpacing = spacing;
         } else {
             fprintf( stderr, "Failed to build the grid\n" );
         }
@@ -1531,7 +1533,7 @@ namespace sol {
                // Needs the command pool and descriptor pool above.
                CreateWhiteTexture( r ) &&
                // Needs the white texture, which its descriptor set binds.
-               CreateGrid( r );
+               CreateGrid( r, kGridDefaultSpacing );
     }
 
     void RendererSetSize( Renderer * r, i32 width, i32 height ) {
@@ -1557,6 +1559,24 @@ namespace sol {
 
     void RendererSetGridVisible( Renderer * r, bool visible ) {
         r->gridVisible = visible;
+    }
+
+    bool RendererSetGridSpacing( Renderer * r, f32 spacing ) {
+        if( spacing <= 0.0f || spacing == r->gridSpacing ) {
+            return true;
+        }
+
+        // The buffer being replaced may still be referenced by a frame the GPU
+        // has not finished with.
+        vkDeviceWaitIdle( r->device );
+        if( r->gridVertexBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->gridVertexBuffer, r->gridVertexAllocation );
+            r->gridVertexBuffer = VK_NULL_HANDLE;
+            r->gridVertexAllocation = VK_NULL_HANDLE;
+            r->gridVertexCount = 0;
+        }
+
+        return CreateGrid( r, spacing );
     }
 
     void RendererSetViews( Renderer * r, const RenderView * views, i32 count ) {

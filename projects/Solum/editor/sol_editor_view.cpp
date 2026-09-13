@@ -16,10 +16,17 @@ namespace sol {
     // takes the rest.
     constexpr f32 kSplitFraction = 0.5f;
 
+    // Selectable grid sizes, smallest first, bound to the 1-6 keys. The snap
+    // step follows whichever is current, so the grid is not decoration - it is
+    // the thing geometry lands on.
+    constexpr f32 kGridSteps[] = { 0.125f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };
+    constexpr i32 kGridStepCount = (i32)( sizeof( kGridSteps ) / sizeof( kGridSteps[0] ) );
+
     VulkanView::VulkanView( Renderer * renderer )
         : renderer( renderer ), world(), started( false ), startFailed( false ),
           camera( FlyCameraDefault() ), topCamera( OrthoCameraDefault( OrthoAxis_Top ) ),
           input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
+          createPrimitive( kNoPrimitive ), createStart(),
           dragAnchor(), frameTimer() {
         setSurfaceType( QSurface::VulkanSurface );
     }
@@ -91,7 +98,10 @@ namespace sol {
         const i32 rightWidth = surfaceWidth - leftWidth;
 
         FlyCameraUpdate( &camera, input, dt );
-        OrthoCameraUpdate( &topCamera, topInput, surfaceHeight );
+        // Logical height, not the pixel one: the pan deltas come from Qt cursor
+        // positions, which are logical too, and mixing the two would scale
+        // panning by the display's device pixel ratio.
+        OrthoCameraUpdate( &topCamera, topInput, height() );
 
         // Deltas are per-frame: whatever the mouse did before this update has
         // been applied, so the next frame starts from zero.
@@ -165,11 +175,79 @@ namespace sol {
         QCursor::setPos( dragAnchor );
     }
 
+    Vec3 VulkanView::OrthoWorldAt( QPoint position ) const {
+        const i32 splitX = (i32)( width() * kSplitFraction );
+        const i32 paneWidth = width() - splitX;
+        return OrthoCameraScreenToWorld( topCamera, (f32)( position.x() - splitX ),
+                                         (f32)position.y(), paneWidth, height() );
+    }
+
+    void VulkanView::BeginCreate( QPoint position ) {
+        if( createPrimitive != kNoPrimitive || !started ) {
+            return;
+        }
+
+        const f32 step = renderer->gridSpacing;
+        createStart = Vec3SnapTo( OrthoWorldAt( position ), step );
+
+        // A unit quad centred on its own origin, so the transform alone can
+        // place and size it. The mesh never has to be rebuilt while dragging.
+        HalfMesh quad = {};
+        HalfMeshCreateQuad( quad, 1.0f );
+
+        RenderMaterial material = RenderMaterialDefault();
+        material.albedo = Vec3{ 0.45f, 0.62f, 0.50f };
+
+        createPrimitive = WorldAddPrimitive( world, renderer, quad, material, Mat4Identity() );
+        HalfMeshFree( quad );
+
+        if( createPrimitive == kNoPrimitive ) {
+            fprintf( stderr, "Failed to create a plane\n" );
+            return;
+        }
+
+        UpdateCreate( position );
+    }
+
+    void VulkanView::UpdateCreate( QPoint position ) {
+        if( createPrimitive == kNoPrimitive ) {
+            return;
+        }
+
+        const f32 step = renderer->gridSpacing;
+        const Vec3 corner = Vec3SnapTo( OrthoWorldAt( position ), step );
+
+        f32 minX = Min( createStart.x, corner.x );
+        f32 maxX = Max( createStart.x, corner.x );
+        f32 minZ = Min( createStart.z, corner.z );
+        f32 maxZ = Max( createStart.z, corner.z );
+
+        // A press that never moves still has to produce something visible, so
+        // the smallest plane is one cell rather than nothing.
+        if( maxX - minX < step ) { maxX = minX + step; }
+        if( maxZ - minZ < step ) { maxZ = minZ + step; }
+
+        const Vec3 center = { 0.5f * ( minX + maxX ), 0.0f, 0.5f * ( minZ + maxZ ) };
+        const Vec3 scale = { maxX - minX, 1.0f, maxZ - minZ };
+
+        WorldSetPrimitiveTransform( world, renderer, createPrimitive,
+                                    Mat4Translate( center ) * Mat4Scale( scale ) );
+    }
+
+    void VulkanView::EndCreate() {
+        createPrimitive = kNoPrimitive;
+    }
+
     void VulkanView::keyPressEvent( QKeyEvent * event ) {
         // Auto-repeat would otherwise deliver a release/press pair per repeat,
         // which reads as the key stuttering rather than being held.
         if( !event->isAutoRepeat() ) {
             SetMovementKey( event->key(), true );
+
+            const i32 step = event->key() - Qt::Key_1;
+            if( step >= 0 && step < kGridStepCount && started ) {
+                RendererSetGridSpacing( renderer, kGridSteps[step] );
+            }
         }
         QWindow::keyPressEvent( event );
     }
@@ -182,11 +260,15 @@ namespace sol {
     }
 
     void VulkanView::mousePressEvent( QMouseEvent * event ) {
+        // Keys only reach a QWindow that holds focus, and clicking the
+        // viewport is how the user expects to hand it over.
+        requestActivate();
+
+        const QPoint position = event->position().toPoint();
         if( event->button() == Qt::RightButton ) {
-            // Keys only reach a QWindow that holds focus, and clicking the
-            // viewport is how the user expects to hand it over.
-            requestActivate();
-            BeginDrag( PaneAt( event->position().toPoint() ) );
+            BeginDrag( PaneAt( position ) );
+        } else if( event->button() == Qt::LeftButton && PaneAt( position ) == Pane_Top ) {
+            BeginCreate( position );
         }
         QWindow::mousePressEvent( event );
     }
@@ -194,11 +276,19 @@ namespace sol {
     void VulkanView::mouseReleaseEvent( QMouseEvent * event ) {
         if( event->button() == Qt::RightButton ) {
             EndDrag();
+        } else if( event->button() == Qt::LeftButton ) {
+            EndCreate();
         }
         QWindow::mouseReleaseEvent( event );
     }
 
     void VulkanView::mouseMoveEvent( QMouseEvent * event ) {
+        // Creating reads the real cursor position, so unlike the camera drags
+        // it must not warp the pointer back to an anchor.
+        if( createPrimitive != kNoPrimitive ) {
+            UpdateCreate( event->position().toPoint() );
+        }
+
         if( dragging ) {
             const QPoint global = event->globalPosition().toPoint();
             const QPoint delta = global - dragAnchor;
@@ -232,6 +322,7 @@ namespace sol {
         // Releases arrive at whoever has focus, so a key or button still down
         // when focus leaves would otherwise stick on forever.
         EndDrag();
+        EndCreate();
         input = {};
         topInput = {};
         QWindow::focusOutEvent( event );

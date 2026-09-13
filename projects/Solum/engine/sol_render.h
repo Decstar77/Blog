@@ -146,6 +146,10 @@ namespace sol {
         VmaAllocation               gridVertexAllocation;
         i32                         gridVertexCount;
         bool                        gridVisible;
+        // World units between lines. The grid keeps a constant line count and
+        // grows its extent with this, so it stays useful at every zoom instead
+        // of turning to mush when the spacing drops.
+        f32                         gridSpacing;
         // Drawn in order every frame. The renderer owns these and frees them on
         // shutdown.
         List<RenderStaticMesh>      staticMeshes;
@@ -189,6 +193,10 @@ namespace sol {
     // The grid is built at startup and shown by default; this hides it in every
     // view at once.
     void RendererSetGridVisible( Renderer * r, bool visible );
+
+    // Rebuilds the grid at a new spacing. Idles the device first, so it is a
+    // stall - fine for a key press, not for something driven per frame.
+    bool RendererSetGridSpacing( Renderer * r, f32 spacing );
 
     void RendererDrawFrame( Renderer * r );
 

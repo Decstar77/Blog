@@ -106,8 +106,9 @@ int main( int argc, char ** argv ) {
         mainWindow.statusBar()->showMessage(
             QStringLiteral( "Left pane: perspective. WASD to move, right-drag to look, "
                             "Space/Ctrl for up and down, Shift to sprint.    "
-                            "Right pane: top-down orthographic. "
-                            "Right-drag to pan, wheel to zoom." ) );
+                            "Right pane: top-down. Left-drag to place a plane, "
+                            "right-drag to pan, wheel to zoom.    "
+                            "Keys 1-6 set the grid size." ) );
         mainWindow.showMaximized();
 
         exitCode = app.exec();

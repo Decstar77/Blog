@@ -62,6 +62,25 @@ namespace sol {
         return r;
     }
 
+    Mat4 Mat4Scale( Vec3 scale ) {
+        Mat4 r = Mat4Identity();
+        r.m[0][0] = scale.x;
+        r.m[1][1] = scale.y;
+        r.m[2][2] = scale.z;
+        return r;
+    }
+
+    f32 SnapTo( f32 value, f32 step ) {
+        if( step <= 0.0f ) {
+            return value;
+        }
+        return roundf( value / step ) * step;
+    }
+
+    Vec3 Vec3SnapTo( Vec3 value, f32 step ) {
+        return Vec3{ SnapTo( value.x, step ), SnapTo( value.y, step ), SnapTo( value.z, step ) };
+    }
+
     Mat4 Mat4LookAt( Vec3 eye, Vec3 target, Vec3 up ) {
         const Vec3 f = Vec3Normalize( target - eye );
         const Vec3 s = Vec3Normalize( Vec3Cross( f, up ) );

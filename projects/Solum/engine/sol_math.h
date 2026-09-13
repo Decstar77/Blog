@@ -40,6 +40,12 @@ namespace sol {
 
     Mat4    Mat4Identity();
     Mat4    Mat4Translate( Vec3 translation );
+    Mat4    Mat4Scale( Vec3 scale );
+
+    // Nearest multiple of step. step <= 0 passes the value straight through, so
+    // callers do not have to guard a disabled snap.
+    f32     SnapTo( f32 value, f32 step );
+    Vec3    Vec3SnapTo( Vec3 value, f32 step );
 
     // World to view. Right-handed: the camera looks down its own -z.
     Mat4    Mat4LookAt( Vec3 eye, Vec3 target, Vec3 up );

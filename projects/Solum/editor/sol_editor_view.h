@@ -58,6 +58,17 @@ namespace sol {
         void BeginDrag( Pane pane );
         void EndDrag();
 
+        // Where a point in the window sits on the top-down camera's plane.
+        // Everything here is in Qt's logical units, mouse position included.
+        Vec3 OrthoWorldAt( QPoint position ) const;
+
+        // Left-dragging in the top-down pane pulls out a plane. It is created
+        // on press as a unit quad and resized purely through its transform, so
+        // dragging costs a matrix rather than a mesh rebuild.
+        void BeginCreate( QPoint position );
+        void UpdateCreate( QPoint position );
+        void EndCreate();
+
         Renderer *          renderer;
         // The authored scene. Owns the half-meshes; the renderer owns the
         // triangles built from them.
@@ -74,6 +85,11 @@ namespace sol {
 
         bool                dragging;
         Pane                dragPane;
+
+        // The plane being pulled out right now, and the snapped corner the drag
+        // started from. kNoPrimitive when nothing is being created.
+        i32                 createPrimitive;
+        Vec3                createStart;
         // Screen position the cursor is warped back to while dragging, which is
         // how an unbounded drag is emulated without GLFW's disabled-cursor mode.
         QPoint              dragAnchor;
