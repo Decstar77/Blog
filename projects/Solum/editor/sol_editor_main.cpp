@@ -6,10 +6,8 @@
 #include "sol_render.h"
 
 #include <QApplication>
-#include <QLabel>
 #include <QMainWindow>
 #include <QStatusBar>
-#include <QVBoxLayout>
 #include <QVulkanInstance>
 #include <QWidget>
 
@@ -102,24 +100,15 @@ int main( int argc, char ** argv ) {
         viewport->setMinimumSize( 640, 360 );
         viewport->setFocusPolicy( Qt::StrongFocus );
 
-        QLabel * caption = new QLabel(
+        // The viewport is the whole window. The controls live in the status bar
+        // rather than a caption strip taking a row off the top of the render.
+        mainWindow.setCentralWidget( viewport );
+        mainWindow.statusBar()->showMessage(
             QStringLiteral( "Left pane: perspective. WASD to move, right-drag to look, "
                             "Space/Ctrl for up and down, Shift to sprint.    "
                             "Right pane: top-down orthographic. "
                             "Right-drag to pan, wheel to zoom." ) );
-        caption->setMargin( 8 );
-
-        QWidget * central = new QWidget;
-        QVBoxLayout * layout = new QVBoxLayout( central );
-        layout->setContentsMargins( 0, 0, 0, 0 );
-        layout->setSpacing( 0 );
-        layout->addWidget( caption );
-        layout->addWidget( viewport, 1 );
-
-        mainWindow.setCentralWidget( central );
-        mainWindow.statusBar()->showMessage( QStringLiteral( "Vulkan viewport" ) );
-        mainWindow.resize( 1280, 800 );
-        mainWindow.show();
+        mainWindow.showMaximized();
 
         exitCode = app.exec();
     }
