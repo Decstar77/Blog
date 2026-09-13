@@ -103,9 +103,10 @@ int main( int argc, char ** argv ) {
         viewport->setFocusPolicy( Qt::StrongFocus );
 
         QLabel * caption = new QLabel(
-            QStringLiteral( "Viewport below is the engine's Vulkan renderer. "
-                            "Right-drag to look, WASD to move, "
-                            "Space/Ctrl for up and down, Shift to sprint." ) );
+            QStringLiteral( "Left pane: perspective. WASD to move, right-drag to look, "
+                            "Space/Ctrl for up and down, Shift to sprint.    "
+                            "Right pane: top-down orthographic. "
+                            "Right-drag to pan, wheel to zoom." ) );
         caption->setMargin( 8 );
 
         QWidget * central = new QWidget;

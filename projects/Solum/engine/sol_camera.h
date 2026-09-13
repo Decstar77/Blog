@@ -29,9 +29,32 @@ namespace sol {
     };
 
     FlyCamera   FlyCameraDefault();
-
     Vec3        FlyCameraForward( const FlyCamera & camera );
     void        FlyCameraUpdate( FlyCamera * camera, const FlyCameraInput & input, f32 dt );
     Mat4        FlyCameraViewProjection( const FlyCamera & camera, i32 width, i32 height );
+
+    enum OrthoAxis {
+        OrthoAxis_Top,      // down -y, +x right and -z up on screen
+        OrthoAxis_Front,    // down -z, +x right and +y up
+        OrthoAxis_Side,     // down -x, +z right and +y up
+    };
+
+    struct OrthoCamera {
+        OrthoAxis   axis;
+        Vec3        center;
+        f32         halfHeight;
+        f32         zoomSpeed;
+    };
+
+    struct OrthoCameraInput {
+        bool    panning;
+        f32     panDeltaX;      // pixels of drag since the last update
+        f32     panDeltaY;
+        f32     zoomTicks;      // wheel notches, positive zooms in
+    };
+
+    OrthoCamera OrthoCameraDefault( OrthoAxis axis );
+    void        OrthoCameraUpdate( OrthoCamera * camera, const OrthoCameraInput & input, i32 pixelHeight );
+    Mat4        OrthoCameraViewProjection( const OrthoCamera & camera, i32 width, i32 height );
 
 } // namespace sol

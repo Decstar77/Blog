@@ -80,6 +80,19 @@ namespace sol {
         return r;
     }
 
+    Mat4 Mat4Orthographic( f32 halfWidth, f32 halfHeight, f32 nearZ, f32 farZ ) {
+        Mat4 r = {};
+        r.m[0][0] = 1.0f / halfWidth;
+        r.m[1][1] = 1.0f / halfHeight;
+        // Solved against the same depth mapping Mat4Perspective uses: a view
+        // space z of -nearZ has to come out 0 and -farZ has to come out 1.
+        // There is no perspective divide here, so w stays 1.
+        r.m[2][2] = 1.0f / ( nearZ - farZ );
+        r.m[2][3] = nearZ / ( nearZ - farZ );
+        r.m[3][3] = 1.0f;
+        return r;
+    }
+
     Mat4 operator*( const Mat4 & a, const Mat4 & b ) {
         Mat4 r = {};
         for( i32 row = 0; row < 4; row++ ) {

@@ -821,6 +821,18 @@ namespace sol {
 
             ok = vkCreateGraphicsPipelines( r->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                             &r->staticMeshPipeline ) == VK_SUCCESS;
+
+            // The grid shares everything above and differs by exactly two
+            // pieces of state, so it is a second pipeline off the same info
+            // rather than a second shader pair. Depth writes are off so the
+            // grid never occludes the geometry standing on it; the test stays
+            // on so geometry in front still hides it.
+            if( ok ) {
+                inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+                depthStencil.depthWriteEnable = VK_FALSE;
+                ok = vkCreateGraphicsPipelines( r->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                                &r->gridPipeline ) == VK_SUCCESS;
+            }
         }
 
         // The modules are baked into the pipeline, so they go straight back.
@@ -1181,6 +1193,68 @@ namespace sol {
         return ok;
     }
 
+    // How far the grid reaches from the origin, and how far apart its lines
+    // are. Fixed for now: an editor grid that subdivides as the orthographic
+    // camera zooms out is a separate piece of work.
+    constexpr f32 kGridExtent = 50.0f;
+    constexpr f32 kGridSpacing = 1.0f;
+    // Every tenth line is brighter, the way a ruled sheet marks its decades.
+    constexpr i32 kGridMajorEvery = 10;
+
+    static void GridPushLine( List<StaticMeshVertex> & vertices, Vec3 a, Vec3 b, Vec3 color ) {
+        StaticMeshVertex vertex = {};
+        vertex.normal = Vec3{ 0.0f, 1.0f, 0.0f };
+        vertex.color = color;
+        // Sampled against the white 1x1 fallback, so any uv gives the same
+        // texel and the vertex colour comes through unmodified.
+        vertex.uv = Vec2{ 0.0f, 0.0f };
+
+        vertex.position = a;
+        ListAdd( vertices, vertex );
+        vertex.position = b;
+        ListAdd( vertices, vertex );
+    }
+
+    static bool CreateGrid( Renderer * r ) {
+        const Vec3 minorColor = { 0.28f, 0.28f, 0.32f };
+        const Vec3 majorColor = { 0.42f, 0.42f, 0.48f };
+        const Vec3 axisXColor = { 0.75f, 0.25f, 0.30f };
+        const Vec3 axisZColor = { 0.25f, 0.45f, 0.80f };
+
+        List<StaticMeshVertex> vertices = {};
+        const i32 lineCount = (i32)( kGridExtent / kGridSpacing );
+
+        for( i32 i = -lineCount; i <= lineCount; i++ ) {
+            const f32 offset = (f32)i * kGridSpacing;
+            const bool major = ( i % kGridMajorEvery ) == 0;
+
+            // Running along z, stepped across x. The one at x = 0 is the z axis.
+            const Vec3 zColor = i == 0 ? axisZColor : ( major ? majorColor : minorColor );
+            GridPushLine( vertices, Vec3{ offset, 0.0f, -kGridExtent },
+                          Vec3{ offset, 0.0f, kGridExtent }, zColor );
+
+            // Running along x, stepped across z. The one at z = 0 is the x axis.
+            const Vec3 xColor = i == 0 ? axisXColor : ( major ? majorColor : minorColor );
+            GridPushLine( vertices, Vec3{ -kGridExtent, 0.0f, offset },
+                          Vec3{ kGridExtent, 0.0f, offset }, xColor );
+        }
+
+        const u64 byteCount = (u64)vertices.count * sizeof( StaticMeshVertex );
+        bool ok = CreateBuffer( r, byteCount,
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+                                &r->gridVertexBuffer, &r->gridVertexAllocation, nullptr );
+        ok = ok && UploadBuffer( r, r->gridVertexBuffer, vertices.data, byteCount );
+        if( ok ) {
+            r->gridVertexCount = vertices.count;
+            r->gridVisible = true;
+        } else {
+            fprintf( stderr, "Failed to build the grid\n" );
+        }
+
+        ListFree( vertices );
+        return ok;
+    }
+
     bool RenderStaticMeshCreate( Renderer * r,
                                  const StaticMeshVertex * vertices, i32 vertexCount,
                                  const u32 * indices, i32 indexCount,
@@ -1332,37 +1406,86 @@ namespace sol {
 
         vkCmdBeginRenderPass( cmd, &passInfo, VK_SUBPASS_CONTENTS_INLINE );
 
-        // Negative height flips clip space so +y is up, matching the camera
-        // convention in sol_math.h. Core since Vulkan 1.1.
-        VkViewport viewport = {};
-        viewport.x = 0.0f;
-        viewport.y = (f32)r->swapchainExtent.height;
-        viewport.width = (f32)r->swapchainExtent.width;
-        viewport.height = -(f32)r->swapchainExtent.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport( cmd, 0, 1, &viewport );
+        const f32 surfaceWidth = (f32)r->swapchainExtent.width;
+        const f32 surfaceHeight = (f32)r->swapchainExtent.height;
 
-        VkRect2D scissor = {};
-        scissor.extent = r->swapchainExtent;
-        vkCmdSetScissor( cmd, 0, 1, &scissor );
+        for( i32 v = 0; v < r->viewCount; v++ ) {
+            const RenderView & view = r->views[v];
 
-        vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipeline );
+            // Rounded out to whole pixels here rather than stored that way, so
+            // a resize does not have to revisit the layout.
+            const f32 rectX = view.x * surfaceWidth;
+            const f32 rectY = view.y * surfaceHeight;
+            const f32 rectWidth = view.width * surfaceWidth;
+            const f32 rectHeight = view.height * surfaceHeight;
 
-        for( i32 i = 0; i < r->staticMeshes.count; i++ ) {
-            const RenderStaticMesh & mesh = r->staticMeshes[i];
+            // A collapsed pane is not a legal viewport, and there is nothing to
+            // see in it anyway.
+            if( rectWidth < 1.0f || rectHeight < 1.0f ) {
+                continue;
+            }
 
-            const Mat4 mvp = r->viewProjection * mesh.transform;
-            vkCmdPushConstants( cmd, r->staticMeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
-                                0, (u32)sizeof( Mat4 ), &mvp );
+            // Negative height flips clip space so +y is up, matching the camera
+            // convention in sol_math.h. Core since Vulkan 1.1. The flip pins the
+            // viewport to the bottom of its rect, hence the + rectHeight.
+            VkViewport viewport = {};
+            viewport.x = rectX;
+            viewport.y = rectY + rectHeight;
+            viewport.width = rectWidth;
+            viewport.height = -rectHeight;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport( cmd, 0, 1, &viewport );
 
-            vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
-                                     0, 1, &mesh.textureSet, 0, nullptr );
+            // Clipped to the surface: a rounded-up rect on the right or bottom
+            // edge would otherwise run a pixel past the attachment.
+            VkRect2D scissor = {};
+            scissor.offset.x = (i32)rectX;
+            scissor.offset.y = (i32)rectY;
+            scissor.extent.width = (u32)rectWidth;
+            scissor.extent.height = (u32)rectHeight;
+            if( scissor.offset.x + (i32)scissor.extent.width > (i32)r->swapchainExtent.width ) {
+                scissor.extent.width = r->swapchainExtent.width - (u32)scissor.offset.x;
+            }
+            if( scissor.offset.y + (i32)scissor.extent.height > (i32)r->swapchainExtent.height ) {
+                scissor.extent.height = r->swapchainExtent.height - (u32)scissor.offset.y;
+            }
+            vkCmdSetScissor( cmd, 0, 1, &scissor );
 
-            VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers( cmd, 0, 1, &mesh.vertexBuffer, &offset );
-            vkCmdBindIndexBuffer( cmd, mesh.indexBuffer, 0, VK_INDEX_TYPE_UINT32 );
-            vkCmdDrawIndexed( cmd, (u32)mesh.indexCount, 1, 0, 0, 0 );
+            // Grid first. It writes no depth, so drawing it before the meshes
+            // is what lets them paint over it rather than the reverse.
+            if( r->gridVisible && r->gridVertexCount > 0 ) {
+                vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->gridPipeline );
+
+                // Already in world space, so the view matrix is the whole mvp -
+                // there is no model transform to premultiply.
+                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                                    0, (u32)sizeof( Mat4 ), &view.viewProjection );
+                vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
+                                         0, 1, &r->whiteTexture.descriptorSet, 0, nullptr );
+
+                VkDeviceSize gridOffset = 0;
+                vkCmdBindVertexBuffers( cmd, 0, 1, &r->gridVertexBuffer, &gridOffset );
+                vkCmdDraw( cmd, (u32)r->gridVertexCount, 1, 0, 0 );
+            }
+
+            vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipeline );
+
+            for( i32 i = 0; i < r->staticMeshes.count; i++ ) {
+                const RenderStaticMesh & mesh = r->staticMeshes[i];
+
+                const Mat4 mvp = view.viewProjection * mesh.transform;
+                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                                    0, (u32)sizeof( Mat4 ), &mvp );
+
+                vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
+                                         0, 1, &mesh.textureSet, 0, nullptr );
+
+                VkDeviceSize offset = 0;
+                vkCmdBindVertexBuffers( cmd, 0, 1, &mesh.vertexBuffer, &offset );
+                vkCmdBindIndexBuffer( cmd, mesh.indexBuffer, 0, VK_INDEX_TYPE_UINT32 );
+                vkCmdDrawIndexed( cmd, (u32)mesh.indexCount, 1, 0, 0, 0 );
+            }
         }
 
         vkCmdEndRenderPass( cmd );
@@ -1388,7 +1511,7 @@ namespace sol {
         r->ownsSurface = ownsSurface;
         r->fallbackWidth = width;
         r->fallbackHeight = height;
-        r->viewProjection = Mat4Identity();
+        RendererSetViewProjection( r, Mat4Identity() );
 
         return PickPhysicalDevice( r ) &&
                CreateLogicalDevice( r ) &&
@@ -1406,7 +1529,9 @@ namespace sol {
                CreateDescriptorPool( r ) &&
                CreateStaticMeshPipeline( r ) &&
                // Needs the command pool and descriptor pool above.
-               CreateWhiteTexture( r );
+               CreateWhiteTexture( r ) &&
+               // Needs the white texture, which its descriptor set binds.
+               CreateGrid( r );
     }
 
     void RendererSetSize( Renderer * r, i32 width, i32 height ) {
@@ -1416,7 +1541,25 @@ namespace sol {
     }
 
     void RendererSetViewProjection( Renderer * r, const Mat4 & viewProjection ) {
-        r->viewProjection = viewProjection;
+        RenderView view = {};
+        view.width = 1.0f;
+        view.height = 1.0f;
+        view.viewProjection = viewProjection;
+        RendererSetViews( r, &view, 1 );
+    }
+
+    void RendererSetGridVisible( Renderer * r, bool visible ) {
+        r->gridVisible = visible;
+    }
+
+    void RendererSetViews( Renderer * r, const RenderView * views, i32 count ) {
+        if( count > kMaxRenderViews ) {
+            count = kMaxRenderViews;
+        }
+        for( i32 i = 0; i < count; i++ ) {
+            r->views[i] = views[i];
+        }
+        r->viewCount = count;
     }
 
     void RendererDrawFrame( Renderer * r ) {
@@ -1542,6 +1685,16 @@ namespace sol {
         // texture's own and still need an explicit teardown.
         RenderTextureDestroy( r, &r->whiteTexture );
 
+        if( r->gridVertexBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->gridVertexBuffer, r->gridVertexAllocation );
+            r->gridVertexBuffer = VK_NULL_HANDLE;
+            r->gridVertexAllocation = VK_NULL_HANDLE;
+            r->gridVertexCount = 0;
+        }
+        if( r->gridPipeline != VK_NULL_HANDLE ) {
+            vkDestroyPipeline( r->device, r->gridPipeline, nullptr );
+            r->gridPipeline = VK_NULL_HANDLE;
+        }
         if( r->staticMeshPipeline != VK_NULL_HANDLE ) {
             vkDestroyPipeline( r->device, r->staticMeshPipeline, nullptr );
             r->staticMeshPipeline = VK_NULL_HANDLE;

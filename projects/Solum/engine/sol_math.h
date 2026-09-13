@@ -48,6 +48,11 @@ namespace sol {
     // already puts +y up. Flipping in both places would cancel out.
     Mat4    Mat4Perspective( f32 fovY, f32 aspect, f32 nearZ, f32 farZ );
 
+    // Same conventions as Mat4Perspective: depth lands in [0, 1] and y is NOT
+    // flipped here. Extents are half-sizes measured from the centre of the
+    // view, so the visible box is 2*halfWidth by 2*halfHeight.
+    Mat4    Mat4Orthographic( f32 halfWidth, f32 halfHeight, f32 nearZ, f32 farZ );
+
     Mat4    operator*( const Mat4 & a, const Mat4 & b );
     Vec4    operator*( const Mat4 & a, Vec4 v );
     Vec3    Mat4MulPoint( const Mat4 & a, Vec3 p );

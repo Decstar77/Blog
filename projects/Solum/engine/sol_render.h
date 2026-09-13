@@ -53,6 +53,23 @@ namespace sol {
 
     };
 
+    // One rectangle of the surface, drawn with its own camera. The whole scene
+    // is walked once per view, so a 3D pane and a top-down pane are two views
+    // over the same mesh list rather than two renderers.
+    struct RenderView {
+        // Fraction of the swapchain, origin top left: { 0, 0, 1, 1 } is the
+        // whole surface. Normalised rather than pixels so a resize needs no
+        // work from whoever laid the views out.
+        f32     x;
+        f32     y;
+        f32     width;
+        f32     height;
+        Mat4    viewProjection;
+    };
+
+    // Four is a full quad-view layout, which is as far as this needs to go.
+    constexpr i32 kMaxRenderViews = 4;
+
     // Two frames in flight: the CPU records frame N+1 while the GPU chews on N.
     constexpr i32 kFramesInFlight = 2;
     // Swapchains on desktop drivers hand back 2-4 images; 8 is slack.
@@ -111,12 +128,22 @@ namespace sol {
         // Viewport and scissor are dynamic, so a resize never rebuilds this.
         VkPipelineLayout            staticMeshPipelineLayout;
         VkPipeline                  staticMeshPipeline;
+        // Same shaders, layout and vertex format as the mesh pipeline, built
+        // with line topology and depth writes off. See CreateStaticMeshPipeline.
+        VkPipeline                  gridPipeline;
+        // World-space grid on the y = 0 plane, drawn in every view before the
+        // meshes. Vertices only: a line list has nothing to index.
+        VkBuffer                    gridVertexBuffer;
+        VmaAllocation               gridVertexAllocation;
+        i32                         gridVertexCount;
+        bool                        gridVisible;
         // Drawn in order every frame. The renderer owns these and frees them on
         // shutdown.
         List<RenderStaticMesh>      staticMeshes;
-        // Whoever owns the camera sets this; the renderer just multiplies by it.
-        // Identity until then, which draws meshes straight in clip space.
-        Mat4                        viewProjection;
+        // Whoever owns the cameras sets these. Startup leaves one full-surface
+        // view at identity, which draws meshes straight in clip space.
+        RenderView                  views[kMaxRenderViews];
+        i32                         viewCount;
 
         VkCommandBuffer             commandBuffers[kFramesInFlight];
         VkSemaphore                 imageAvailable[kFramesInFlight];
@@ -141,7 +168,19 @@ namespace sol {
     void RendererShutdown( Renderer * r );
 
     void RendererSetSize( Renderer * r, i32 width, i32 height );
+
+    // Collapses the renderer to a single view covering the whole surface. The
+    // shorthand for a shell that only ever shows one camera.
     void RendererSetViewProjection( Renderer * r, const Mat4 & viewProjection );
+
+    // Replaces the set of views drawn each frame. Anything past kMaxRenderViews
+    // is dropped.
+    void RendererSetViews( Renderer * r, const RenderView * views, i32 count );
+
+    // The grid is built at startup and shown by default; this hides it in every
+    // view at once.
+    void RendererSetGridVisible( Renderer * r, bool visible );
+
     void RendererDrawFrame( Renderer * r );
 
     // Uploads through a staging buffer, so the mesh lands in device-local memory.

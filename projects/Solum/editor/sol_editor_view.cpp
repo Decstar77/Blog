@@ -6,14 +6,21 @@
 #include <QMouseEvent>
 #include <QResizeEvent>
 #include <QVulkanInstance>
+#include <QWheelEvent>
 
 #include <cstdio>
 
 namespace sol {
 
+    // Fraction of the surface the perspective pane gets; the top-down pane
+    // takes the rest.
+    constexpr f32 kSplitFraction = 0.5f;
+
     VulkanView::VulkanView( Renderer * renderer )
         : renderer( renderer ), started( false ), startFailed( false ),
-          camera( FlyCameraDefault() ), input( {} ), lookAnchor(), frameTimer() {
+          camera( FlyCameraDefault() ), topCamera( OrthoCameraDefault( OrthoAxis_Top ) ),
+          input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
+          dragAnchor(), frameTimer() {
         setSurfaceType( QSurface::VulkanSurface );
     }
 
@@ -58,6 +65,10 @@ namespace sol {
         return true;
     }
 
+    VulkanView::Pane VulkanView::PaneAt( QPoint position ) const {
+        return position.x() < (i32)( width() * kSplitFraction ) ? Pane_Perspective : Pane_Top;
+    }
+
     void VulkanView::Render() {
         if( !isExposed() || !EnsureStarted() ) {
             return;
@@ -69,17 +80,39 @@ namespace sol {
             frameTimer.start();
         }
 
+        const qreal dpr = devicePixelRatio();
+        const i32 surfaceWidth = (i32)( width() * dpr );
+        const i32 surfaceHeight = (i32)( height() * dpr );
+        const i32 leftWidth = (i32)( surfaceWidth * kSplitFraction );
+        const i32 rightWidth = surfaceWidth - leftWidth;
+
         FlyCameraUpdate( &camera, input, dt );
+        OrthoCameraUpdate( &topCamera, topInput, surfaceHeight );
+
         // Deltas are per-frame: whatever the mouse did before this update has
         // been applied, so the next frame starts from zero.
         input.lookDeltaX = 0.0f;
         input.lookDeltaY = 0.0f;
+        topInput.panDeltaX = 0.0f;
+        topInput.panDeltaY = 0.0f;
+        topInput.zoomTicks = 0.0f;
 
-        const qreal dpr = devicePixelRatio();
-        RendererSetViewProjection( renderer,
-                                   FlyCameraViewProjection( camera, (i32)( width() * dpr ),
-                                                            (i32)( height() * dpr ) ) );
+        // Each pane's projection uses its own pixel size, or the halves would
+        // both be stretched by the full surface's aspect.
+        RenderView views[2] = {};
+        views[0].x = 0.0f;
+        views[0].y = 0.0f;
+        views[0].width = kSplitFraction;
+        views[0].height = 1.0f;
+        views[0].viewProjection = FlyCameraViewProjection( camera, leftWidth, surfaceHeight );
 
+        views[1].x = kSplitFraction;
+        views[1].y = 0.0f;
+        views[1].width = 1.0f - kSplitFraction;
+        views[1].height = 1.0f;
+        views[1].viewProjection = OrthoCameraViewProjection( topCamera, rightWidth, surfaceHeight );
+
+        RendererSetViews( renderer, views, 2 );
         RendererDrawFrame( renderer );
 
         // Presenting is FIFO, so this self-scheduling loop paces itself on vsync
@@ -100,21 +133,32 @@ namespace sol {
         }
     }
 
-    void VulkanView::SetLooking( bool looking ) {
-        if( looking == input.looking ) {
+    void VulkanView::BeginDrag( Pane pane ) {
+        if( dragging ) {
             return;
         }
-        input.looking = looking;
+        dragging = true;
+        dragPane = pane;
 
-        if( looking ) {
-            // Anchor where the drag started and hide the pointer, so the cursor
-            // does not wander off the viewport or hit a screen edge mid-turn.
-            lookAnchor = QCursor::pos();
-            setCursor( Qt::BlankCursor );
-        } else {
-            unsetCursor();
-            QCursor::setPos( lookAnchor );
+        // Anchor where the drag started and hide the pointer, so the cursor
+        // does not wander into the other pane or hit a screen edge mid-drag.
+        dragAnchor = QCursor::pos();
+        setCursor( Qt::BlankCursor );
+
+        input.looking = pane == Pane_Perspective;
+        topInput.panning = pane == Pane_Top;
+    }
+
+    void VulkanView::EndDrag() {
+        if( !dragging ) {
+            return;
         }
+        dragging = false;
+        input.looking = false;
+        topInput.panning = false;
+
+        unsetCursor();
+        QCursor::setPos( dragAnchor );
     }
 
     void VulkanView::keyPressEvent( QKeyEvent * event ) {
@@ -138,42 +182,54 @@ namespace sol {
             // Keys only reach a QWindow that holds focus, and clicking the
             // viewport is how the user expects to hand it over.
             requestActivate();
-            SetLooking( true );
+            BeginDrag( PaneAt( event->position().toPoint() ) );
         }
         QWindow::mousePressEvent( event );
     }
 
     void VulkanView::mouseReleaseEvent( QMouseEvent * event ) {
         if( event->button() == Qt::RightButton ) {
-            SetLooking( false );
+            EndDrag();
         }
         QWindow::mouseReleaseEvent( event );
     }
 
     void VulkanView::mouseMoveEvent( QMouseEvent * event ) {
-        if( input.looking ) {
+        if( dragging ) {
             const QPoint global = event->globalPosition().toPoint();
-            const QPoint delta = global - lookAnchor;
+            const QPoint delta = global - dragAnchor;
             // The warp below generates its own move event landing exactly on
             // the anchor; ignoring a zero delta is what stops it recursing.
             if( !delta.isNull() ) {
-                input.lookDeltaX += (f32)delta.x();
-                input.lookDeltaY += (f32)delta.y();
-                QCursor::setPos( lookAnchor );
+                if( dragPane == Pane_Perspective ) {
+                    input.lookDeltaX += (f32)delta.x();
+                    input.lookDeltaY += (f32)delta.y();
+                } else {
+                    topInput.panDeltaX += (f32)delta.x();
+                    topInput.panDeltaY += (f32)delta.y();
+                }
+                QCursor::setPos( dragAnchor );
             }
         }
         QWindow::mouseMoveEvent( event );
     }
 
+    void VulkanView::wheelEvent( QWheelEvent * event ) {
+        // Zoom belongs to the pane under the cursor, and only the orthographic
+        // one has a zoom to speak of.
+        if( PaneAt( event->position().toPoint() ) == Pane_Top ) {
+            // A notch is 120 eighths of a degree by Qt's convention.
+            topInput.zoomTicks += (f32)event->angleDelta().y() / 120.0f;
+        }
+        QWindow::wheelEvent( event );
+    }
+
     void VulkanView::focusOutEvent( QFocusEvent * event ) {
         // Releases arrive at whoever has focus, so a key or button still down
         // when focus leaves would otherwise stick on forever.
-        const bool wasLooking = input.looking;
+        EndDrag();
         input = {};
-        if( wasLooking ) {
-            unsetCursor();
-            QCursor::setPos( lookAnchor );
-        }
+        topInput = {};
         QWindow::focusOutEvent( event );
     }
 

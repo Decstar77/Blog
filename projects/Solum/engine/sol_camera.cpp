@@ -57,6 +57,78 @@ namespace sol {
         }
     }
 
+    // Zoom is clamped so a runaway wheel cannot collapse the view to nothing or
+    // push it out past the depth range.
+    constexpr f32 kMinHalfHeight = 0.05f;
+    constexpr f32 kMaxHalfHeight = 500.0f;
+    // How far back along the view axis the eye sits. The depth range below is
+    // twice this, so geometry either side of the centre plane stays visible.
+    constexpr f32 kOrthoPullback = 500.0f;
+
+    static void OrthoAxisBasis( OrthoAxis axis, Vec3 * outForward, Vec3 * outUp ) {
+        switch( axis ) {
+            case OrthoAxis_Front:
+                *outForward = Vec3{ 0.0f, 0.0f, -1.0f };
+                *outUp = Vec3{ 0.0f, 1.0f, 0.0f };
+                break;
+            case OrthoAxis_Side:
+                *outForward = Vec3{ -1.0f, 0.0f, 0.0f };
+                *outUp = Vec3{ 0.0f, 1.0f, 0.0f };
+                break;
+            case OrthoAxis_Top:
+            default:
+                *outForward = Vec3{ 0.0f, -1.0f, 0.0f };
+                *outUp = Vec3{ 0.0f, 0.0f, -1.0f };
+                break;
+        }
+    }
+
+    OrthoCamera OrthoCameraDefault( OrthoAxis axis ) {
+        OrthoCamera camera = {};
+        camera.axis = axis;
+        camera.center = Vec3{ 0.0f, 0.0f, 0.0f };
+        // Wide enough to frame the debug geometry at the origin.
+        camera.halfHeight = 2.0f;
+        camera.zoomSpeed = 1.1f;
+        return camera;
+    }
+
+    void OrthoCameraUpdate( OrthoCamera * camera, const OrthoCameraInput & input, i32 pixelHeight ) {
+        if( input.zoomTicks != 0.0f ) {
+            camera->halfHeight *= powf( camera->zoomSpeed, -input.zoomTicks );
+            if( camera->halfHeight < kMinHalfHeight ) { camera->halfHeight = kMinHalfHeight; }
+            if( camera->halfHeight > kMaxHalfHeight ) { camera->halfHeight = kMaxHalfHeight; }
+        }
+
+        if( input.panning && pixelHeight > 0 ) {
+            Vec3 forward = {};
+            Vec3 up = {};
+            OrthoAxisBasis( camera->axis, &forward, &up );
+            const Vec3 right = Vec3Normalize( Vec3Cross( forward, up ) );
+
+            // The world is dragged, not the camera, so the centre moves against
+            // the cursor. Screen y grows downward, which is why the up term is
+            // added rather than subtracted.
+            const f32 scale = ( 2.0f * camera->halfHeight ) / (f32)pixelHeight;
+            camera->center = camera->center - right * ( input.panDeltaX * scale );
+            camera->center = camera->center + up * ( input.panDeltaY * scale );
+        }
+    }
+
+    Mat4 OrthoCameraViewProjection( const OrthoCamera & camera, i32 width, i32 height ) {
+        Vec3 forward = {};
+        Vec3 up = {};
+        OrthoAxisBasis( camera.axis, &forward, &up );
+
+        const Vec3 eye = camera.center - forward * kOrthoPullback;
+        const Mat4 view = Mat4LookAt( eye, camera.center, up );
+
+        const f32 aspect = height > 0 ? (f32)width / (f32)height : 1.0f;
+        const Mat4 projection = Mat4Orthographic( camera.halfHeight * aspect, camera.halfHeight,
+                                                  0.1f, 2.0f * kOrthoPullback );
+        return projection * view;
+    }
+
     Mat4 FlyCameraViewProjection( const FlyCamera & camera, i32 width, i32 height ) {
         const Vec3 forward = FlyCameraForward( camera );
         const Mat4 view = Mat4LookAt( camera.position, camera.position + forward,
