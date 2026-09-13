@@ -2,6 +2,7 @@
 //
 
 #include "sol_asset.h"
+#include "sol_camera.h"
 #include "sol_defines.h"
 #include "sol_math.h"
 #include "sol_render.h"
@@ -9,92 +10,53 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <cmath>
 #include <cstdio>
 
 namespace sol {
 
-    struct FlyCamera {
-        Vec3    position;
-        // Radians. yaw 0 / pitch 0 looks down -z, matching the math convention.
-        f32     yaw;
-        f32     pitch;
-        f32     moveSpeed;      // units per second
-        f32     lookSpeed;      // radians per pixel of mouse travel
+    // The GLFW half of the camera controls: everything below turns polled
+    // window state into a FlyCameraInput. The camera itself lives in
+    // sol_camera.cpp so the Qt editor drives the identical code.
+    struct GLFWLookState {
         bool    looking;
         f64     lastCursorX;
         f64     lastCursorY;
     };
 
-    constexpr f32 kPitchLimit = 89.0f * kDeg2Rad;
+    static FlyCameraInput GatherCameraInput( GLFWLookState * look, GLFWwindow * window ) {
+        FlyCameraInput input = {};
 
-    static Vec3 FlyCameraForward( const FlyCamera & camera ) {
-        const f32 cosPitch = cosf( camera.pitch );
-        return Vec3{
-            cosPitch * sinf( camera.yaw ),
-            sinf( camera.pitch ),
-            -cosPitch * cosf( camera.yaw ),
-        };
-    }
-
-    static void FlyCameraUpdate( FlyCamera * camera, GLFWwindow * window, f32 dt ) {
         // Look only while the right button is held, so the cursor stays usable
         // the rest of the time.
         const bool wantLook = glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_RIGHT ) == GLFW_PRESS;
-        if( wantLook != camera->looking ) {
-            camera->looking = wantLook;
-            glfwSetInputMode( window, GLFW_CURSOR,
-                              wantLook ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL );
+        if( wantLook != look->looking ) {
+            look->looking = wantLook;
+            glfwSetInputMode( window, GLFW_CURSOR, wantLook ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL );
             // Re-seed on the press, otherwise the first frame sees the whole
             // gap since the last drag as one enormous delta.
-            glfwGetCursorPos( window, &camera->lastCursorX, &camera->lastCursorY );
+            glfwGetCursorPos( window, &look->lastCursorX, &look->lastCursorY );
         }
 
-        if( camera->looking ) {
+        input.looking = look->looking;
+        if( look->looking ) {
             f64 cursorX = 0.0;
             f64 cursorY = 0.0;
             glfwGetCursorPos( window, &cursorX, &cursorY );
 
-            camera->yaw += (f32)( cursorX - camera->lastCursorX ) * camera->lookSpeed;
-            camera->pitch -= (f32)( cursorY - camera->lastCursorY ) * camera->lookSpeed;
-            camera->lastCursorX = cursorX;
-            camera->lastCursorY = cursorY;
-
-            // Stop short of straight up, where the forward vector and world up
-            // line up and the right vector collapses.
-            if( camera->pitch > kPitchLimit )  { camera->pitch = kPitchLimit; }
-            if( camera->pitch < -kPitchLimit ) { camera->pitch = -kPitchLimit; }
+            input.lookDeltaX = (f32)( cursorX - look->lastCursorX );
+            input.lookDeltaY = (f32)( cursorY - look->lastCursorY );
+            look->lastCursorX = cursorX;
+            look->lastCursorY = cursorY;
         }
 
-        const Vec3 forward = FlyCameraForward( *camera );
-        const Vec3 right = Vec3Normalize( Vec3Cross( forward, Vec3{ 0.0f, 1.0f, 0.0f } ) );
-
-        Vec3 move = {};
-        if( glfwGetKey( window, GLFW_KEY_W ) == GLFW_PRESS ) { move = move + forward; }
-        if( glfwGetKey( window, GLFW_KEY_S ) == GLFW_PRESS ) { move = move - forward; }
-        if( glfwGetKey( window, GLFW_KEY_D ) == GLFW_PRESS ) { move = move + right; }
-        if( glfwGetKey( window, GLFW_KEY_A ) == GLFW_PRESS ) { move = move - right; }
-        if( glfwGetKey( window, GLFW_KEY_SPACE ) == GLFW_PRESS ) { move.y += 1.0f; }
-        if ( glfwGetKey( window, GLFW_KEY_LEFT_CONTROL ) == GLFW_PRESS ) { move.y -= 1.0f; }
-
-        f32 speed = camera->moveSpeed;
-        if( glfwGetKey( window, GLFW_KEY_LEFT_SHIFT ) == GLFW_PRESS ) {
-            speed *= 4.0f;
-        }
-
-        // Normalised so diagonals are not faster than the axes.
-        if( Vec3Length( move ) > 0.0f ) {
-            camera->position = camera->position + Vec3Normalize( move ) * ( speed * dt );
-        }
-    }
-
-    static Mat4 FlyCameraViewProjection( const FlyCamera & camera, i32 width, i32 height ) {
-        const Vec3 forward = FlyCameraForward( camera );
-        const Mat4 view = Mat4LookAt( camera.position, camera.position + forward,
-                                      Vec3{ 0.0f, 1.0f, 0.0f } );
-        const f32 aspect = height > 0 ? (f32)width / (f32)height : 1.0f;
-        const Mat4 projection = Mat4Perspective( 60.0f * kDeg2Rad, aspect, 0.1f, 1000.0f );
-        return projection * view;
+        input.forward = glfwGetKey( window, GLFW_KEY_W ) == GLFW_PRESS;
+        input.back    = glfwGetKey( window, GLFW_KEY_S ) == GLFW_PRESS;
+        input.right   = glfwGetKey( window, GLFW_KEY_D ) == GLFW_PRESS;
+        input.left    = glfwGetKey( window, GLFW_KEY_A ) == GLFW_PRESS;
+        input.up      = glfwGetKey( window, GLFW_KEY_SPACE ) == GLFW_PRESS;
+        input.down    = glfwGetKey( window, GLFW_KEY_LEFT_CONTROL ) == GLFW_PRESS;
+        input.fast    = glfwGetKey( window, GLFW_KEY_LEFT_SHIFT ) == GLFW_PRESS;
+        return input;
     }
 
     static void GLFWErrorCallback( int code, const char * description ) {
@@ -242,11 +204,8 @@ int main() {
         return 1;
     }
 
-    sol::FlyCamera camera = {};
-    // Backed off down +z so the debug triangle at the origin is in view.
-    camera.position = sol::Vec3{ 0.0f, 0.0f, 2.0f };
-    camera.moveSpeed = 3.0f;
-    camera.lookSpeed = 0.0025f;
+    sol::FlyCamera camera = sol::FlyCameraDefault();
+    sol::GLFWLookState look = {};
 
     sol::f64 lastTime = glfwGetTime();
 
@@ -269,7 +228,7 @@ int main() {
         const sol::f32 dt = (sol::f32)( now - lastTime );
         lastTime = now;
 
-        sol::FlyCameraUpdate( &camera, window, dt );
+        sol::FlyCameraUpdate( &camera, sol::GatherCameraInput( &look, window ), dt );
         sol::RendererSetViewProjection( &renderer,
                                         sol::FlyCameraViewProjection( camera, width, height ) );
 

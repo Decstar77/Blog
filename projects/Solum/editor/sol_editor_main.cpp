@@ -103,8 +103,9 @@ int main( int argc, char ** argv ) {
         viewport->setFocusPolicy( Qt::StrongFocus );
 
         QLabel * caption = new QLabel(
-            QStringLiteral( "Viewport below is the engine's Vulkan renderer, "
-                            "clearing to green inside a Qt widget." ) );
+            QStringLiteral( "Viewport below is the engine's Vulkan renderer. "
+                            "Right-drag to look, WASD to move, "
+                            "Space/Ctrl for up and down, Shift to sprint." ) );
         caption->setMargin( 8 );
 
         QWidget * central = new QWidget;
