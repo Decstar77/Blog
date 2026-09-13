@@ -10,10 +10,6 @@
 // Every asset is a pair:
 //   <name>.stex  - binary payload, fully decompressed, ready to memcpy to the GPU
 //   <name>.meta  - text sidecar: where it came from and how to sample it
-//
-// The sidecar is text on purpose. It diffs, it merges, and it can be edited by
-// hand without a tool. The payload is binary on purpose: the engine should do a
-// header read and one bulk copy, nothing more.
 
 namespace sol {
 
@@ -25,8 +21,8 @@ namespace sol {
     // ---- texture assets ----------------------------------------------------
 
     enum TextureFormat : u32 {
-        TextureFormat_RGBA8_UNORM = 0,   // data, normals, masks
-        TextureFormat_RGBA8_SRGB  = 1,   // colour art, the usual case
+        TextureFormat_RGBA8_UNORM = 0,
+        TextureFormat_RGBA8_SRGB  = 1,
     };
 
     enum TextureFilter : u32 {
@@ -40,8 +36,6 @@ namespace sol {
         TextureWrap_Mirror = 2,
     };
 
-    // Mirrors the .meta sidecar one field per line. Unknown keys are ignored on
-    // read so an older engine still loads a newer sidecar.
     struct TextureMeta {
         LargeString     source;         // absolute path to the original art
         LargeString     binary;         // payload filename, relative to the .meta
@@ -72,8 +66,6 @@ namespace sol {
 
     static_assert( sizeof( TextureBinHeader ) == 32 );
 
-    // A decoded texture in main memory, ready to hand to the renderer. Owns its
-    // pixels; release with TextureAssetFree.
     struct TextureAsset {
         TextureMeta     meta;
         i32             width;
@@ -83,22 +75,15 @@ namespace sol {
 
     // ---- sidecar text ------------------------------------------------------
 
-    // Parses "key = value" lines. Blank lines and '#' comments are skipped.
-    // Missing fields keep the defaults from TextureMetaDefault.
+    // Parses "key = value" lines. Blank lines and '#' comments are skipped. Missing fields keep the defaults from TextureMetaDefault.
     TextureMeta TextureMetaDefault();
-    bool TextureMetaParse( StringView text, TextureMeta * outMeta );
-    // Serialises to the same format TextureMetaParse accepts. Round-trips.
-    bool TextureMetaWrite( const TextureMeta & meta, HeapString & outText );
+    bool        TextureMetaParse( StringView text, TextureMeta * outMeta );
+    bool        TextureMetaWrite( const TextureMeta & meta, HeapString & outText );
 
     // ---- whole assets ------------------------------------------------------
-
-    // Reads the sidecar, then the payload it names from the same directory.
     bool TextureAssetLoad( StringView metaPath, TextureAsset * outAsset );
     void TextureAssetFree( TextureAsset * asset );
 
     // Writes both halves. The editor's importer calls this; the engine never does.
-    bool TextureAssetWrite( StringView outputDirectory, StringView assetName,
-                            const TextureMeta & meta,
-                            const void * pixels, i32 width, i32 height );
-
+    bool TextureAssetWrite( StringView outputDirectory, StringView assetName, const TextureMeta & meta, const void * pixels, i32 width, i32 height );
 } // namespace sol

@@ -40,7 +40,7 @@ target_include_directories (solum PRIVATE "${SOLUM_SHADER_OUT_DIR}")
 if (MSVC)
   target_compile_definitions (solum PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif ()
-target_link_libraries (solum PUBLIC Vulkan::Vulkan)
+target_link_libraries (solum PUBLIC Vulkan::Vulkan vma)
 set_property (TARGET solum PROPERTY CXX_STANDARD 20)
 
 add_executable (engine "sol_engine.cpp")

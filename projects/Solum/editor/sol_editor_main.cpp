@@ -18,17 +18,12 @@
 
 namespace {
 
-    // Qt creates the surface, so the instance has to carry the surface
-    // extensions Qt's Windows platform plugin will ask for. Spelled out rather
-    // than pulled from vulkan_win32.h, which would drag in windows.h.
     const char * const kSurfaceExtensions[] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
         "VK_KHR_win32_surface",
     };
 
-    // "editor.exe --import <sourcePath> <outputDirectory> <assetName>". A pure
-    // CLI path: it must run headlessly, so it is handled before QApplication
-    // (and the Vulkan instance) ever gets constructed.
+    // "editor.exe --import <sourcePath> <outputDirectory> <assetName>". 
     int RunImportCommand( int argc, char ** argv ) {
         if( argc != 5 ) {
             fprintf( stderr, "usage: editor --import <sourcePath> <outputDirectory> <assetName>\n" );

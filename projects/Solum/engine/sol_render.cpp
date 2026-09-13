@@ -274,6 +274,21 @@ namespace sol {
         return true;
     }
 
+    // Every buffer and image the renderer owns is suballocated out of this.
+    // Built against the statically linked loader, matching VMA_STATIC_VULKAN_
+    // FUNCTIONS in vendor/vma_impl.cpp.
+    static bool CreateAllocator( Renderer * r ) {
+        VmaAllocatorCreateInfo createInfo = {};
+        createInfo.physicalDevice = r->physicalDevice;
+        createInfo.device = r->device;
+        createInfo.instance = r->instance;
+        // Has to match the apiVersion the instance was created with, or VMA
+        // will call entry points the driver never promised.
+        createInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        VK_CHECK( vmaCreateAllocator( &createInfo, &r->allocator ) );
+        return true;
+    }
+
     static VkSurfaceFormatKHR ChooseSurfaceFormat( VkPhysicalDevice device, VkSurfaceKHR surface ) {
         u32 count = 0;
         vkGetPhysicalDeviceSurfaceFormatsKHR( device, surface, &count, nullptr );
@@ -378,10 +393,6 @@ namespace sol {
         return true;
     }
 
-    // Defined further down with the buffer helpers; the depth image needs it first.
-    static bool FindMemoryType( Renderer * r, u32 typeBits, VkMemoryPropertyFlags wanted,
-                                u32 * outIndex );
-
     static bool FormatHasStencil( VkFormat format ) {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
@@ -414,12 +425,9 @@ namespace sol {
             r->depthView = VK_NULL_HANDLE;
         }
         if( r->depthImage != VK_NULL_HANDLE ) {
-            vkDestroyImage( r->device, r->depthImage, nullptr );
+            vmaDestroyImage( r->allocator, r->depthImage, r->depthAllocation );
             r->depthImage = VK_NULL_HANDLE;
-        }
-        if( r->depthMemory != VK_NULL_HANDLE ) {
-            vkFreeMemory( r->device, r->depthMemory, nullptr );
-            r->depthMemory = VK_NULL_HANDLE;
+            r->depthAllocation = VK_NULL_HANDLE;
         }
     }
 
@@ -443,24 +451,16 @@ namespace sol {
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         // The render pass transitions it out of UNDEFINED on first use.
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VK_CHECK( vkCreateImage( r->device, &imageInfo, nullptr, &r->depthImage ) );
 
-        VkMemoryRequirements requirements = {};
-        vkGetImageMemoryRequirements( r->device, r->depthImage, &requirements );
-
-        u32 memoryType = 0;
-        if( !FindMemoryType( r, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                             &memoryType ) ) {
-            DestroyDepthResources( r );
-            return false;
-        }
-
-        VkMemoryAllocateInfo allocInfo = {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = requirements.size;
-        allocInfo.memoryTypeIndex = memoryType;
-        VK_CHECK( vkAllocateMemory( r->device, &allocInfo, nullptr, &r->depthMemory ) );
-        VK_CHECK( vkBindImageMemory( r->device, r->depthImage, r->depthMemory, 0 ) );
+        // A full-screen attachment is exactly the case VMA recommends a
+        // dedicated block for: it is large, and it dies with the swapchain
+        // rather than alongside the meshes it shares a pool with.
+        VmaAllocationCreateInfo allocInfo = {};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+        allocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        VK_CHECK( vmaCreateImage( r->allocator, &imageInfo, &allocInfo, &r->depthImage,
+                                  &r->depthAllocation, nullptr ) );
 
         VkImageViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -833,53 +833,46 @@ namespace sol {
         return ok;
     }
 
-    static bool FindMemoryType( Renderer * r, u32 typeBits, VkMemoryPropertyFlags wanted,
-                                u32 * outIndex ) {
-        VkPhysicalDeviceMemoryProperties props = {};
-        vkGetPhysicalDeviceMemoryProperties( r->physicalDevice, &props );
-
-        for( u32 i = 0; i < props.memoryTypeCount; i++ ) {
-            bool typeAllowed = ( typeBits & ( 1u << i ) ) != 0;
-            bool hasProps = ( props.memoryTypes[i].propertyFlags & wanted ) == wanted;
-            if( typeAllowed && hasProps ) {
-                *outIndex = i;
-                return true;
-            }
-        }
-
-        fprintf( stderr, "No memory type with properties 0x%x\n", (unsigned)wanted );
-        return false;
-    }
-
+    // VMA picks the memory type from the usage flags plus allocFlags, so callers
+    // say what they intend to do with the buffer rather than naming heaps.
+    // outInfo is optional; pass it to get pMappedData back for a mapped staging
+    // allocation.
     static bool CreateBuffer( Renderer * r, u64 size, VkBufferUsageFlags usage,
-                              VkMemoryPropertyFlags memoryProps, VkBuffer * outBuffer,
-                              VkDeviceMemory * outMemory ) {
+                              VmaAllocationCreateFlags allocFlags, VkBuffer * outBuffer,
+                              VmaAllocation * outAllocation, VmaAllocationInfo * outInfo ) {
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        VK_CHECK( vkCreateBuffer( r->device, &bufferInfo, nullptr, outBuffer ) );
 
-        VkMemoryRequirements requirements = {};
-        vkGetBufferMemoryRequirements( r->device, *outBuffer, &requirements );
+        VmaAllocationCreateInfo allocInfo = {};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocInfo.flags = allocFlags;
 
-        u32 memoryType = 0;
-        if( !FindMemoryType( r, requirements.memoryTypeBits, memoryProps, &memoryType ) ) {
-            vkDestroyBuffer( r->device, *outBuffer, nullptr );
-            *outBuffer = VK_NULL_HANDLE;
+        VK_CHECK( vmaCreateBuffer( r->allocator, &bufferInfo, &allocInfo, outBuffer,
+                                   outAllocation, outInfo ) );
+        return true;
+    }
+
+    // Host-visible, already mapped, and written front to back exactly once.
+    // Staging is the only host-writable memory this renderer asks for.
+    constexpr VmaAllocationCreateFlags kStagingAllocFlags =
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+        VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    // Fills a freshly created staging allocation and makes the write visible to
+    // the device. AUTO can land staging in non-coherent memory (device-local
+    // host-visible on resizable BAR), so the flush is not optional; it is a
+    // no-op when the memory turned out to be coherent after all.
+    static bool WriteStaging( Renderer * r, const VmaAllocationInfo & info,
+                              VmaAllocation allocation, const void * data, u64 size ) {
+        if( info.pMappedData == nullptr ) {
+            fprintf( stderr, "Staging allocation came back unmapped\n" );
             return false;
         }
-
-        // One allocation per buffer. Fine at this scale; a real scene wants a
-        // suballocator instead, because drivers cap the total allocation count.
-        VkMemoryAllocateInfo allocInfo = {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = requirements.size;
-        allocInfo.memoryTypeIndex = memoryType;
-        VK_CHECK( vkAllocateMemory( r->device, &allocInfo, nullptr, outMemory ) );
-        VK_CHECK( vkBindBufferMemory( r->device, *outBuffer, *outMemory, 0 ) );
-        return true;
+        memcpy( info.pMappedData, data, (size_t)size );
+        return vmaFlushAllocation( r->allocator, allocation, 0, size ) == VK_SUCCESS;
     }
 
     // One-shot command buffer pattern shared by every blocking upload below:
@@ -919,19 +912,14 @@ namespace sol {
     // Stages through host-visible memory and blocks on the copy.
     static bool UploadBuffer( Renderer * r, VkBuffer dst, const void * data, u64 size ) {
         VkBuffer staging = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        if( !CreateBuffer( r, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                           &staging, &stagingMemory ) ) {
+        VmaAllocation stagingAllocation = VK_NULL_HANDLE;
+        VmaAllocationInfo stagingInfo = {};
+        if( !CreateBuffer( r, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, kStagingAllocFlags,
+                           &staging, &stagingAllocation, &stagingInfo ) ) {
             return false;
         }
 
-        void * mapped = nullptr;
-        bool ok = vkMapMemory( r->device, stagingMemory, 0, size, 0, &mapped ) == VK_SUCCESS;
-        if( ok ) {
-            memcpy( mapped, data, (size_t)size );
-            vkUnmapMemory( r->device, stagingMemory );
-        }
+        bool ok = WriteStaging( r, stagingInfo, stagingAllocation, data, size );
 
         VkCommandBuffer cmd = VK_NULL_HANDLE;
         if( ok ) {
@@ -945,8 +933,7 @@ namespace sol {
             ok = EndOneShotCommands( r, cmd );
         }
 
-        vkDestroyBuffer( r->device, staging, nullptr );
-        vkFreeMemory( r->device, stagingMemory, nullptr );
+        vmaDestroyBuffer( r->allocator, staging, stagingAllocation );
 
         if( !ok ) {
             fprintf( stderr, "Failed to upload %llu bytes\n", (unsigned long long)size );
@@ -955,7 +942,8 @@ namespace sol {
     }
 
     static bool CreateImage( Renderer * r, i32 width, i32 height, VkFormat format,
-                             VkImageUsageFlags usage, VkImage * outImage, VkDeviceMemory * outMemory ) {
+                             VkImageUsageFlags usage, VkImage * outImage,
+                             VmaAllocation * outAllocation ) {
         VkImageCreateInfo imageInfo = {};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -970,25 +958,12 @@ namespace sol {
         imageInfo.usage = usage;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VK_CHECK( vkCreateImage( r->device, &imageInfo, nullptr, outImage ) );
 
-        VkMemoryRequirements requirements = {};
-        vkGetImageMemoryRequirements( r->device, *outImage, &requirements );
-
-        u32 memoryType = 0;
-        if( !FindMemoryType( r, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                             &memoryType ) ) {
-            vkDestroyImage( r->device, *outImage, nullptr );
-            *outImage = VK_NULL_HANDLE;
-            return false;
-        }
-
-        VkMemoryAllocateInfo allocInfo = {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = requirements.size;
-        allocInfo.memoryTypeIndex = memoryType;
-        VK_CHECK( vkAllocateMemory( r->device, &allocInfo, nullptr, outMemory ) );
-        VK_CHECK( vkBindImageMemory( r->device, *outImage, *outMemory, 0 ) );
+        VmaAllocationCreateInfo allocInfo = {};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        VK_CHECK( vmaCreateImage( r->allocator, &imageInfo, &allocInfo, outImage,
+                                  outAllocation, nullptr ) );
         return true;
     }
 
@@ -1068,24 +1043,19 @@ namespace sol {
 
         if( !CreateImage( r, asset.width, asset.height, format,
                           VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                          &outTexture->image, &outTexture->memory ) ) {
+                          &outTexture->image, &outTexture->allocation ) ) {
             return false;
         }
 
         const u64 byteCount = (u64)asset.width * (u64)asset.height * 4;
 
         VkBuffer staging = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        bool ok = CreateBuffer( r, byteCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                &staging, &stagingMemory );
+        VmaAllocation stagingAllocation = VK_NULL_HANDLE;
+        VmaAllocationInfo stagingInfo = {};
+        bool ok = CreateBuffer( r, byteCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, kStagingAllocFlags,
+                                &staging, &stagingAllocation, &stagingInfo );
         if( ok ) {
-            void * mapped = nullptr;
-            ok = vkMapMemory( r->device, stagingMemory, 0, byteCount, 0, &mapped ) == VK_SUCCESS;
-            if( ok ) {
-                memcpy( mapped, asset.pixels.data, (size_t)byteCount );
-                vkUnmapMemory( r->device, stagingMemory );
-            }
+            ok = WriteStaging( r, stagingInfo, stagingAllocation, asset.pixels.data, byteCount );
         }
 
         ok = ok && TransitionImageLayout( r, outTexture->image, VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1095,10 +1065,7 @@ namespace sol {
                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL );
 
         if( staging != VK_NULL_HANDLE ) {
-            vkDestroyBuffer( r->device, staging, nullptr );
-        }
-        if( stagingMemory != VK_NULL_HANDLE ) {
-            vkFreeMemory( r->device, stagingMemory, nullptr );
+            vmaDestroyBuffer( r->allocator, staging, stagingAllocation );
         }
 
         if( !ok ) {
@@ -1192,10 +1159,7 @@ namespace sol {
             vkDestroyImageView( r->device, texture->view, nullptr );
         }
         if( texture->image != VK_NULL_HANDLE ) {
-            vkDestroyImage( r->device, texture->image, nullptr );
-        }
-        if( texture->memory != VK_NULL_HANDLE ) {
-            vkFreeMemory( r->device, texture->memory, nullptr );
+            vmaDestroyImage( r->allocator, texture->image, texture->allocation );
         }
 
         *texture = {};
@@ -1236,17 +1200,17 @@ namespace sol {
         u64 vertexBytes = (u64)vertexCount * sizeof( StaticMeshVertex );
         u64 indexBytes = (u64)indexCount * sizeof( u32 );
 
+        // No host access flag, so VMA puts both of these in device-local memory
+        // and they are filled through the staging path below.
         if( !CreateBuffer( r, vertexBytes,
-                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                           &outMesh->vertexBuffer, &outMesh->vertexMemory ) ) {
+                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+                           &outMesh->vertexBuffer, &outMesh->vertexAllocation, nullptr ) ) {
             return false;
         }
 
         if( !CreateBuffer( r, indexBytes,
-                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                           &outMesh->indexBuffer, &outMesh->indexMemory ) ) {
+                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+                           &outMesh->indexBuffer, &outMesh->indexAllocation, nullptr ) ) {
             RenderStaticMeshDestroy( r, outMesh );
             return false;
         }
@@ -1268,16 +1232,10 @@ namespace sol {
         }
 
         if( mesh->vertexBuffer != VK_NULL_HANDLE ) {
-            vkDestroyBuffer( r->device, mesh->vertexBuffer, nullptr );
-        }
-        if( mesh->vertexMemory != VK_NULL_HANDLE ) {
-            vkFreeMemory( r->device, mesh->vertexMemory, nullptr );
+            vmaDestroyBuffer( r->allocator, mesh->vertexBuffer, mesh->vertexAllocation );
         }
         if( mesh->indexBuffer != VK_NULL_HANDLE ) {
-            vkDestroyBuffer( r->device, mesh->indexBuffer, nullptr );
-        }
-        if( mesh->indexMemory != VK_NULL_HANDLE ) {
-            vkFreeMemory( r->device, mesh->indexMemory, nullptr );
+            vmaDestroyBuffer( r->allocator, mesh->indexBuffer, mesh->indexAllocation );
         }
 
         *mesh = {};
@@ -1434,6 +1392,8 @@ namespace sol {
 
         return PickPhysicalDevice( r ) &&
                CreateLogicalDevice( r ) &&
+               // Before anything that allocates: the depth image is the first.
+               CreateAllocator( r ) &&
                CreateSwapchain( r ) &&
                // Before the render pass, which needs the chosen depth format.
                CreateDepthResources( r ) &&
@@ -1604,6 +1564,13 @@ namespace sol {
         }
         if( r->renderPass != VK_NULL_HANDLE ) {
             vkDestroyRenderPass( r->device, r->renderPass, nullptr );
+        }
+
+        // After every buffer and image above has gone back: VMA asserts if it
+        // is torn down with allocations still outstanding.
+        if( r->allocator != VK_NULL_HANDLE ) {
+            vmaDestroyAllocator( r->allocator );
+            r->allocator = VK_NULL_HANDLE;
         }
 
         vkDestroyDevice( r->device, nullptr );

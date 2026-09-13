@@ -33,6 +33,21 @@ if (MSVC)
   target_compile_definitions (stb PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif ()
 
+# VulkanMemoryAllocator is a single header; this target is the one TU that
+# compiles its implementation, so every consumer just includes the header.
+find_package (Vulkan REQUIRED)
+add_library (vma STATIC "vendor/vma_impl.cpp")
+target_include_directories (vma PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
+target_link_libraries (vma PUBLIC Vulkan::Vulkan)
+set_property (TARGET vma PROPERTY CXX_STANDARD 20)
+
+# Vendored code we do not want to patch: VMA trips MSVC's unreferenced-parameter
+# and nameless-struct warnings, and uses functions MSVC deprecates.
+if (MSVC)
+  target_compile_definitions (vma PRIVATE _CRT_SECURE_NO_WARNINGS)
+  target_compile_options (vma PRIVATE /w)
+endif ()
+
 # Where find_package looks for Qt6 when the caller has not said otherwise.
 if (NOT DEFINED CMAKE_PREFIX_PATH AND EXISTS "C:/Qt/6.11.1/msvc2022_64")
   set(CMAKE_PREFIX_PATH "C:/Qt/6.11.1/msvc2022_64")

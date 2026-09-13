@@ -5,6 +5,7 @@
 #include "sol_math.h"
 
 #include <vulkan/vulkan.h>
+#include <vma/vk_mem_alloc.h>
 
 namespace sol {
 
@@ -20,7 +21,7 @@ namespace sol {
     // since nothing here ever changes which image a set points at.
     struct RenderTexture {
         VkImage             image;
-        VkDeviceMemory      memory;
+        VmaAllocation       allocation;
         VkImageView         view;
         VkSampler           sampler;
         i32                 width;
@@ -34,9 +35,9 @@ namespace sol {
     // ends up as one of these, so the upload path and the pipeline are shared.
     struct RenderStaticMesh {
         VkBuffer        vertexBuffer;
-        VkDeviceMemory  vertexMemory;
+        VmaAllocation   vertexAllocation;
         VkBuffer        indexBuffer;
-        VkDeviceMemory  indexMemory;
+        VmaAllocation   indexAllocation;
         i32             vertexCount;
         i32             indexCount;
         // Model to world. The renderer premultiplies the camera onto this before
@@ -72,6 +73,10 @@ namespace sol {
         VkQueue                     graphicsQueue;
         VkQueue                     presentQueue;
 
+        // Every buffer and image below is suballocated out of this rather than
+        // getting its own vkAllocateMemory, which drivers cap at a few thousand.
+        VmaAllocator                allocator;
+
         VkSwapchainKHR              swapchain;
         VkFormat                    swapchainFormat;
         VkExtent2D                  swapchainExtent;
@@ -89,7 +94,7 @@ namespace sol {
         // its own render pass ends.
         VkFormat                    depthFormat;
         VkImage                     depthImage;
-        VkDeviceMemory              depthMemory;
+        VmaAllocation               depthAllocation;
         VkImageView                 depthView;
 
         VkRenderPass                renderPass;
