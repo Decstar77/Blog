@@ -4,15 +4,21 @@
 
 namespace sol {
 
-    bool RenderMeshFromHalfMesh( Renderer * r, const HalfMesh & halfMesh, const RenderMaterial & material, RenderStaticMesh * outMesh ) {
+    World WorldCreate() {
+        World world = {};
+        world.selected = kNoPrimitive;
+        return world;
+    }
+
+    RenderMeshHandle RenderMeshFromHalfMesh( Renderer * r, const HalfMesh & halfMesh, const RenderMaterial & material ) {
         List<HMTriVertex> triVertices = {};
         List<u32> triIndices = {};
         HalfMeshTriangulate( halfMesh, triVertices, triIndices );
 
         List<StaticMeshVertex> vertices = {};
-        bool ok = triVertices.count > 0 && triIndices.count > 0;
+        RenderMeshHandle handle = {};
 
-        if( ok ) {
+        if( triVertices.count > 0 && triIndices.count > 0 ) {
             ListReserve( vertices, triVertices.count );
             for( i32 i = 0; i < triVertices.count; i++ ) {
                 // The half-mesh side knows nothing about materials, so the tint
@@ -25,35 +31,32 @@ namespace sol {
                 ListAdd( vertices, vertex );
             }
 
-            ok = RenderStaticMeshCreate( r, vertices.data, vertices.count, triIndices.data, triIndices.count, material.texture, outMesh );
+            handle = RendererCreateStaticMesh( r, vertices.data, vertices.count,
+                                               triIndices.data, triIndices.count, material.texture );
         }
 
         ListFree( triVertices );
         ListFree( triIndices );
         ListFree( vertices );
-        return ok;
+        return handle;
     }
 
     i32 WorldAddPrimitive( World & world, Renderer * r, const HalfMesh & halfMesh, const RenderMaterial & material, const Mat4 & transform ) {
-        RenderStaticMesh renderMesh = {};
-        if( !RenderMeshFromHalfMesh( r, halfMesh, material, &renderMesh ) ) {
+        RenderMeshHandle renderMesh = RenderMeshFromHalfMesh( r, halfMesh, material );
+        RenderStaticMesh * mesh = RendererGetStaticMesh( r, renderMesh );
+        if( mesh == nullptr ) {
             return kNoPrimitive;
         }
-        renderMesh.transform = transform;
-
-        if( RendererAddStaticMesh( r, renderMesh ) == nullptr ) {
-            RenderStaticMeshDestroy( r, &renderMesh );
-            return kNoPrimitive;
-        }
+        mesh->transform = transform;
 
         Primitive primitive = {};
         primitive.halfMesh = HalfMeshCopy( halfMesh );
         primitive.material = material;
-        // RendererAddStaticMesh appends, so the slot it landed in is the last.
-        primitive.renderMesh = r->staticMeshes.count - 1;
+        primitive.renderMesh = renderMesh;
 
         if( ListAdd( world.primitives, primitive ) == nullptr ) {
             HalfMeshFree( primitive.halfMesh );
+            RendererDestroyStaticMesh( r, renderMesh );
             return kNoPrimitive;
         }
 
@@ -66,25 +69,28 @@ namespace sol {
         }
 
         Primitive & entry = world.primitives[primitive];
-        if( entry.renderMesh < 0 || entry.renderMesh >= r->staticMeshes.count ) {
+        const RenderStaticMesh * previous = RendererGetStaticMesh( r, entry.renderMesh );
+        if( previous == nullptr ) {
             return false;
         }
 
-        RenderStaticMesh rebuilt = {};
-        if( !RenderMeshFromHalfMesh( r, entry.halfMesh, entry.material, &rebuilt ) ) {
-            return false;
-        }
+        // Carried across the rebuild, or a selected primitive would drop its
+        // highlight while it stayed selected.
+        const Mat4 transform = previous->transform;
+        const Vec4 tint = previous->tint;
 
-        // Built the replacement first, so a failure above leaves the old mesh
+        // Built the replacement first, so a failure here leaves the old mesh
         // on screen rather than a hole.
-        RenderStaticMesh * slot = &r->staticMeshes[entry.renderMesh];
-        rebuilt.transform = slot->transform;
+        RenderMeshHandle rebuilt = RenderMeshFromHalfMesh( r, entry.halfMesh, entry.material );
+        RenderStaticMesh * mesh = RendererGetStaticMesh( r, rebuilt );
+        if( mesh == nullptr ) {
+            return false;
+        }
+        mesh->transform = transform;
+        mesh->tint = tint;
 
-        // The buffers about to be freed may still be referenced by a frame the
-        // GPU has not finished with.
-        vkDeviceWaitIdle( r->device );
-        RenderStaticMeshDestroy( r, slot );
-        *slot = rebuilt;
+        RendererDestroyStaticMesh( r, entry.renderMesh );
+        entry.renderMesh = rebuilt;
         return true;
     }
 
@@ -93,14 +99,94 @@ namespace sol {
             return;
         }
 
-        const i32 renderMesh = world.primitives[primitive].renderMesh;
-        if( renderMesh < 0 || renderMesh >= r->staticMeshes.count ) {
+        RenderStaticMesh * mesh = RendererGetStaticMesh( r, world.primitives[primitive].renderMesh );
+        if( mesh == nullptr ) {
             return;
         }
 
         // Read fresh on the CPU when the next frame records, so there is
         // nothing to synchronise against here.
-        r->staticMeshes[renderMesh].transform = transform;
+        mesh->transform = transform;
+    }
+
+    // A plane is a zero-thickness box, and floating point can turn that slab
+    // into a miss. A hair of padding keeps flat things clickable.
+    constexpr f32 kPickPadding = 0.001f;
+
+    bool WorldPick( const World & world, Renderer * r, Vec3 rayOrigin, Vec3 rayDirection,
+                    i32 * outPrimitive ) {
+        i32 best = kNoPrimitive;
+        f32 bestDistance = 0.0f;
+
+        for( i32 i = 0; i < world.primitives.count; i++ ) {
+            const Primitive & primitive = world.primitives[i];
+            const RenderStaticMesh * mesh = RendererGetStaticMesh( r, primitive.renderMesh );
+            if( mesh == nullptr ) {
+                continue;
+            }
+            if( primitive.halfMesh.vertices.count == 0 ) {
+                continue;
+            }
+
+            const Mat4 & transform = mesh->transform;
+
+            // Bounds taken from the transformed vertices rather than from a
+            // transformed local box: exact whatever the transform does, where
+            // moving a box's corners is only exact without rotation.
+            Vec3 boundsMin = Mat4MulPoint( transform, primitive.halfMesh.vertices[0].position );
+            Vec3 boundsMax = boundsMin;
+            for( i32 v = 1; v < primitive.halfMesh.vertices.count; v++ ) {
+                const Vec3 point = Mat4MulPoint( transform, primitive.halfMesh.vertices[v].position );
+                boundsMin.x = Min( boundsMin.x, point.x );
+                boundsMin.y = Min( boundsMin.y, point.y );
+                boundsMin.z = Min( boundsMin.z, point.z );
+                boundsMax.x = Max( boundsMax.x, point.x );
+                boundsMax.y = Max( boundsMax.y, point.y );
+                boundsMax.z = Max( boundsMax.z, point.z );
+            }
+
+            const Vec3 padding = { kPickPadding, kPickPadding, kPickPadding };
+            boundsMin = boundsMin - padding;
+            boundsMax = boundsMax + padding;
+
+            f32 distance = 0.0f;
+            if( !RayAabbIntersect( rayOrigin, rayDirection, boundsMin, boundsMax, &distance ) ) {
+                continue;
+            }
+
+            if( best == kNoPrimitive || distance < bestDistance ) {
+                best = i;
+                bestDistance = distance;
+            }
+        }
+
+        if( outPrimitive != nullptr ) {
+            *outPrimitive = best;
+        }
+        return best != kNoPrimitive;
+    }
+
+    void WorldSetSelected( World & world, Renderer * r, i32 primitive ) {
+        if( world.selected == primitive ) {
+            return;
+        }
+
+        // Clear the old highlight before moving on, or it stays lit forever.
+        if( world.selected >= 0 && world.selected < world.primitives.count ) {
+            RenderStaticMesh * previous = RendererGetStaticMesh( r, world.primitives[world.selected].renderMesh );
+            if( previous != nullptr ) {
+                previous->tint = kNoTint;
+            }
+        }
+
+        world.selected = primitive;
+
+        if( primitive >= 0 && primitive < world.primitives.count ) {
+            RenderStaticMesh * current = RendererGetStaticMesh( r, world.primitives[primitive].renderMesh );
+            if( current != nullptr ) {
+                current->tint = kSelectionTint;
+            }
+        }
     }
 
     void WorldFree( World & world ) {

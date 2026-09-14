@@ -5,6 +5,9 @@
 namespace sol {
 
     constexpr f32 kPitchLimit = 89.0f * kDeg2Rad;
+    // Shared by the projection and the picking ray, so the two cannot drift
+    // apart and have a click land somewhere the render did not put it.
+    constexpr f32 kFlyCameraFovY = 60.0f * kDeg2Rad;
 
     FlyCamera FlyCameraDefault() {
         FlyCamera camera = {};
@@ -138,6 +141,21 @@ namespace sol {
         return world;
     }
 
+    void OrthoCameraScreenRay( const OrthoCamera & camera, f32 pixelX, f32 pixelY,
+                               i32 pixelWidth, i32 pixelHeight,
+                               Vec3 * outOrigin, Vec3 * outDirection ) {
+        Vec3 forward = {};
+        Vec3 up = {};
+        OrthoAxisBasis( camera.axis, &forward, &up );
+
+        // Start where the eye plane is rather than on the centre plane, so
+        // anything in front of the camera is still in front of the ray.
+        const Vec3 onPlane = OrthoCameraScreenToWorld( camera, pixelX, pixelY,
+                                                       pixelWidth, pixelHeight );
+        *outOrigin = onPlane - forward * kOrthoPullback;
+        *outDirection = forward;
+    }
+
     Mat4 OrthoCameraViewProjection( const OrthoCamera & camera, i32 width, i32 height ) {
         Vec3 forward = {};
         Vec3 up = {};
@@ -157,8 +175,29 @@ namespace sol {
         const Mat4 view = Mat4LookAt( camera.position, camera.position + forward,
                                       Vec3{ 0.0f, 1.0f, 0.0f } );
         const f32 aspect = height > 0 ? (f32)width / (f32)height : 1.0f;
-        const Mat4 projection = Mat4Perspective( 60.0f * kDeg2Rad, aspect, 0.1f, 1000.0f );
+        const Mat4 projection = Mat4Perspective( kFlyCameraFovY, aspect, 0.1f, 1000.0f );
         return projection * view;
+    }
+
+    void FlyCameraScreenRay( const FlyCamera & camera, f32 pixelX, f32 pixelY,
+                             i32 pixelWidth, i32 pixelHeight,
+                             Vec3 * outOrigin, Vec3 * outDirection ) {
+        const Vec3 forward = FlyCameraForward( camera );
+        const Vec3 right = Vec3Normalize( Vec3Cross( forward, Vec3{ 0.0f, 1.0f, 0.0f } ) );
+        const Vec3 up = Vec3Cross( right, forward );
+
+        const f32 aspect = pixelHeight > 0 ? (f32)pixelWidth / (f32)pixelHeight : 1.0f;
+        const f32 tanHalf = tanf( 0.5f * kFlyCameraFovY );
+
+        // Screen y grows downward and clip space does not, so that one flips.
+        const f32 ndcX = pixelWidth > 0 ? ( 2.0f * pixelX / (f32)pixelWidth - 1.0f ) : 0.0f;
+        const f32 ndcY = pixelHeight > 0 ? ( 1.0f - 2.0f * pixelY / (f32)pixelHeight ) : 0.0f;
+
+        Vec3 direction = forward + right * ( ndcX * tanHalf * aspect );
+        direction = direction + up * ( ndcY * tanHalf );
+
+        *outOrigin = camera.position;
+        *outDirection = Vec3Normalize( direction );
     }
 
 } // namespace sol

@@ -11,8 +11,12 @@ layout( location = 2 ) out vec2 fragUv;
 
 // row_major because sol::Mat4 is row-major on the CPU and GLSL defaults to
 // column-major. Without this the matrix arrives transposed.
+//
+// Must match the block in static_mesh.frag exactly: one range covers both
+// stages, and the two declarations describe the same bytes.
 layout( push_constant, row_major ) uniform PushConstants {
     mat4 mvp;
+    vec4 tint;
 } push;
 
 void main() {

@@ -74,6 +74,12 @@ namespace sol {
 
     f32     FocalLengthFromFovX( f32 fovX, i32 imageWidth );
 
+    // Slab test. outDistance is how far along direction the ray first meets the
+    // box, and is zero when the ray starts inside it. direction need not be
+    // normalised, but the distance comes back in units of it if it is not.
+    bool    RayAabbIntersect( Vec3 origin, Vec3 direction, Vec3 boundsMin, Vec3 boundsMax,
+                              f32 * outDistance );
+
     // xorshift32. Seeded explicitly so a given seed always replays the same stream, and 0 is
     // folded to a non zero constant because a zero state gets stuck at zero.
     struct RandomSeries {

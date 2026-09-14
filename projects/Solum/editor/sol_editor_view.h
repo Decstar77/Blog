@@ -62,6 +62,10 @@ namespace sol {
         // Everything here is in Qt's logical units, mouse position included.
         Vec3 OrthoWorldAt( QPoint position ) const;
 
+        // Nearest primitive under the cursor, picked through whichever pane the
+        // point falls in.
+        bool PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const;
+
         // Left-dragging in the top-down pane pulls out a plane. It is created
         // on press as a unit quad and resized purely through its transform, so
         // dragging costs a matrix rather than a mesh rebuild.

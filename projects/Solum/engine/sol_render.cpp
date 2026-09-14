@@ -686,6 +686,10 @@ namespace sol {
 
         VkDescriptorPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // Individually freeable, so destroying a texture hands its set back.
+        // Without this, loading and dropping textures would walk through the
+        // pool's budget and never get any of it back until shutdown.
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         poolInfo.maxSets = kMaxDescriptorSets;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
@@ -788,10 +792,12 @@ namespace sol {
         dynamic.dynamicStateCount = (u32)SPLATS_ARRAY_COUNT( dynamicStates );
         dynamic.pDynamicStates = dynamicStates;
 
+        // Both stages: the vertex shader reads the matrix and the fragment
+        // shader reads the tint, and one range has to cover the whole block.
         VkPushConstantRange pushRange = {};
-        pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushRange.offset = 0;
-        pushRange.size = (u32)sizeof( Mat4 );
+        pushRange.size = (u32)sizeof( StaticMeshPush );
 
         VkPipelineLayoutCreateInfo layoutInfo = {};
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1041,7 +1047,12 @@ namespace sol {
         return EndOneShotCommands( r, cmd );
     }
 
-    bool RenderTextureCreate( Renderer * r, const TextureAsset & asset, RenderTexture * outTexture ) {
+    // Both halves of a texture's lifetime are internal now: the pool below is
+    // the only thing that owns a RenderTexture, so callers get a handle rather
+    // than a struct they would have to remember to destroy.
+    static void RenderTextureDestroy( Renderer * r, RenderTexture * texture );
+
+    static bool RenderTextureCreate( Renderer * r, const TextureAsset & asset, RenderTexture * outTexture ) {
         *outTexture = {};
 
         if( asset.width <= 0 || asset.height <= 0 ) {
@@ -1156,14 +1167,17 @@ namespace sol {
         return true;
     }
 
-    void RenderTextureDestroy( Renderer * r, RenderTexture * texture ) {
+    static void RenderTextureDestroy( Renderer * r, RenderTexture * texture ) {
         if( r->device == VK_NULL_HANDLE ) {
             return;
         }
 
-        // Descriptor sets are not freed individually: the pool was not created
-        // with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, so destroying
-        // the pool at shutdown is what reclaims them.
+        // The pool carries VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+        // so the set goes back here rather than waiting for the pool itself to
+        // be destroyed at shutdown.
+        if( texture->descriptorSet != VK_NULL_HANDLE && r->descriptorPool != VK_NULL_HANDLE ) {
+            vkFreeDescriptorSets( r->device, r->descriptorPool, 1, &texture->descriptorSet );
+        }
         if( texture->sampler != VK_NULL_HANDLE ) {
             vkDestroySampler( r->device, texture->sampler, nullptr );
         }
@@ -1177,6 +1191,36 @@ namespace sol {
         *texture = {};
     }
 
+    RenderTextureHandle RendererCreateTexture( Renderer * r, const TextureAsset & asset ) {
+        RenderTexture texture = {};
+        if( !RenderTextureCreate( r, asset, &texture ) ) {
+            return {};
+        }
+
+        RenderTextureHandle handle = PoolAdd( r->textures, texture );
+        if( HandleIsNull( handle ) ) {
+            // Nothing can name it, so it would leak until shutdown otherwise.
+            RenderTextureDestroy( r, &texture );
+        }
+        return handle;
+    }
+
+    void RendererDestroyTexture( Renderer * r, RenderTextureHandle handle ) {
+        RenderTexture * texture = PoolGet( r->textures, handle );
+        if( texture == nullptr ) {
+            return;
+        }
+
+        // A frame still in flight may be sampling this image.
+        vkDeviceWaitIdle( r->device );
+        RenderTextureDestroy( r, texture );
+        PoolRemove( r->textures, handle );
+    }
+
+    const RenderTexture * RendererGetTexture( const Renderer * r, RenderTextureHandle handle ) {
+        return PoolGet( r->textures, handle );
+    }
+
     static bool CreateWhiteTexture( Renderer * r ) {
         u8 pixel[4] = { 255, 255, 255, 255 };
 
@@ -1188,9 +1232,9 @@ namespace sol {
         asset.meta.wrap = TextureWrap_Repeat;
         ListAddRange( asset.pixels, pixel, (i32)SPLATS_ARRAY_COUNT( pixel ) );
 
-        bool ok = RenderTextureCreate( r, asset, &r->whiteTexture );
+        r->whiteTexture = RendererCreateTexture( r, asset );
         ListFree( asset.pixels );
-        return ok;
+        return !HandleIsNull( r->whiteTexture );
     }
 
     // Lines either side of the origin per axis. Held constant while the spacing
@@ -1257,16 +1301,19 @@ namespace sol {
         return ok;
     }
 
-    bool RenderStaticMeshCreate( Renderer * r,
-                                 const StaticMeshVertex * vertices, i32 vertexCount,
-                                 const u32 * indices, i32 indexCount,
-                                 const RenderTexture * texture,
-                                 RenderStaticMesh * outMesh ) {
+    static void RenderStaticMeshDestroy( Renderer * r, RenderStaticMesh * mesh );
+
+    static bool RenderStaticMeshCreate( Renderer * r,
+                                        const StaticMeshVertex * vertices, i32 vertexCount,
+                                        const u32 * indices, i32 indexCount,
+                                        RenderTextureHandle texture,
+                                        RenderStaticMesh * outMesh ) {
         *outMesh = {};
         outMesh->transform = Mat4Identity();
-        // Untextured meshes still need a populated descriptor, so they fall
-        // back to the renderer's 1x1 white texture.
-        outMesh->textureSet = texture != nullptr ? texture->descriptorSet : r->whiteTexture.descriptorSet;
+        outMesh->tint = kNoTint;
+        // A null handle here is fine: the draw path resolves it to the white
+        // 1x1 fallback, which is what keeps the descriptor populated.
+        outMesh->texture = texture;
 
         if( vertexCount <= 0 || indexCount <= 0 ) {
             fprintf( stderr, "Static mesh needs both vertices and indices\n" );
@@ -1302,7 +1349,7 @@ namespace sol {
         return true;
     }
 
-    void RenderStaticMeshDestroy( Renderer * r, RenderStaticMesh * mesh ) {
+    static void RenderStaticMeshDestroy( Renderer * r, RenderStaticMesh * mesh ) {
         if( r->device == VK_NULL_HANDLE ) {
             return;
         }
@@ -1317,8 +1364,37 @@ namespace sol {
         *mesh = {};
     }
 
-    RenderStaticMesh * RendererAddStaticMesh( Renderer * r, const RenderStaticMesh & mesh ) {
-        return ListAdd( r->staticMeshes, mesh );
+    RenderMeshHandle RendererCreateStaticMesh( Renderer * r,
+                                               const StaticMeshVertex * vertices, i32 vertexCount,
+                                               const u32 * indices, i32 indexCount,
+                                               RenderTextureHandle texture ) {
+        RenderStaticMesh mesh = {};
+        if( !RenderStaticMeshCreate( r, vertices, vertexCount, indices, indexCount, texture, &mesh ) ) {
+            return {};
+        }
+
+        RenderMeshHandle handle = PoolAdd( r->staticMeshes, mesh );
+        if( HandleIsNull( handle ) ) {
+            RenderStaticMeshDestroy( r, &mesh );
+        }
+        return handle;
+    }
+
+    void RendererDestroyStaticMesh( Renderer * r, RenderMeshHandle handle ) {
+        RenderStaticMesh * mesh = PoolGet( r->staticMeshes, handle );
+        if( mesh == nullptr ) {
+            return;
+        }
+
+        // The buffers about to go back may still be referenced by a frame the
+        // GPU has not finished with.
+        vkDeviceWaitIdle( r->device );
+        RenderStaticMeshDestroy( r, mesh );
+        PoolRemove( r->staticMeshes, handle );
+    }
+
+    RenderStaticMesh * RendererGetStaticMesh( Renderer * r, RenderMeshHandle handle ) {
+        return PoolGet( r->staticMeshes, handle );
     }
 
     bool RendererAddDebugTriangle( Renderer * r ) {
@@ -1341,26 +1417,24 @@ namespace sol {
         };
 
         for( u64 i = 0; i < SPLATS_ARRAY_COUNT( offsets ); i++ ) {
-            RenderStaticMesh mesh = {};
-            if( !RenderStaticMeshCreate( r, vertices, (i32)SPLATS_ARRAY_COUNT( vertices ),
-                                         indices, (i32)SPLATS_ARRAY_COUNT( indices ), nullptr, &mesh ) ) {
+            RenderMeshHandle handle = RendererCreateStaticMesh(
+                r, vertices, (i32)SPLATS_ARRAY_COUNT( vertices ),
+                indices, (i32)SPLATS_ARRAY_COUNT( indices ), {} );
+
+            RenderStaticMesh * mesh = RendererGetStaticMesh( r, handle );
+            if( mesh == nullptr ) {
                 return false;
             }
 
-            mesh.transform = Mat4Identity();
-            mesh.transform.m[0][3] = offsets[i].x;
-            mesh.transform.m[1][3] = offsets[i].y;
-            mesh.transform.m[2][3] = offsets[i].z;
-
-            if( RendererAddStaticMesh( r, mesh ) == nullptr ) {
-                RenderStaticMeshDestroy( r, &mesh );
-                return false;
-            }
+            mesh->transform = Mat4Identity();
+            mesh->transform.m[0][3] = offsets[i].x;
+            mesh->transform.m[1][3] = offsets[i].y;
+            mesh->transform.m[2][3] = offsets[i].z;
         }
         return true;
     }
 
-    bool RendererAddTexturedPlane( Renderer * r, RenderTexture * texture, Vec3 center, f32 size ) {
+    bool RendererAddTexturedPlane( Renderer * r, RenderTextureHandle texture, Vec3 center, f32 size ) {
         const f32 half = size * 0.5f;
         const Vec3 white = { 1.0f, 1.0f, 1.0f };
         const Vec3 normal = { 0.0f, 0.0f, 1.0f };
@@ -1374,20 +1448,23 @@ namespace sol {
         };
         const u32 indices[] = { 0, 1, 2, 0, 2, 3 };
 
-        RenderStaticMesh mesh = {};
-        if( !RenderStaticMeshCreate( r, vertices, (i32)SPLATS_ARRAY_COUNT( vertices ),
-                                     indices, (i32)SPLATS_ARRAY_COUNT( indices ), texture, &mesh ) ) {
-            return false;
-        }
-
-        if( RendererAddStaticMesh( r, mesh ) == nullptr ) {
-            RenderStaticMeshDestroy( r, &mesh );
-            return false;
-        }
-        return true;
+        RenderMeshHandle handle = RendererCreateStaticMesh(
+            r, vertices, (i32)SPLATS_ARRAY_COUNT( vertices ),
+            indices, (i32)SPLATS_ARRAY_COUNT( indices ), texture );
+        return !HandleIsNull( handle );
     }
 
     static bool RecordCommandBuffer( Renderer * r, VkCommandBuffer cmd, i32 imageIndex ) {
+        // The grid binds this, and so does every mesh whose texture handle is
+        // null or stale. Startup fails without it, so losing it is a
+        // should-never-happen - but the alternative to checking is binding a
+        // null descriptor set, which is a device loss rather than a blank frame.
+        const RenderTexture * white = PoolGet( r->textures, r->whiteTexture );
+        if( white == nullptr ) {
+            return false;
+        }
+        const VkDescriptorSet whiteSet = white->descriptorSet;
+
         VkCommandBufferBeginInfo beginInfo = {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         VK_CHECK( vkBeginCommandBuffer( cmd, &beginInfo ) );
@@ -1460,11 +1537,17 @@ namespace sol {
                 vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->gridPipeline );
 
                 // Already in world space, so the view matrix is the whole mvp -
-                // there is no model transform to premultiply.
-                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
-                                    0, (u32)sizeof( Mat4 ), &view.viewProjection );
+                // there is no model transform to premultiply. The whole block
+                // goes every time: pushing only part of it would leave the
+                // fragment shader reading bytes nothing ever wrote.
+                StaticMeshPush gridPush = {};
+                gridPush.mvp = view.viewProjection;
+                gridPush.tint = kNoTint;
+                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
+                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                    0, (u32)sizeof( gridPush ), &gridPush );
                 vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
-                                         0, 1, &r->whiteTexture.descriptorSet, 0, nullptr );
+                                         0, 1, &whiteSet, 0, nullptr );
 
                 VkDeviceSize gridOffset = 0;
                 vkCmdBindVertexBuffers( cmd, 0, 1, &r->gridVertexBuffer, &gridOffset );
@@ -1473,20 +1556,32 @@ namespace sol {
 
             vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipeline );
 
-            for( i32 i = 0; i < r->staticMeshes.count; i++ ) {
-                const RenderStaticMesh & mesh = r->staticMeshes[i];
+            // Slots, not elements: the pool leaves holes where meshes were
+            // destroyed, and PoolAt is what tells the two apart.
+            for( i32 i = 0; i < PoolSlotCount( r->staticMeshes ); i++ ) {
+                const RenderStaticMesh * mesh = PoolAt( r->staticMeshes, i );
+                if( mesh == nullptr ) {
+                    continue;
+                }
 
-                const Mat4 mvp = view.viewProjection * mesh.transform;
-                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
-                                    0, (u32)sizeof( Mat4 ), &mvp );
+                StaticMeshPush push = {};
+                push.mvp = view.viewProjection * mesh->transform;
+                push.tint = mesh->tint;
+                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
+                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                    0, (u32)sizeof( push ), &push );
 
+                // Resolved per draw, so a mesh whose texture was destroyed
+                // falls back to white instead of binding a freed set.
+                const RenderTexture * texture = PoolGet( r->textures, mesh->texture );
+                const VkDescriptorSet meshSet = texture != nullptr ? texture->descriptorSet : whiteSet;
                 vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
-                                         0, 1, &mesh.textureSet, 0, nullptr );
+                                         0, 1, &meshSet, 0, nullptr );
 
                 VkDeviceSize offset = 0;
-                vkCmdBindVertexBuffers( cmd, 0, 1, &mesh.vertexBuffer, &offset );
-                vkCmdBindIndexBuffer( cmd, mesh.indexBuffer, 0, VK_INDEX_TYPE_UINT32 );
-                vkCmdDrawIndexed( cmd, (u32)mesh.indexCount, 1, 0, 0, 0 );
+                vkCmdBindVertexBuffers( cmd, 0, 1, &mesh->vertexBuffer, &offset );
+                vkCmdBindIndexBuffer( cmd, mesh->indexBuffer, 0, VK_INDEX_TYPE_UINT32 );
+                vkCmdDrawIndexed( cmd, (u32)mesh->indexCount, 1, 0, 0, 0 );
             }
         }
 
@@ -1553,7 +1648,7 @@ namespace sol {
     RenderMaterial RenderMaterialDefault() {
         RenderMaterial material = {};
         material.albedo = Vec3{ 1.0f, 1.0f, 1.0f };
-        material.texture = nullptr;
+        material.texture = {};
         return material;
     }
 
@@ -1702,15 +1797,26 @@ namespace sol {
 
         DestroySwapchain( r );
 
-        for( i32 i = 0; i < r->staticMeshes.count; i++ ) {
-            RenderStaticMeshDestroy( r, &r->staticMeshes[i] );
+        for( i32 i = 0; i < PoolSlotCount( r->staticMeshes ); i++ ) {
+            RenderStaticMesh * mesh = PoolAt( r->staticMeshes, i );
+            if( mesh != nullptr ) {
+                RenderStaticMeshDestroy( r, mesh );
+            }
         }
-        ListFree( r->staticMeshes );
+        PoolFree( r->staticMeshes );
 
-        // Before the pool: destroying the pool implicitly frees every set
-        // allocated from it, but the image/view/sampler it points at are this
-        // texture's own and still need an explicit teardown.
-        RenderTextureDestroy( r, &r->whiteTexture );
+        // Before the descriptor pool: destroying that implicitly frees every
+        // set allocated from it, but the image, view and sampler each texture
+        // points at are its own and still need an explicit teardown. The white
+        // fallback lives in here too, so it needs no separate pass.
+        for( i32 i = 0; i < PoolSlotCount( r->textures ); i++ ) {
+            RenderTexture * texture = PoolAt( r->textures, i );
+            if( texture != nullptr ) {
+                RenderTextureDestroy( r, texture );
+            }
+        }
+        PoolFree( r->textures );
+        r->whiteTexture = {};
 
         if( r->gridVertexBuffer != VK_NULL_HANDLE ) {
             vmaDestroyBuffer( r->allocator, r->gridVertexBuffer, r->gridVertexAllocation );

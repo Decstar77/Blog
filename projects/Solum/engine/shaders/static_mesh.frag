@@ -10,6 +10,12 @@ layout( location = 0 ) out vec4 outColor;
 // the renderer's white 1x1 fallback so this sample is always valid.
 layout( set = 0, binding = 0 ) uniform sampler2D texSampler;
 
+// Must match the block in static_mesh.vert exactly - see the note there.
+layout( push_constant, row_major ) uniform PushConstants {
+    mat4 mvp;
+    vec4 tint;
+} push;
+
 // A fixed key light, until there are real lights in the world. Without it a
 // solid-coloured box renders as one flat silhouette with no visible edges,
 // which makes modelling in the viewport impossible to judge.
@@ -25,5 +31,7 @@ void main() {
     float diffuse = max( dot( normal, kLightDirection ), 0.0 );
     float lighting = kAmbient + ( 1.0 - kAmbient ) * diffuse;
 
-    outColor = vec4( fragColor * lighting, 1.0 ) * texel;
+    // The tint is a multiply, so a selected object brightens and shifts without
+    // losing the shading that says which way its faces point.
+    outColor = vec4( fragColor * lighting, 1.0 ) * texel * push.tint;
 }

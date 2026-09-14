@@ -168,8 +168,6 @@ int main() {
         sol::RendererAddDebugTriangle( &renderer );
     }
 
-    sol::RenderTexture brickTexture = {};
-    bool haveBrickTexture = false;
     if( started ) {
         sol::TextureAsset textureAsset = {};
         bool loadedFromDisk = sol::TextureAssetLoad( sol::kBrickTextureMetaPath, &textureAsset );
@@ -179,16 +177,18 @@ int main() {
             textureAsset = sol::MakeCheckerboardFallback();
         }
 
-        haveBrickTexture = sol::RenderTextureCreate( &renderer, textureAsset, &brickTexture );
-        if( !haveBrickTexture ) {
+        // The renderer owns the texture from here on, so there is nothing to
+        // release at shutdown beyond shutting the renderer down.
+        sol::RenderTextureHandle brickTexture = sol::RendererCreateTexture( &renderer, textureAsset );
+        if( sol::HandleIsNull( brickTexture ) ) {
             fprintf( stderr, "Failed to create the brick/checkerboard render texture\n" );
-        } else if( !sol::RendererAddTexturedPlane( &renderer, &brickTexture,
+        } else if( !sol::RendererAddTexturedPlane( &renderer, brickTexture,
                                                     sol::Vec3{ 0.0f, 0.0f, 0.0f }, 2.0f ) ) {
             fprintf( stderr, "Failed to add the textured plane\n" );
         }
 
         // The CPU-side copy is only needed for the upload above; the renderer
-        // now owns a GPU-resident copy in brickTexture.
+        // now owns a GPU-resident copy.
         if( loadedFromDisk ) {
             sol::TextureAssetFree( &textureAsset );
         } else {
@@ -235,9 +235,6 @@ int main() {
         sol::RendererDrawFrame( &renderer );
     }
 
-    if( haveBrickTexture ) {
-        sol::RenderTextureDestroy( &renderer, &brickTexture );
-    }
     sol::RendererShutdown( &renderer );
     glfwDestroyWindow( window );
     glfwTerminate();

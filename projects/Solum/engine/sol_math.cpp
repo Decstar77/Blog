@@ -170,6 +170,48 @@ namespace sol {
         return Vec3{ -a.m[0][2], -a.m[1][2], -a.m[2][2] };
     }
 
+    bool RayAabbIntersect( Vec3 origin, Vec3 direction, Vec3 boundsMin, Vec3 boundsMax,
+                           f32 * outDistance ) {
+        f32 tMin = 0.0f;
+        f32 tMax = 3.4e38f;
+
+        const f32 o[3] = { origin.x, origin.y, origin.z };
+        const f32 d[3] = { direction.x, direction.y, direction.z };
+        const f32 lo[3] = { boundsMin.x, boundsMin.y, boundsMin.z };
+        const f32 hi[3] = { boundsMax.x, boundsMax.y, boundsMax.z };
+
+        for( i32 axis = 0; axis < 3; axis++ ) {
+            if( d[axis] > -1e-8f && d[axis] < 1e-8f ) {
+                // Parallel to this pair of planes, so it either started between
+                // them or it never crosses them at all.
+                if( o[axis] < lo[axis] || o[axis] > hi[axis] ) {
+                    return false;
+                }
+                continue;
+            }
+
+            const f32 inverse = 1.0f / d[axis];
+            f32 near = ( lo[axis] - o[axis] ) * inverse;
+            f32 far = ( hi[axis] - o[axis] ) * inverse;
+            if( near > far ) {
+                const f32 swap = near;
+                near = far;
+                far = swap;
+            }
+
+            if( near > tMin ) { tMin = near; }
+            if( far < tMax )  { tMax = far; }
+            if( tMin > tMax ) {
+                return false;
+            }
+        }
+
+        if( outDistance != nullptr ) {
+            *outDistance = tMin;
+        }
+        return true;
+    }
+
     f32 FocalLengthFromFovX( f32 fovX, i32 imageWidth ) {
         return 0.5f * (f32)imageWidth / tanf( 0.5f * fovX );
     }

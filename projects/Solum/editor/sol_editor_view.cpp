@@ -23,7 +23,7 @@ namespace sol {
     constexpr i32 kGridStepCount = (i32)( sizeof( kGridSteps ) / sizeof( kGridSteps[0] ) );
 
     VulkanView::VulkanView( Renderer * renderer )
-        : renderer( renderer ), world(), started( false ), startFailed( false ),
+        : renderer( renderer ), world( WorldCreate() ), started( false ), startFailed( false ),
           camera( FlyCameraDefault() ), topCamera( OrthoCameraDefault( OrthoAxis_Top ) ),
           input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
           createPrimitive( kNoPrimitive ), createStart(),
@@ -182,6 +182,22 @@ namespace sol {
                                          (f32)position.y(), paneWidth, height() );
     }
 
+    bool VulkanView::PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const {
+        const i32 splitX = (i32)( width() * kSplitFraction );
+
+        Vec3 origin = {};
+        Vec3 direction = {};
+        if( pane == Pane_Perspective ) {
+            FlyCameraScreenRay( camera, (f32)position.x(), (f32)position.y(),
+                                splitX, height(), &origin, &direction );
+        } else {
+            OrthoCameraScreenRay( topCamera, (f32)( position.x() - splitX ), (f32)position.y(),
+                                  width() - splitX, height(), &origin, &direction );
+        }
+
+        return WorldPick( world, renderer, origin, direction, outPrimitive );
+    }
+
     void VulkanView::BeginCreate( QPoint position ) {
         if( createPrimitive != kNoPrimitive || !started ) {
             return;
@@ -206,6 +222,8 @@ namespace sol {
             return;
         }
 
+        // Whatever you just made is what you are working on.
+        WorldSetSelected( world, renderer, createPrimitive );
         UpdateCreate( position );
     }
 
@@ -267,8 +285,20 @@ namespace sol {
         const QPoint position = event->position().toPoint();
         if( event->button() == Qt::RightButton ) {
             BeginDrag( PaneAt( position ) );
-        } else if( event->button() == Qt::LeftButton && PaneAt( position ) == Pane_Top ) {
-            BeginCreate( position );
+        } else if( event->button() == Qt::LeftButton ) {
+            // Selecting wins over creating: a click that lands on something
+            // picks it, and only empty space starts a new plane. Placing one
+            // on top of another therefore needs the space cleared first.
+            const Pane pane = PaneAt( position );
+            i32 hit = kNoPrimitive;
+            if( PickAt( position, pane, &hit ) ) {
+                WorldSetSelected( world, renderer, hit );
+            } else {
+                WorldSetSelected( world, renderer, kNoPrimitive );
+                if( pane == Pane_Top ) {
+                    BeginCreate( position );
+                }
+            }
         }
         QWindow::mousePressEvent( event );
     }

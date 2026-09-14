@@ -3,6 +3,7 @@
 #include "sol_defines.h"
 #include "sol_list.h"
 #include "sol_math.h"
+#include "sol_pool.h"
 
 #include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
@@ -15,6 +16,17 @@ namespace sol {
         Vec3    color;
         Vec2    uv;
     };
+
+    // Pushed once per draw. Small enough to sit inside the 128 bytes every
+    // Vulkan implementation guarantees, which is what lets the selection
+    // highlight be a push rather than a rebuilt vertex buffer.
+    struct StaticMeshPush {
+        Mat4    mvp;
+        Vec4    tint;
+    };
+
+    // Multiplied into the fragment colour, so this leaves it untouched.
+    constexpr Vec4 kNoTint = { 1.0f, 1.0f, 1.0f, 1.0f };
 
     // A GPU-resident, sampleable image plus the sampler that reads it. One of
     // these per loaded texture; the descriptor set is baked in at creation time
@@ -31,6 +43,11 @@ namespace sol {
         VkDescriptorSet     descriptorSet;
     };
 
+    // How everything outside the renderer names a texture. The renderer owns
+    // the RenderTexture itself; a null handle means "no texture", which the
+    // draw path resolves to the white fallback.
+    using RenderTextureHandle = Handle<RenderTexture>;
+
     // One indexed draw out of device-local memory. Every mesh the renderer draws
     // ends up as one of these, so the upload path and the pipeline are shared.
     struct RenderStaticMesh {
@@ -43,11 +60,18 @@ namespace sol {
         // Model to world. The renderer premultiplies the camera onto this before
         // pushing it to the vertex shader.
         Mat4            transform;
-        // Every mesh must bind something here - Vulkan requires the combined
-        // image sampler at set 0 binding 0 to be populated. Meshes that do not
-        // care about a texture get the renderer's white 1x1 fallback.
-        VkDescriptorSet textureSet;
+        // Multiplied into every fragment. kNoTint normally; the editor drives
+        // this to highlight a selection without touching the mesh itself.
+        Vec4            tint;
+        // Resolved to a descriptor set at record time rather than baked in
+        // here, so destroying or reloading a texture cannot leave a mesh
+        // bound to a set that no longer points anywhere. A null handle - and
+        // a stale one - lands on the renderer's white 1x1 fallback, which is
+        // what keeps set 0 binding 0 populated the way Vulkan requires.
+        RenderTextureHandle texture;
     };
+
+    using RenderMeshHandle = Handle<RenderStaticMesh>;
 
     // What a surface is made of, as far as the one pipeline currently cares:
     // a tint multiplied into every vertex, and the texture it samples.
@@ -55,7 +79,7 @@ namespace sol {
         Vec3                    albedo;
         // Null falls back to the renderer's white 1x1, so the tint comes
         // through unmodified.
-        const RenderTexture *   texture;
+        RenderTextureHandle     texture;
     };
 
     // Zeroing a RenderMaterial would give it a black albedo, so anything that
@@ -130,9 +154,13 @@ namespace sol {
         // per mesh before its draw call.
         VkDescriptorSetLayout       textureSetLayout;
         VkDescriptorPool            descriptorPool;
+        // Every texture the renderer owns. Handed out as handles, so a texture
+        // can be destroyed without anything still naming it reading freed
+        // Vulkan objects.
+        Pool<RenderTexture>         textures;
         // 1x1 opaque white, so a mesh with no real texture still satisfies the
         // descriptor requirement and renders as if unlit by any texture at all.
-        RenderTexture               whiteTexture;
+        RenderTextureHandle         whiteTexture;
 
         // Viewport and scissor are dynamic, so a resize never rebuilds this.
         VkPipelineLayout            staticMeshPipelineLayout;
@@ -150,9 +178,11 @@ namespace sol {
         // grows its extent with this, so it stays useful at every zoom instead
         // of turning to mush when the spacing drops.
         f32                         gridSpacing;
-        // Drawn in order every frame. The renderer owns these and frees them on
-        // shutdown.
-        List<RenderStaticMesh>      staticMeshes;
+        // Drawn in slot order every frame. The renderer owns these and frees
+        // them on shutdown. A pool rather than a list because the world stores
+        // references to individual meshes, and a list index stops naming the
+        // same mesh the moment one is removed.
+        Pool<RenderStaticMesh>      staticMeshes;
         // Whoever owns the cameras sets these. Startup leaves one full-surface
         // view at identity, which draws meshes straight in clip space.
         RenderView                  views[kMaxRenderViews];
@@ -200,16 +230,21 @@ namespace sol {
 
     void RendererDrawFrame( Renderer * r );
 
-    // Uploads through a staging buffer, so the mesh lands in device-local memory.
-    // Blocks until the copy is done - fine for load-time geometry, not for streaming.
-    // texture may be null, in which case the mesh binds the renderer's white
-    // fallback so its descriptor is still valid.
-    bool RenderStaticMeshCreate( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount, const u32 * indices, i32 indexCount, const RenderTexture * texture, RenderStaticMesh * outMesh );
-    void RenderStaticMeshDestroy( Renderer * r, RenderStaticMesh * mesh );
+    // Uploads through a staging buffer, so the mesh lands in device-local memory,
+    // then hands it to the renderer, which draws it every frame and owns it from
+    // here on. Blocks until the copy is done - fine for load-time geometry, not
+    // for streaming. A null texture handle binds the white fallback.
+    // Returns a null handle on failure.
+    RenderMeshHandle RendererCreateStaticMesh( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount, const u32 * indices, i32 indexCount, RenderTextureHandle texture );
 
-    // Hands the mesh to the renderer, which draws it every frame and owns it from
-    // here on. Returns the stored copy, or nullptr if it could not be stored.
-    RenderStaticMesh * RendererAddStaticMesh( Renderer * r, const RenderStaticMesh & mesh );
+    // Frees the mesh's buffers and retires its slot, so every handle onto it
+    // stops resolving. Idles the device first, since a frame in flight may
+    // still be reading those buffers - a stall, same as RendererSetGridSpacing.
+    void RendererDestroyStaticMesh( Renderer * r, RenderMeshHandle handle );
+
+    // Null for a stale or null handle. The pointer is good until the next add
+    // or remove on the mesh pool, so write through it and do not store it.
+    RenderStaticMesh * RendererGetStaticMesh( Renderer * r, RenderMeshHandle handle );
 
     // Placeholder geometry so there is something on screen. Delete once real
     // meshes are being loaded.
@@ -217,12 +252,19 @@ namespace sol {
 
     // A two-triangle quad in the XY plane, facing +z, uvs spanning 0..1 across
     // it, vertex colour white so the sampled texel comes through unmodified.
-    bool RendererAddTexturedPlane( Renderer * r, RenderTexture * texture, Vec3 center, f32 size );
+    bool RendererAddTexturedPlane( Renderer * r, RenderTextureHandle texture, Vec3 center, f32 size );
 
     // Uploads asset.pixels through a staging buffer into a sampled, shader-read-
     // only-optimal image, and bakes a descriptor set pointing at it. Blocks
-    // until the upload completes, same as RenderStaticMeshCreate.
-    bool RenderTextureCreate( Renderer * r, const TextureAsset & asset, RenderTexture * outTexture );
-    void RenderTextureDestroy( Renderer * r, RenderTexture * texture );
+    // until the upload completes, same as RendererCreateStaticMesh. The renderer
+    // owns the result; callers keep only the handle. Null handle on failure.
+    RenderTextureHandle RendererCreateTexture( Renderer * r, const TextureAsset & asset );
+
+    // Meshes still naming this texture fall back to white rather than break.
+    // Idles the device first, for the same reason the mesh teardown does.
+    void RendererDestroyTexture( Renderer * r, RenderTextureHandle handle );
+
+    // Null for a stale or null handle. Same lifetime caveat as the mesh getter.
+    const RenderTexture * RendererGetTexture( const Renderer * r, RenderTextureHandle handle );
 
 } // namespace sol
