@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sol_camera.h"
+#include "sol_editor_gizmo.h"
 #include "sol_render.h"
 #include "sol_world.h"
 
@@ -62,9 +63,22 @@ namespace sol {
         // Everything here is in Qt's logical units, mouse position included.
         Vec3 OrthoWorldAt( QPoint position ) const;
 
+        // The cursor ray through whichever pane the point falls in.
+        void RayAt( QPoint position, Pane pane, Vec3 * outOrigin, Vec3 * outDirection ) const;
+
         // Nearest primitive under the cursor, picked through whichever pane the
         // point falls in.
         bool PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const;
+
+        // T and R put the translate and rotate gizmo up on the selection, and
+        // pressing the same key again takes it down.
+        void SetGizmoMode( GizmoMode mode );
+        // Moves the gizmo onto the selection and sizes it for this frame. Also
+        // what makes it pickable, since picking reads that centre and size.
+        void UpdateGizmo();
+        // True when the press was taken by a gizmo handle, in which case it is
+        // not also a selection click.
+        bool BeginGizmoDrag( QPoint position, Pane pane );
 
         // Left-dragging in the top-down pane pulls out a plane. Nothing is
         // created on press - see ArmCreate - and once it is, it starts as a
@@ -121,6 +135,9 @@ namespace sol {
         // clicks stop picking objects, so the subject cannot change without
         // leaving edit mode first.
         i32                 editPrimitive;
+        // Drives the selection's transform. Only up in object mode: in edit
+        // mode the subject is the geometry, not the object.
+        Gizmo               gizmo;
         // Screen position the cursor is warped back to while dragging, which is
         // how an unbounded drag is emulated without GLFW's disabled-cursor mode.
         QPoint              dragAnchor;

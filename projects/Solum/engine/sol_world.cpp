@@ -4,6 +4,17 @@
 
 namespace sol {
 
+    Transform TransformDefault() {
+        Transform transform = {};
+        transform.scale = Vec3{ 1.0f, 1.0f, 1.0f };
+        return transform;
+    }
+
+    Mat4 TransformToMat4( const Transform & transform ) {
+        return Mat4Translate( transform.position ) * Mat4FromEuler( transform.rotation ) *
+               Mat4Scale( transform.scale );
+    }
+
     World WorldCreate() {
         World world = {};
         world.selected = kNoPrimitive;
@@ -41,18 +52,19 @@ namespace sol {
         return handle;
     }
 
-    i32 WorldAddPrimitive( World & world, Renderer * r, const HalfMesh & halfMesh, const RenderMaterial & material, const Mat4 & transform ) {
+    i32 WorldAddPrimitive( World & world, Renderer * r, const HalfMesh & halfMesh, const RenderMaterial & material, const Transform & transform ) {
         RenderMeshHandle renderMesh = RenderMeshFromHalfMesh( r, halfMesh, material );
         RenderStaticMesh * mesh = RendererGetStaticMesh( r, renderMesh );
         if( mesh == nullptr ) {
             return kNoPrimitive;
         }
-        mesh->transform = transform;
+        mesh->transform = TransformToMat4( transform );
 
         Primitive primitive = {};
         primitive.halfMesh = HalfMeshCopy( halfMesh );
         primitive.material = material;
         primitive.renderMesh = renderMesh;
+        primitive.transform = transform;
 
         if( ListAdd( world.primitives, primitive ) == nullptr ) {
             HalfMeshFree( primitive.halfMesh );
@@ -74,9 +86,9 @@ namespace sol {
             return false;
         }
 
-        // Carried across the rebuild, or a selected primitive would drop its
-        // highlight while it stayed selected.
-        const Mat4 transform = previous->transform;
+        // The transform comes from the primitive now, so only the tint has to
+        // be carried across - dropping it would unhighlight a selected object.
+        const Mat4 transform = TransformToMat4( entry.transform );
         const Vec4 tint = previous->tint;
 
         // Built the replacement first, so a failure here leaves the old mesh
@@ -94,10 +106,12 @@ namespace sol {
         return true;
     }
 
-    void WorldSetPrimitiveTransform( World & world, Renderer * r, i32 primitive, const Mat4 & transform ) {
+    void WorldSetPrimitiveTransform( World & world, Renderer * r, i32 primitive, const Transform & transform ) {
         if( primitive < 0 || primitive >= world.primitives.count ) {
             return;
         }
+
+        world.primitives[primitive].transform = transform;
 
         RenderStaticMesh * mesh = RendererGetStaticMesh( r, world.primitives[primitive].renderMesh );
         if( mesh == nullptr ) {
@@ -106,7 +120,18 @@ namespace sol {
 
         // Read fresh on the CPU when the next frame records, so there is
         // nothing to synchronise against here.
-        mesh->transform = transform;
+        mesh->transform = TransformToMat4( transform );
+    }
+
+    bool WorldGetPrimitiveTransform( const World & world, i32 primitive, Transform * outTransform ) {
+        if( primitive < 0 || primitive >= world.primitives.count ) {
+            return false;
+        }
+
+        if( outTransform != nullptr ) {
+            *outTransform = world.primitives[primitive].transform;
+        }
+        return true;
     }
 
     // A plane is a zero-thickness box, and floating point can turn that slab
@@ -313,8 +338,9 @@ namespace sol {
         HalfMesh cube = {};
         HalfMeshCreateCube( cube, 2 );
         material.albedo = Vec3{ 0.72f, 0.74f, 0.78f };
-        bool ok = WorldAddPrimitive( world, r, cube, material,
-                                     Mat4Translate( Vec3{ -1.6f, 1.0f, 0.0f } ) ) != kNoPrimitive;
+        Transform cubeTransform = TransformDefault();
+        cubeTransform.position = Vec3{ -1.6f, 1.0f, 0.0f };
+        bool ok = WorldAddPrimitive( world, r, cube, material, cubeTransform ) != kNoPrimitive;
         HalfMeshFree( cube );
 
         HalfMesh tower = {};
@@ -333,7 +359,9 @@ namespace sol {
         }
 
         material.albedo = Vec3{ 0.78f, 0.62f, 0.45f };
-        ok = ok && WorldAddPrimitive( world, r, tower, material, Mat4Translate( Vec3{ 1.6f, 1.0f, 0.0f } ) ) != kNoPrimitive;
+        Transform towerTransform = TransformDefault();
+        towerTransform.position = Vec3{ 1.6f, 1.0f, 0.0f };
+        ok = ok && WorldAddPrimitive( world, r, tower, material, towerTransform ) != kNoPrimitive;
         HalfMeshFree( tower );
 
         if( !ok ) {

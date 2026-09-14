@@ -30,7 +30,7 @@ namespace sol {
           input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
           createPrimitive( kNoPrimitive ), createStart(),
           createPending( false ), createPressPosition(),
-          editPrimitive( kNoPrimitive ),
+          editPrimitive( kNoPrimitive ), gizmo( GizmoCreate() ),
           dragAnchor(), frameTimer() {
         setSurfaceType( QSurface::VulkanSurface );
     }
@@ -75,6 +75,13 @@ namespace sol {
         }
 
         WorldCreateDefaultLevel( world, renderer );
+
+        // Local-space geometry that never changes, so it is uploaded once and
+        // then only ever repositioned by a push constant.
+        List<StaticMeshVertex> gizmoVertices = {};
+        GizmoBuildGeometry( gizmo, gizmoVertices );
+        RendererSetGizmoGeometry( renderer, gizmoVertices.data, gizmoVertices.count );
+        ListFree( gizmoVertices );
 
         started = true;
         return true;
@@ -129,6 +136,8 @@ namespace sol {
         views[1].width = 1.0f - kSplitFraction;
         views[1].height = 1.0f;
         views[1].viewProjection = OrthoCameraViewProjection( topCamera, rightWidth, surfaceHeight );
+
+        UpdateGizmo();
 
         RendererSetViews( renderer, views, 2 );
         RendererDrawFrame( renderer );
@@ -186,20 +195,80 @@ namespace sol {
                                          (f32)position.y(), paneWidth, height() );
     }
 
-    bool VulkanView::PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const {
+    void VulkanView::RayAt( QPoint position, Pane pane, Vec3 * outOrigin, Vec3 * outDirection ) const {
         const i32 splitX = (i32)( width() * kSplitFraction );
+
+        if( pane == Pane_Perspective ) {
+            FlyCameraScreenRay( camera, (f32)position.x(), (f32)position.y(),
+                                splitX, height(), outOrigin, outDirection );
+        } else {
+            OrthoCameraScreenRay( topCamera, (f32)( position.x() - splitX ), (f32)position.y(),
+                                  width() - splitX, height(), outOrigin, outDirection );
+        }
+    }
+
+    bool VulkanView::PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const {
+        Vec3 origin = {};
+        Vec3 direction = {};
+        RayAt( position, pane, &origin, &direction );
+        return WorldPick( world, renderer, origin, direction, outPrimitive );
+    }
+
+    void VulkanView::SetGizmoMode( GizmoMode mode ) {
+        // The same key twice is how you put the gizmo away.
+        gizmo.mode = gizmo.mode == mode ? GizmoMode_None : mode;
+        if( gizmo.mode == GizmoMode_None ) {
+            GizmoEndDrag( gizmo );
+            gizmo.hovered = GizmoAxis_None;
+        }
+    }
+
+    void VulkanView::UpdateGizmo() {
+        // Edit mode owns the object's geometry, so the object-level gizmo steps
+        // aside rather than offering to move the thing being edited.
+        Transform transform = {};
+        const bool show = gizmo.mode != GizmoMode_None && editPrimitive == kNoPrimitive &&
+                          WorldGetPrimitiveTransform( world, world.selected, &transform );
+
+        RendererSetGizmoVisible( renderer, show );
+        if( !show ) {
+            GizmoEndDrag( gizmo );
+            gizmo.hovered = GizmoAxis_None;
+            return;
+        }
+
+        // Not updated mid-drag: the handle has to stay where it was grabbed, or
+        // moving the object would move the axis the drag is measured against.
+        if( gizmo.active == GizmoAxis_None ) {
+            gizmo.center = transform.position;
+            // Sized off the perspective camera, which is where objects are
+            // mostly handled. The top-down pane draws it at that same world
+            // size rather than one of its own.
+            gizmo.scale = GizmoScaleFor( gizmo.center, camera.position );
+        }
+
+        RenderGizmoRange ranges[kGizmoRangeCount] = {};
+        const i32 rangeCount = GizmoDrawRanges( gizmo, ranges );
+        RendererSetGizmoDraw( renderer, GizmoDrawTransform( gizmo ), ranges, rangeCount );
+    }
+
+    bool VulkanView::BeginGizmoDrag( QPoint position, Pane pane ) {
+        Transform transform = {};
+        if( gizmo.mode == GizmoMode_None || editPrimitive != kNoPrimitive ||
+            !WorldGetPrimitiveTransform( world, world.selected, &transform ) ) {
+            return false;
+        }
 
         Vec3 origin = {};
         Vec3 direction = {};
-        if( pane == Pane_Perspective ) {
-            FlyCameraScreenRay( camera, (f32)position.x(), (f32)position.y(),
-                                splitX, height(), &origin, &direction );
-        } else {
-            OrthoCameraScreenRay( topCamera, (f32)( position.x() - splitX ), (f32)position.y(),
-                                  width() - splitX, height(), &origin, &direction );
+        RayAt( position, pane, &origin, &direction );
+
+        const GizmoAxis axis = GizmoPick( gizmo, origin, direction );
+        if( axis == GizmoAxis_None ) {
+            return false;
         }
 
-        return WorldPick( world, renderer, origin, direction, outPrimitive );
+        return GizmoBeginDrag( gizmo, axis, transform, origin, direction );
     }
 
     void VulkanView::ArmCreate( QPoint position ) {
@@ -232,7 +301,7 @@ namespace sol {
         RenderMaterial material = RenderMaterialDefault();
         material.albedo = Vec3{ 0.45f, 0.62f, 0.50f };
 
-        createPrimitive = WorldAddPrimitive( world, renderer, quad, material, Mat4Identity() );
+        createPrimitive = WorldAddPrimitive( world, renderer, quad, material, TransformDefault() );
         HalfMeshFree( quad );
 
         if( createPrimitive == kNoPrimitive ) {
@@ -263,11 +332,11 @@ namespace sol {
         if( maxX - minX < step ) { maxX = minX + step; }
         if( maxZ - minZ < step ) { maxZ = minZ + step; }
 
-        const Vec3 center = { 0.5f * ( minX + maxX ), 0.0f, 0.5f * ( minZ + maxZ ) };
-        const Vec3 scale = { maxX - minX, 1.0f, maxZ - minZ };
+        Transform transform = TransformDefault();
+        transform.position = Vec3{ 0.5f * ( minX + maxX ), 0.0f, 0.5f * ( minZ + maxZ ) };
+        transform.scale = Vec3{ maxX - minX, 1.0f, maxZ - minZ };
 
-        WorldSetPrimitiveTransform( world, renderer, createPrimitive,
-                                    Mat4Translate( center ) * Mat4Scale( scale ) );
+        WorldSetPrimitiveTransform( world, renderer, createPrimitive, transform );
     }
 
     void VulkanView::EndCreate() {
@@ -356,6 +425,14 @@ namespace sol {
             if( event->key() == Qt::Key_Tab ) {
                 ToggleEditMode();
             }
+
+            if( event->key() == Qt::Key_T ) {
+                SetGizmoMode( GizmoMode_Translate );
+            }
+
+            if( event->key() == Qt::Key_R ) {
+                SetGizmoMode( GizmoMode_Rotate );
+            }
         }
         QWindow::keyPressEvent( event );
     }
@@ -376,6 +453,13 @@ namespace sol {
         if( event->button() == Qt::RightButton ) {
             BeginDrag( PaneAt( position ) );
         } else if( event->button() == Qt::LeftButton ) {
+            // A press on a handle is a drag of the selection, never a pick of
+            // whatever happens to lie behind it.
+            if( BeginGizmoDrag( position, PaneAt( position ) ) ) {
+                QWindow::mousePressEvent( event );
+                return;
+            }
+
             // Edit mode locks on to its subject. While the cage is up a left
             // click is not a way to pick a different object, nor to place a new
             // one - both would move the selection out from under the cage.
@@ -407,12 +491,28 @@ namespace sol {
             EndDrag();
         } else if( event->button() == Qt::LeftButton ) {
             EndCreate();
+            GizmoEndDrag( gizmo );
         }
         QWindow::mouseReleaseEvent( event );
     }
 
     void VulkanView::mouseMoveEvent( QMouseEvent * event ) {
         const QPoint position = event->position().toPoint();
+
+        if( gizmo.mode != GizmoMode_None && !dragging ) {
+            Vec3 origin = {};
+            Vec3 direction = {};
+            RayAt( position, PaneAt( position ), &origin, &direction );
+
+            if( gizmo.active != GizmoAxis_None ) {
+                Transform transform = {};
+                if( GizmoUpdateDrag( gizmo, origin, direction, renderer->gridSpacing, &transform ) ) {
+                    WorldSetPrimitiveTransform( world, renderer, world.selected, transform );
+                }
+            } else {
+                gizmo.hovered = GizmoPick( gizmo, origin, direction );
+            }
+        }
 
         // The platform's own click-versus-drag threshold, so this matches what
         // every other application on the machine considers a drag. Measured
@@ -467,6 +567,7 @@ namespace sol {
         // when focus leaves would otherwise stick on forever.
         EndDrag();
         EndCreate();
+        GizmoEndDrag( gizmo );
         input = {};
         topInput = {};
         QWindow::focusOutEvent( event );

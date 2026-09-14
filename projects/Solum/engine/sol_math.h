@@ -42,6 +42,12 @@ namespace sol {
     Mat4    Mat4Translate( Vec3 translation );
     Mat4    Mat4Scale( Vec3 scale );
 
+    Mat4    Mat4RotateX( f32 radians );
+    Mat4    Mat4RotateY( f32 radians );
+    Mat4    Mat4RotateZ( f32 radians );
+    // Ry * Rx * Rz, matching the camera's yaw-then-pitch convention.
+    Mat4    Mat4FromEuler( Vec3 radians );
+
     // Nearest multiple of step. step <= 0 passes the value straight through, so
     // callers do not have to guard a disabled snap.
     f32     SnapTo( f32 value, f32 step );
@@ -79,6 +85,15 @@ namespace sol {
     // normalised, but the distance comes back in units of it if it is not.
     bool    RayAabbIntersect( Vec3 origin, Vec3 direction, Vec3 boundsMin, Vec3 boundsMax,
                               f32 * outDistance );
+
+    // Point on the infinite line through linePoint that is nearest the ray.
+    // outLineT is the parameter along lineDir. False when the two are parallel.
+    bool    RayLineClosest( Vec3 rayOrigin, Vec3 rayDirection, Vec3 linePoint, Vec3 lineDirection,
+                            f32 * outLineT );
+
+    // Distance along the ray to the plane. False when the ray runs parallel to it.
+    bool    RayPlaneIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 planePoint, Vec3 planeNormal,
+                               f32 * outDistance );
 
     // xorshift32. Seeded explicitly so a given seed always replays the same stream, and 0 is
     // folded to a non zero constant because a zero state gets stuck at zero.

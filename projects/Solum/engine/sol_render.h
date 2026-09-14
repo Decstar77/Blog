@@ -106,6 +106,16 @@ namespace sol {
         bool            visible;
     };
 
+    // A slice of the gizmo's vertex buffer drawn with its own tint, which is how
+    // one static buffer carries handles that highlight independently.
+    struct RenderGizmoRange {
+        i32     firstVertex;
+        i32     vertexCount;
+        Vec4    tint;
+    };
+
+    constexpr i32 kMaxGizmoRanges = 8;
+
     // One rectangle of the surface, drawn with its own camera. The whole scene
     // is walked once per view, so a 3D pane and a top-down pane are two views
     // over the same mesh list rather than two renderers.
@@ -198,6 +208,16 @@ namespace sol {
         // handles to a single pixel - Vulkan permits no other size there.
         bool                        largePoints;
         RenderEditOverlay           editOverlay;
+
+        // Static local-space geometry uploaded once; the transform and tints
+        // are per frame, so following a moving object costs no GPU work.
+        VkBuffer                    gizmoVertexBuffer;
+        VmaAllocation               gizmoVertexAllocation;
+        i32                         gizmoVertexCount;
+        RenderGizmoRange            gizmoRanges[kMaxGizmoRanges];
+        i32                         gizmoRangeCount;
+        Mat4                        gizmoTransform;
+        bool                        gizmoVisible;
         // World-space grid on the y = 0 plane, drawn in every view before the
         // meshes. Vertices only: a line list has nothing to index.
         VkBuffer                    gridVertexBuffer;
@@ -267,6 +287,15 @@ namespace sol {
     // Takes the cage down and hands its buffers back. Cheap when there is no
     // cage up, so it is safe to call unconditionally.
     void RendererClearEditOverlay( Renderer * r );
+
+    // Uploads the gizmo's local-space line geometry. Idles the device, so this
+    // belongs at startup rather than in a frame.
+    bool RendererSetGizmoGeometry( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount );
+
+    // Where to draw that geometry and how to tint each slice of it. CPU state
+    // only, so this is the per-frame call.
+    void RendererSetGizmoDraw( Renderer * r, const Mat4 & transform, const RenderGizmoRange * ranges, i32 rangeCount );
+    void RendererSetGizmoVisible( Renderer * r, bool visible );
 
     void RendererDrawFrame( Renderer * r );
 

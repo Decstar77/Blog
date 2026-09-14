@@ -1643,6 +1643,33 @@ namespace sol {
                     vkCmdDraw( cmd, (u32)r->editOverlay.pointVertexCount, 1, 0, 0 );
                 }
             }
+
+            // One draw per range so each handle can carry its own tint, which
+            // is what lets the hovered axis light up without a second buffer.
+            if( r->gizmoVisible && r->gizmoVertexCount > 0 ) {
+                vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->editLinePipeline );
+                vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
+                                         0, 1, &whiteSet, 0, nullptr );
+
+                VkDeviceSize gizmoOffset = 0;
+                vkCmdBindVertexBuffers( cmd, 0, 1, &r->gizmoVertexBuffer, &gizmoOffset );
+
+                for( i32 g = 0; g < r->gizmoRangeCount; g++ ) {
+                    const RenderGizmoRange & range = r->gizmoRanges[g];
+                    if( range.vertexCount <= 0 ) {
+                        continue;
+                    }
+
+                    StaticMeshPush gizmoPush = {};
+                    gizmoPush.mvp = view.viewProjection * r->gizmoTransform;
+                    gizmoPush.tint = range.tint;
+                    gizmoPush.pointSize = 1.0f;
+                    vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
+                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                        0, (u32)sizeof( gizmoPush ), &gizmoPush );
+                    vkCmdDraw( cmd, (u32)range.vertexCount, 1, (u32)range.firstVertex, 0 );
+                }
+            }
         }
 
         vkCmdEndRenderPass( cmd );
@@ -1784,6 +1811,45 @@ namespace sol {
 
         vkDeviceWaitIdle( r->device );
         DestroyEditOverlayBuffers( r );
+    }
+
+    bool RendererSetGizmoGeometry( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount ) {
+        vkDeviceWaitIdle( r->device );
+        if( r->gizmoVertexBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->gizmoVertexBuffer, r->gizmoVertexAllocation );
+            r->gizmoVertexBuffer = VK_NULL_HANDLE;
+            r->gizmoVertexAllocation = VK_NULL_HANDLE;
+            r->gizmoVertexCount = 0;
+        }
+
+        if( vertexCount <= 0 ) {
+            return true;
+        }
+
+        if( !CreateEditOverlayBuffer( r, vertices, vertexCount,
+                                      &r->gizmoVertexBuffer, &r->gizmoVertexAllocation ) ) {
+            fprintf( stderr, "Failed to build the gizmo geometry\n" );
+            return false;
+        }
+
+        r->gizmoVertexCount = vertexCount;
+        return true;
+    }
+
+    void RendererSetGizmoDraw( Renderer * r, const Mat4 & transform, const RenderGizmoRange * ranges,
+                               i32 rangeCount ) {
+        if( rangeCount > kMaxGizmoRanges ) {
+            rangeCount = kMaxGizmoRanges;
+        }
+        for( i32 i = 0; i < rangeCount; i++ ) {
+            r->gizmoRanges[i] = ranges[i];
+        }
+        r->gizmoRangeCount = rangeCount;
+        r->gizmoTransform = transform;
+    }
+
+    void RendererSetGizmoVisible( Renderer * r, bool visible ) {
+        r->gizmoVisible = visible;
     }
 
     bool RendererSetGridSpacing( Renderer * r, f32 spacing ) {
@@ -1955,6 +2021,12 @@ namespace sol {
             r->gridVertexCount = 0;
         }
         DestroyEditOverlayBuffers( r );
+        if( r->gizmoVertexBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->gizmoVertexBuffer, r->gizmoVertexAllocation );
+            r->gizmoVertexBuffer = VK_NULL_HANDLE;
+            r->gizmoVertexAllocation = VK_NULL_HANDLE;
+            r->gizmoVertexCount = 0;
+        }
         if( r->editPointPipeline != VK_NULL_HANDLE ) {
             vkDestroyPipeline( r->device, r->editPointPipeline, nullptr );
             r->editPointPipeline = VK_NULL_HANDLE;

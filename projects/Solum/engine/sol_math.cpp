@@ -70,6 +70,37 @@ namespace sol {
         return r;
     }
 
+    Mat4 Mat4RotateX( f32 radians ) {
+        const f32 c = cosf( radians );
+        const f32 s = sinf( radians );
+        Mat4 r = Mat4Identity();
+        r.m[1][1] = c;  r.m[1][2] = -s;
+        r.m[2][1] = s;  r.m[2][2] = c;
+        return r;
+    }
+
+    Mat4 Mat4RotateY( f32 radians ) {
+        const f32 c = cosf( radians );
+        const f32 s = sinf( radians );
+        Mat4 r = Mat4Identity();
+        r.m[0][0] = c;  r.m[0][2] = s;
+        r.m[2][0] = -s; r.m[2][2] = c;
+        return r;
+    }
+
+    Mat4 Mat4RotateZ( f32 radians ) {
+        const f32 c = cosf( radians );
+        const f32 s = sinf( radians );
+        Mat4 r = Mat4Identity();
+        r.m[0][0] = c;  r.m[0][1] = -s;
+        r.m[1][0] = s;  r.m[1][1] = c;
+        return r;
+    }
+
+    Mat4 Mat4FromEuler( Vec3 radians ) {
+        return Mat4RotateY( radians.y ) * Mat4RotateX( radians.x ) * Mat4RotateZ( radians.z );
+    }
+
     f32 SnapTo( f32 value, f32 step ) {
         if( step <= 0.0f ) {
             return value;
@@ -208,6 +239,40 @@ namespace sol {
 
         if( outDistance != nullptr ) {
             *outDistance = tMin;
+        }
+        return true;
+    }
+
+    bool RayLineClosest( Vec3 rayOrigin, Vec3 rayDirection, Vec3 linePoint, Vec3 lineDirection,
+                         f32 * outLineT ) {
+        const Vec3 w = rayOrigin - linePoint;
+        const f32 a = Vec3Dot( rayDirection, rayDirection );
+        const f32 b = Vec3Dot( rayDirection, lineDirection );
+        const f32 c = Vec3Dot( lineDirection, lineDirection );
+        const f32 d = Vec3Dot( rayDirection, w );
+        const f32 e = Vec3Dot( lineDirection, w );
+
+        // Zero when the two are parallel, where there is no single nearest point.
+        const f32 denom = a * c - b * b;
+        if( denom > -1e-8f && denom < 1e-8f ) {
+            return false;
+        }
+
+        if( outLineT != nullptr ) {
+            *outLineT = ( a * e - b * d ) / denom;
+        }
+        return true;
+    }
+
+    bool RayPlaneIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 planePoint, Vec3 planeNormal,
+                            f32 * outDistance ) {
+        const f32 denom = Vec3Dot( rayDirection, planeNormal );
+        if( denom > -1e-8f && denom < 1e-8f ) {
+            return false;
+        }
+
+        if( outDistance != nullptr ) {
+            *outDistance = Vec3Dot( planePoint - rayOrigin, planeNormal ) / denom;
         }
         return true;
     }

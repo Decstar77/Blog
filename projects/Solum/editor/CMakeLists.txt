@@ -11,7 +11,7 @@ endif ()
 
 set (CMAKE_AUTOMOC ON)
 
-add_executable (editor "sol_editor_main.cpp" "sol_editor_view.cpp" "sol_editor_import.cpp")
+add_executable (editor "sol_editor_main.cpp" "sol_editor_view.cpp" "sol_editor_import.cpp" "sol_editor_gizmo.h" "sol_editor_gizmo.cpp")
 target_link_libraries (editor PRIVATE solum stb Qt6::Widgets Qt6::Gui Qt6::Core)
 set_property (TARGET editor PROPERTY CXX_STANDARD 20)
 
