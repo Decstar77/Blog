@@ -2,9 +2,11 @@
 
 #include <QCursor>
 #include <QFocusEvent>
+#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QResizeEvent>
+#include <QStyleHints>
 #include <QVulkanInstance>
 #include <QWheelEvent>
 
@@ -27,6 +29,7 @@ namespace sol {
           camera( FlyCameraDefault() ), topCamera( OrthoCameraDefault( OrthoAxis_Top ) ),
           input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
           createPrimitive( kNoPrimitive ), createStart(),
+          createPending( false ), createPressPosition(),
           dragAnchor(), frameTimer() {
         setSurfaceType( QSurface::VulkanSurface );
     }
@@ -198,10 +201,24 @@ namespace sol {
         return WorldPick( world, renderer, origin, direction, outPrimitive );
     }
 
+    void VulkanView::ArmCreate( QPoint position ) {
+        if( !started ) {
+            return;
+        }
+
+        // Nothing is built yet. Whether this press is a click that clears the
+        // selection or the start of a new plane is not knowable until the
+        // mouse either moves far enough or comes back up.
+        createPending = true;
+        createPressPosition = position;
+    }
+
     void VulkanView::BeginCreate( QPoint position ) {
         if( createPrimitive != kNoPrimitive || !started ) {
             return;
         }
+
+        createPending = false;
 
         const f32 step = renderer->gridSpacing;
         createStart = Vec3SnapTo( OrthoWorldAt( position ), step );
@@ -253,7 +270,26 @@ namespace sol {
     }
 
     void VulkanView::EndCreate() {
+        // Disarms a press that never travelled, which is what leaves a plain
+        // click having done nothing but clear the selection.
+        createPending = false;
         createPrimitive = kNoPrimitive;
+    }
+
+    void VulkanView::DeleteSelected() {
+        if( !started || world.selected == kNoPrimitive ) {
+            return;
+        }
+
+        const i32 removed = world.selected;
+        if( !WorldRemovePrimitive( world, renderer, removed ) ) {
+            return;
+        }
+
+        // A plane being dragged out right now is a primitive like any other, so
+        // the index tracking it has to follow the removal - and stop naming
+        // anything at all if it was what just went.
+        createPrimitive = WorldRemapPrimitive( createPrimitive, removed );
     }
 
     void VulkanView::keyPressEvent( QKeyEvent * event ) {
@@ -265,6 +301,10 @@ namespace sol {
             const i32 step = event->key() - Qt::Key_1;
             if( step >= 0 && step < kGridStepCount && started ) {
                 RendererSetGridSpacing( renderer, kGridSteps[step] );
+            }
+
+            if( event->key() == Qt::Key_Delete ) {
+                DeleteSelected();
             }
         }
         QWindow::keyPressEvent( event );
@@ -294,9 +334,12 @@ namespace sol {
             if( PickAt( position, pane, &hit ) ) {
                 WorldSetSelected( world, renderer, hit );
             } else {
+                // Empty space always clears the selection. It only becomes a
+                // new plane if the press turns into a drag, so a click on
+                // nothing deselects and leaves the scene alone.
                 WorldSetSelected( world, renderer, kNoPrimitive );
                 if( pane == Pane_Top ) {
-                    BeginCreate( position );
+                    ArmCreate( position );
                 }
             }
         }
@@ -313,10 +356,25 @@ namespace sol {
     }
 
     void VulkanView::mouseMoveEvent( QMouseEvent * event ) {
+        const QPoint position = event->position().toPoint();
+
+        // The platform's own click-versus-drag threshold, so this matches what
+        // every other application on the machine considers a drag. Measured
+        // from the press, and skipped while a camera drag is warping the
+        // cursor around, which would otherwise read as enormous travel.
+        if( createPending && !dragging ) {
+            const i32 travel = ( position - createPressPosition ).manhattanLength();
+            if( travel >= QGuiApplication::styleHints()->startDragDistance() ) {
+                // Anchored at the press, not here, or the plane would start
+                // from wherever the cursor happened to cross the threshold.
+                BeginCreate( createPressPosition );
+            }
+        }
+
         // Creating reads the real cursor position, so unlike the camera drags
         // it must not warp the pointer back to an anchor.
         if( createPrimitive != kNoPrimitive ) {
-            UpdateCreate( event->position().toPoint() );
+            UpdateCreate( position );
         }
 
         if( dragging ) {

@@ -107,7 +107,9 @@ int main( int argc, char ** argv ) {
             QStringLiteral( "Left pane: perspective. WASD to move, right-drag to look, "
                             "Space/Ctrl for up and down, Shift to sprint.    "
                             "Right pane: top-down. Right-drag to pan, wheel to zoom.    "
-                            "Left-click to select, left-drag on empty space to place a plane.    "
+                            "Left-click to select, click empty space to deselect, "
+                            "left-drag on empty space to place a plane.    "
+                            "Delete removes the selection.    "
                             "Keys 1-6 set the grid size." ) );
         mainWindow.showMaximized();
 

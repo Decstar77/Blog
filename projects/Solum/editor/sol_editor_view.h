@@ -66,12 +66,21 @@ namespace sol {
         // point falls in.
         bool PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const;
 
-        // Left-dragging in the top-down pane pulls out a plane. It is created
-        // on press as a unit quad and resized purely through its transform, so
-        // dragging costs a matrix rather than a mesh rebuild.
+        // Left-dragging in the top-down pane pulls out a plane. Nothing is
+        // created on press - see ArmCreate - and once it is, it starts as a
+        // unit quad resized purely through its transform, so dragging costs a
+        // matrix rather than a mesh rebuild.
+        //
+        // position is where the press landed, not where the cursor is now:
+        // the plane has to span from the corner the user started at.
+        void ArmCreate( QPoint position );
         void BeginCreate( QPoint position );
         void UpdateCreate( QPoint position );
         void EndCreate();
+
+        // Removes whatever is selected, leaving nothing selected. Bound to the
+        // Delete key; a no-op when the selection is empty.
+        void DeleteSelected();
 
         Renderer *          renderer;
         // The authored scene. Owns the half-meshes; the renderer owns the
@@ -94,6 +103,11 @@ namespace sol {
         // started from. kNoPrimitive when nothing is being created.
         i32                 createPrimitive;
         Vec3                createStart;
+        // A left press on empty space arms a create rather than committing to
+        // one: the plane appears only once the cursor has travelled far enough
+        // to read as a drag, so a plain click just clears the selection.
+        bool                createPending;
+        QPoint              createPressPosition;
         // Screen position the cursor is warped back to while dragging, which is
         // how an unbounded drag is emulated without GLFW's disabled-cursor mode.
         QPoint              dragAnchor;

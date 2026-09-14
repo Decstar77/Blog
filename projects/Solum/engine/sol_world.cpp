@@ -189,6 +189,41 @@ namespace sol {
         }
     }
 
+    i32 WorldRemapPrimitive( i32 held, i32 removed ) {
+        if( held == removed ) {
+            return kNoPrimitive;
+        }
+        if( held > removed ) {
+            return held - 1;
+        }
+        return held;
+    }
+
+    bool WorldRemovePrimitive( World & world, Renderer * r, i32 primitive ) {
+        if( primitive < 0 || primitive >= world.primitives.count ) {
+            return false;
+        }
+
+        // Cleared while the mesh is still alive, so the highlight is dropped
+        // properly rather than left on whatever slides into this index.
+        if( world.selected == primitive ) {
+            WorldSetSelected( world, r, kNoPrimitive );
+        }
+
+        Primitive & entry = world.primitives[primitive];
+        // Idles the device, so the buffers are not pulled out from under a
+        // frame that is still reading them.
+        RendererDestroyStaticMesh( r, entry.renderMesh );
+        HalfMeshFree( entry.halfMesh );
+
+        ListRemoveIndex( world.primitives, primitive );
+
+        // A selection above the hole has just shifted down with everything
+        // else, so the index it holds now names its old neighbour.
+        world.selected = WorldRemapPrimitive( world.selected, primitive );
+        return true;
+    }
+
     void WorldFree( World & world ) {
         for( i32 i = 0; i < world.primitives.count; i++ ) {
             HalfMeshFree( world.primitives[i].halfMesh );

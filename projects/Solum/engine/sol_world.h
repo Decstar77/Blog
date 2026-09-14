@@ -49,6 +49,19 @@ namespace sol {
     // there is no GPU work and nothing to synchronise.
     void WorldSetSelected( World & world, Renderer * r, i32 primitive );
 
+    // Frees the primitive's render mesh and its half-mesh, then closes the gap
+    // it leaves. False for an index that names nothing.
+    //
+    // Removal is order preserving, so every primitive after this one shifts
+    // down by one and any index held across the call stops naming what it did.
+    // The selection is fixed up here; anything else holding an index has to run
+    // it through WorldRemapPrimitive.
+    bool WorldRemovePrimitive( World & world, Renderer * r, i32 primitive );
+
+    // Where an index held across a WorldRemovePrimitive lands afterwards, or
+    // kNoPrimitive if it named the primitive that was removed.
+    i32  WorldRemapPrimitive( i32 held, i32 removed );
+
     bool WorldCreateDefaultLevel( World & world, Renderer * r );
     void WorldFree( World & world );
 
