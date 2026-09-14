@@ -189,6 +189,80 @@ namespace sol {
         }
     }
 
+    void WorldSetPrimitiveHighlight( World & world, Renderer * r, i32 primitive, bool highlight ) {
+        // Anything that is not the selection has no highlight either way, so
+        // there is nothing here to drop and nothing to hand back.
+        if( world.selected != primitive ) {
+            return;
+        }
+        if( primitive < 0 || primitive >= world.primitives.count ) {
+            return;
+        }
+
+        RenderStaticMesh * mesh = RendererGetStaticMesh( r, world.primitives[primitive].renderMesh );
+        if( mesh == nullptr ) {
+            return;
+        }
+
+        mesh->tint = highlight ? kSelectionTint : kNoTint;
+    }
+
+    // The fragment shader always applies its key light, so cage vertices carry
+    // the light's own direction as their normal. dot( n, l ) is then 1 and the
+    // colours below come through exactly as written, with no shading to read
+    // as a handle being a different colour from its neighbour.
+    constexpr Vec3 kEditOverlayNormal = { 0.41646f, 0.83291f, 0.36440f };
+    constexpr Vec3 kEditEdgeColor = { 0.88f, 0.89f, 0.91f };
+    constexpr Vec3 kEditVertexColor = { 0.09f, 0.16f, 0.42f };
+
+    static void EditOverlayPushVertex( List<StaticMeshVertex> & vertices, Vec3 position, Vec3 color ) {
+        StaticMeshVertex vertex = {};
+        vertex.position = position;
+        vertex.normal = kEditOverlayNormal;
+        vertex.color = color;
+        // Sampled against the white 1x1, so any uv gives the same texel.
+        vertex.uv = Vec2{ 0.0f, 0.0f };
+        ListAdd( vertices, vertex );
+    }
+
+    bool WorldSetEditOverlay( World & world, Renderer * r, i32 primitive ) {
+        if( primitive < 0 || primitive >= world.primitives.count ) {
+            return false;
+        }
+
+        const Primitive & entry = world.primitives[primitive];
+        // The cage is drawn in local space, so it needs the same transform the
+        // mesh is drawn with rather than one of its own.
+        const RenderStaticMesh * mesh = RendererGetStaticMesh( r, entry.renderMesh );
+        if( mesh == nullptr ) {
+            return false;
+        }
+
+        const HalfMesh & halfMesh = entry.halfMesh;
+        List<StaticMeshVertex> lines = {};
+        List<StaticMeshVertex> points = {};
+
+        // One line per edge, not per half-edge: the pair describes the same
+        // segment, so walking edges draws each one once.
+        for( i32 e = 0; e < halfMesh.edges.count; e++ ) {
+            const i32 halfEdge = halfMesh.edges[e].halfEdge;
+            const i32 from = halfMesh.halfEdges[halfEdge].vert;
+            const i32 to = HalfEdgeDest( halfMesh, halfEdge );
+            EditOverlayPushVertex( lines, halfMesh.vertices[from].position, kEditEdgeColor );
+            EditOverlayPushVertex( lines, halfMesh.vertices[to].position, kEditEdgeColor );
+        }
+
+        for( i32 v = 0; v < halfMesh.vertices.count; v++ ) {
+            EditOverlayPushVertex( points, halfMesh.vertices[v].position, kEditVertexColor );
+        }
+
+        const bool ok = RendererSetEditOverlay( r, lines.data, lines.count,
+                                                points.data, points.count, mesh->transform );
+        ListFree( lines );
+        ListFree( points );
+        return ok;
+    }
+
     i32 WorldRemapPrimitive( i32 held, i32 removed ) {
         if( held == removed ) {
             return kNoPrimitive;

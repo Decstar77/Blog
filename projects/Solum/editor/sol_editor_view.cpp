@@ -30,6 +30,7 @@ namespace sol {
           input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
           createPrimitive( kNoPrimitive ), createStart(),
           createPending( false ), createPressPosition(),
+          editPrimitive( kNoPrimitive ),
           dragAnchor(), frameTimer() {
         setSurfaceType( QSurface::VulkanSurface );
     }
@@ -290,6 +291,51 @@ namespace sol {
         // the index tracking it has to follow the removal - and stop naming
         // anything at all if it was what just went.
         createPrimitive = WorldRemapPrimitive( createPrimitive, removed );
+
+        // Same for the cage, which additionally has to come down if what it was
+        // describing is what was deleted.
+        editPrimitive = WorldRemapPrimitive( editPrimitive, removed );
+        RefreshEditOverlay();
+    }
+
+    void VulkanView::ToggleEditMode() {
+        if( !started ) {
+            return;
+        }
+
+        if( editPrimitive != kNoPrimitive ) {
+            // The highlight goes back on the way out, or the object would stop
+            // reading as selected the moment its cage came down.
+            const i32 previous = editPrimitive;
+            editPrimitive = kNoPrimitive;
+            WorldSetPrimitiveHighlight( world, renderer, previous, true );
+        } else {
+            // Nothing selected is nothing to edit, so Tab is a no-op rather
+            // than a mode with no subject.
+            if( world.selected == kNoPrimitive ) {
+                return;
+            }
+            editPrimitive = world.selected;
+            // The cage shows which object is the subject far better than a
+            // tint does, so the tint comes off rather than competing with it.
+            WorldSetPrimitiveHighlight( world, renderer, editPrimitive, false );
+        }
+
+        RefreshEditOverlay();
+    }
+
+    void VulkanView::RefreshEditOverlay() {
+        // A primitive that can no longer produce a cage takes the mode down
+        // with it, so edit mode never outlives what it was editing.
+        if( editPrimitive == kNoPrimitive || !WorldSetEditOverlay( world, renderer, editPrimitive ) ) {
+            // A cage that could not be built leaves edit mode off, so whatever
+            // was about to wear it gets its highlight back rather than sitting
+            // selected with nothing showing it.
+            const i32 previous = editPrimitive;
+            editPrimitive = kNoPrimitive;
+            RendererClearEditOverlay( renderer );
+            WorldSetPrimitiveHighlight( world, renderer, previous, true );
+        }
     }
 
     void VulkanView::keyPressEvent( QKeyEvent * event ) {
@@ -305,6 +351,10 @@ namespace sol {
 
             if( event->key() == Qt::Key_Delete ) {
                 DeleteSelected();
+            }
+
+            if( event->key() == Qt::Key_Tab ) {
+                ToggleEditMode();
             }
         }
         QWindow::keyPressEvent( event );
@@ -326,20 +376,26 @@ namespace sol {
         if( event->button() == Qt::RightButton ) {
             BeginDrag( PaneAt( position ) );
         } else if( event->button() == Qt::LeftButton ) {
-            // Selecting wins over creating: a click that lands on something
-            // picks it, and only empty space starts a new plane. Placing one
-            // on top of another therefore needs the space cleared first.
-            const Pane pane = PaneAt( position );
-            i32 hit = kNoPrimitive;
-            if( PickAt( position, pane, &hit ) ) {
-                WorldSetSelected( world, renderer, hit );
-            } else {
-                // Empty space always clears the selection. It only becomes a
-                // new plane if the press turns into a drag, so a click on
-                // nothing deselects and leaves the scene alone.
-                WorldSetSelected( world, renderer, kNoPrimitive );
-                if( pane == Pane_Top ) {
-                    ArmCreate( position );
+            // Edit mode locks on to its subject. While the cage is up a left
+            // click is not a way to pick a different object, nor to place a new
+            // one - both would move the selection out from under the cage.
+            // Tab puts the cage away and hands object picking back.
+            if( editPrimitive == kNoPrimitive ) {
+                // Selecting wins over creating: a click that lands on something
+                // picks it, and only empty space starts a new plane. Placing one
+                // on top of another therefore needs the space cleared first.
+                const Pane pane = PaneAt( position );
+                i32 hit = kNoPrimitive;
+                if( PickAt( position, pane, &hit ) ) {
+                    WorldSetSelected( world, renderer, hit );
+                } else {
+                    // Empty space always clears the selection. It only becomes a
+                    // new plane if the press turns into a drag, so a click on
+                    // nothing deselects and leaves the scene alone.
+                    WorldSetSelected( world, renderer, kNoPrimitive );
+                    if( pane == Pane_Top ) {
+                        ArmCreate( position );
+                    }
                 }
             }
         }

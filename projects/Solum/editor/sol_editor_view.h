@@ -82,6 +82,14 @@ namespace sol {
         // Delete key; a no-op when the selection is empty.
         void DeleteSelected();
 
+        // Tab puts the edit cage up on the selection and takes it down again.
+        // Nothing selected means nothing to edit, so it does nothing.
+        void ToggleEditMode();
+        // Rebuilds the cage for editPrimitive, or clears it when there is no
+        // longer anything to show. The one path that touches the overlay, so
+        // the renderer and editPrimitive cannot disagree.
+        void RefreshEditOverlay();
+
         Renderer *          renderer;
         // The authored scene. Owns the half-meshes; the renderer owns the
         // triangles built from them.
@@ -108,6 +116,11 @@ namespace sol {
         // to read as a drag, so a plain click just clears the selection.
         bool                createPending;
         QPoint              createPressPosition;
+        // The primitive whose cage is up, or kNoPrimitive when edit mode is
+        // off. While this names something it is also the locked selection:
+        // clicks stop picking objects, so the subject cannot change without
+        // leaving edit mode first.
+        i32                 editPrimitive;
         // Screen position the cursor is warped back to while dragging, which is
         // how an unbounded drag is emulated without GLFW's disabled-cursor mode.
         QPoint              dragAnchor;

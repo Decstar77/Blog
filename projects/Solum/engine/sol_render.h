@@ -23,6 +23,10 @@ namespace sol {
     struct StaticMeshPush {
         Mat4    mvp;
         Vec4    tint;
+        // In pixels, and only read when the bound pipeline draws points. Every
+        // other draw leaves it at 1. Pinned to 1 on a device without the
+        // largePoints feature, where Vulkan allows no other value.
+        f32     pointSize;
     };
 
     // Multiplied into the fragment colour, so this leaves it untouched.
@@ -85,6 +89,22 @@ namespace sol {
     // Zeroing a RenderMaterial would give it a black albedo, so anything that
     // wants a sane default has to start here rather than at {}.
     RenderMaterial RenderMaterialDefault();
+
+    // The edit cage for one primitive: its edges as a line list and its
+    // vertices as a point list, both in the primitive's local space. Drawn
+    // last in every view with the depth test off, so it reads as an overlay on
+    // the shape rather than something competing with it for depth.
+    struct RenderEditOverlay {
+        VkBuffer        lineBuffer;
+        VmaAllocation   lineAllocation;
+        i32             lineVertexCount;
+        VkBuffer        pointBuffer;
+        VmaAllocation   pointAllocation;
+        i32             pointVertexCount;
+        // Local to world, matching the mesh the cage describes.
+        Mat4            transform;
+        bool            visible;
+    };
 
     // One rectangle of the surface, drawn with its own camera. The whole scene
     // is walked once per view, so a 3D pane and a top-down pane are two views
@@ -168,6 +188,16 @@ namespace sol {
         // Same shaders, layout and vertex format as the mesh pipeline, built
         // with line topology and depth writes off. See CreateStaticMeshPipeline.
         VkPipeline                  gridPipeline;
+        // The edit cage, in line and point topology. Both go a step further
+        // than the grid and turn the depth test off as well, so edges and
+        // handles lying exactly on the surface they describe draw over it
+        // instead of z-fighting with it.
+        VkPipeline                  editLinePipeline;
+        VkPipeline                  editPointPipeline;
+        // False on a device without the largePoints feature, which pins vertex
+        // handles to a single pixel - Vulkan permits no other size there.
+        bool                        largePoints;
+        RenderEditOverlay           editOverlay;
         // World-space grid on the y = 0 plane, drawn in every view before the
         // meshes. Vertices only: a line list has nothing to index.
         VkBuffer                    gridVertexBuffer;
@@ -227,6 +257,16 @@ namespace sol {
     // Rebuilds the grid at a new spacing. Idles the device first, so it is a
     // stall - fine for a key press, not for something driven per frame.
     bool RendererSetGridSpacing( Renderer * r, f32 spacing );
+
+    // Replaces the edit cage. Both vertex lists are in the edited primitive's
+    // local space and are drawn with transform. Either count may be zero.
+    // Idles the device, same as RendererSetGridSpacing, so this belongs on a
+    // selection change rather than in a frame.
+    bool RendererSetEditOverlay( Renderer * r, const StaticMeshVertex * lineVertices, i32 lineVertexCount, const StaticMeshVertex * pointVertices, i32 pointVertexCount, const Mat4 & transform );
+
+    // Takes the cage down and hands its buffers back. Cheap when there is no
+    // cage up, so it is safe to call unconditionally.
+    void RendererClearEditOverlay( Renderer * r );
 
     void RendererDrawFrame( Renderer * r );
 

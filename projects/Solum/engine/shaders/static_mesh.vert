@@ -17,10 +17,15 @@ layout( location = 2 ) out vec2 fragUv;
 layout( push_constant, row_major ) uniform PushConstants {
     mat4 mvp;
     vec4 tint;
+    float pointSize;
 } push;
 
 void main() {
     gl_Position = push.mvp * vec4( inPosition, 1.0 );
+    // Only the point-topology pipeline reads this; every other draw sets it to
+    // 1 and the rasterizer ignores it. Written unconditionally because a point
+    // pipeline whose shader never writes it gets an undefined size.
+    gl_PointSize = push.pointSize;
     fragNormal = inNormal;
     fragColor = inColor;
     fragUv = inUv;

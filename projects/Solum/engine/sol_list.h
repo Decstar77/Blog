@@ -6,8 +6,6 @@
 
 namespace sol {
 
-    // Growable array over malloc/realloc. Elements are moved with memcpy/memmove, so this
-    // holds POD only - which is everything in the engine. No constructors are run.
     template<typename _type_>
     struct List {
         _type_ *    data;
@@ -39,7 +37,6 @@ namespace sol {
         list.cap = 0;
     }
 
-    // Keeps the allocation, drops the elements.
     template<typename _type_>
     void ListClear( List<_type_> & list ) {
         list.count = 0;
@@ -60,7 +57,6 @@ namespace sol {
         return index >= 0 && index < list.count;
     }
 
-    // Grows the allocation to hold at least wantedCap. Never shrinks, never touches count.
     template<typename _type_>
     void ListReserve( List<_type_> & list, i32 wantedCap ) {
         if ( wantedCap <= list.cap ) {
@@ -81,7 +77,6 @@ namespace sol {
         list.cap = newCap;
     }
 
-    // Hands back the allocation the list is not using. cap lands exactly on count.
     template<typename _type_>
     void ListShrinkToFit( List<_type_> & list ) {
         if ( list.cap == list.count ) {
@@ -102,7 +97,6 @@ namespace sol {
         list.cap = list.count;
     }
 
-    // Returns a pointer to the stored copy so callers can keep writing into it.
     template<typename _type_>
     _type_ * ListAdd( List<_type_> & list, const _type_ & value ) {
         ListReserve( list, list.count + 1 );
@@ -115,7 +109,6 @@ namespace sol {
         return &list.data[list.count - 1];
     }
 
-    // Uninitialised slot at the end. Same growth rules as ListAdd.
     template<typename _type_>
     _type_ * ListAddEmpty( List<_type_> & list ) {
         ListReserve( list, list.count + 1 );
@@ -147,7 +140,6 @@ namespace sol {
         ListAddRange( list, other.data, other.count );
     }
 
-    // index == count appends. Shifts the tail right, so O( count - index ).
     template<typename _type_>
     _type_ * ListInsert( List<_type_> & list, i32 index, const _type_ & value ) {
         if ( index < 0 || index > list.count ) {
@@ -169,7 +161,6 @@ namespace sol {
         return &list.data[index];
     }
 
-    // Order preserving removal.
     template<typename _type_>
     void ListRemoveIndex( List<_type_> & list, i32 index ) {
         if ( ListIsValidIndex( list, index ) == false ) {
@@ -184,7 +175,6 @@ namespace sol {
         list.count--;
     }
 
-    // O(1) removal that swaps the last element into the hole. Reorders the list.
     template<typename _type_>
     void ListRemoveIndexFast( List<_type_> & list, i32 index ) {
         if ( ListIsValidIndex( list, index ) == false ) {
@@ -241,7 +231,6 @@ namespace sol {
         return &list.data[list.count - 1];
     }
 
-    // -1 when absent, so callers can test the result against ListIsValidIndex or < 0.
     template<typename _type_>
     i32 ListIndexOf( const List<_type_> & list, const _type_ & value ) {
         for ( i32 i = 0; i < list.count; i++ ) {
@@ -279,7 +268,6 @@ namespace sol {
         return true;
     }
 
-    // _pred_ is anything callable as bool( const _type_ & ) - a lambda or a function pointer.
     template<typename _type_, typename _pred_>
     i32 ListIndexOfPred( const List<_type_> & list, _pred_ pred ) {
         for ( i32 i = 0; i < list.count; i++ ) {
@@ -299,7 +287,6 @@ namespace sol {
         return &list.data[index];
     }
 
-    // Order preserving compaction: one pass, so removing many elements stays O( count ).
     template<typename _type_, typename _pred_>
     i32 ListRemoveIf( List<_type_> & list, _pred_ pred ) {
         i32 write = 0;
@@ -319,7 +306,6 @@ namespace sol {
         return removed;
     }
 
-    // Sets count outright. Elements grown into are zeroed; shrinking just drops the tail.
     template<typename _type_>
     void ListResize( List<_type_> & list, i32 newCount ) {
         if ( newCount < 0 ) {
@@ -347,7 +333,6 @@ namespace sol {
         }
     }
 
-    // Deep copy. The result owns its own allocation, sized to count.
     template<typename _type_>
     List<_type_> ListCopy( const List<_type_> & list ) {
         List<_type_> result = {};

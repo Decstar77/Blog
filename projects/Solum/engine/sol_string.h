@@ -26,7 +26,7 @@ namespace sol {
         const char *    end() const                     { return data + count; }
     };
 
-    // Inline storage, no allocation. _cap_ counts the null terminator, so the most characters this can hold is _cap_ - 1.
+    // _cap_ counts the null terminator
     template<i32 _cap_>
     struct FixedString {
         char    data[_cap_];
@@ -38,7 +38,6 @@ namespace sol {
     using SmallString = FixedString<64>;
     using LargeString = FixedString<256>;
 
-    // Heap allocated and growable. Also kept null-terminated.
     struct HeapString {
         char *  data;
         i32     count;
@@ -47,12 +46,6 @@ namespace sol {
         operator StringView() const { return StringView( data, count ); }
     };
 
-    // The write-side counterpart to StringView: a borrowed, fixed-capacity
-    // buffer. count is a pointer so appends update the string that owns it.
-    //
-    // This is what lets one StringBufferAppend serve every string type. It can
-    // fill a buffer but never grow one, because it cannot realloc through a
-    // borrowed pointer - growing is HeapString's own business.
     struct StringBuffer {
         char *  data;
         i32 *   count;
@@ -60,7 +53,6 @@ namespace sol {
     };
 
     // ---- reads -------------------------------------------------------------
-
     i32         StringLength( const char * cstr );
     bool        StringIsEmpty( StringView str );
 
@@ -88,18 +80,14 @@ namespace sol {
     StringView  StringTrimRight( StringView str );
     StringView  StringTrim( StringView str );
 
-    // Walks separator-delimited fields without allocating. Seed the cursor with the whole view and call until it returns false. Empty fields come back as
-    // empty views, so "a,,b" yields three parts.
+    // Walks separator-delimited fields without allocating. Seed the cursor with the whole view and call until it returns false. Empty fields come back as empty views, so "a,,b" yields three parts.
     bool        StringSplitNext( StringView * cursor, char separator, StringView * outPart );
-    // Fills outParts and returns how many were written, stopping at maxParts.
     i32         StringSplit( StringView str, char separator, StringView * outParts, i32 maxParts );
 
-    // False if the text is not entirely a number, so a partial parse never passes silently.
     bool        StringParseI32( StringView str, i32 * outValue );
     bool        StringParseF32( StringView str, f32 * outValue );
 
     // ---- writes ------------------------------------------------------------
-
     template<i32 _cap_> 
     StringBuffer StringBufferFrom( FixedString<_cap_> & str ) { return StringBuffer{ str.data, &str.count, _cap_ }; }
     StringBuffer StringBufferFrom( HeapString & str );
@@ -114,7 +102,6 @@ namespace sol {
     template<i32 _cap_> void StringClear( FixedString<_cap_> & str ) { StringBufferClear( StringBufferFrom( str ) ); }
 
     // ---- heap strings ------------------------------------------------------
-
     HeapString  HeapStringCreate( StringView value );
     void        HeapStringFree( HeapString & str );
     void        HeapStringClear( HeapString & str );

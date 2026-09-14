@@ -255,7 +255,15 @@ namespace sol {
             queueCount++;
         }
 
+        // Vertex handles are point sprites, and a point wider than one pixel
+        // needs largePoints. Asked for only where the device has it, since
+        // requesting a feature it does not support fails device creation.
+        VkPhysicalDeviceFeatures supported = {};
+        vkGetPhysicalDeviceFeatures( r->physicalDevice, &supported );
+
         VkPhysicalDeviceFeatures features = {};
+        features.largePoints = supported.largePoints;
+        r->largePoints = supported.largePoints == VK_TRUE;
 
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -839,6 +847,22 @@ namespace sol {
                 ok = vkCreateGraphicsPipelines( r->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                                 &r->gridPipeline ) == VK_SUCCESS;
             }
+
+            // The edit cage differs by one more piece of state: the depth test
+            // goes off too. Its edges and handles sit exactly on the surface
+            // they describe, which is the one case where an equal depth is
+            // guaranteed rather than unlucky.
+            if( ok ) {
+                depthStencil.depthTestEnable = VK_FALSE;
+                ok = vkCreateGraphicsPipelines( r->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                                &r->editLinePipeline ) == VK_SUCCESS;
+            }
+
+            if( ok ) {
+                inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+                ok = vkCreateGraphicsPipelines( r->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                                &r->editPointPipeline ) == VK_SUCCESS;
+            }
         }
 
         // The modules are baked into the pipeline, so they go straight back.
@@ -1237,6 +1261,10 @@ namespace sol {
         return !HandleIsNull( r->whiteTexture );
     }
 
+    // Vertex handles in pixels. Big enough to hit with a cursor, small enough
+    // not to bury the geometry underneath them.
+    constexpr f32 kEditPointSize = 7.0f;
+
     // Lines either side of the origin per axis. Held constant while the spacing
     // changes, so the grid covers more ground as it coarsens rather than piling
     // up more lines than the screen can resolve.
@@ -1543,6 +1571,7 @@ namespace sol {
                 StaticMeshPush gridPush = {};
                 gridPush.mvp = view.viewProjection;
                 gridPush.tint = kNoTint;
+                gridPush.pointSize = 1.0f;
                 vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
                                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                     0, (u32)sizeof( gridPush ), &gridPush );
@@ -1567,6 +1596,7 @@ namespace sol {
                 StaticMeshPush push = {};
                 push.mvp = view.viewProjection * mesh->transform;
                 push.tint = mesh->tint;
+                push.pointSize = 1.0f;
                 vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
                                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                     0, (u32)sizeof( push ), &push );
@@ -1582,6 +1612,36 @@ namespace sol {
                 vkCmdBindVertexBuffers( cmd, 0, 1, &mesh->vertexBuffer, &offset );
                 vkCmdBindIndexBuffer( cmd, mesh->indexBuffer, 0, VK_INDEX_TYPE_UINT32 );
                 vkCmdDrawIndexed( cmd, (u32)mesh->indexCount, 1, 0, 0, 0 );
+            }
+
+            // Last in the view, with the depth test off in both cage pipelines,
+            // so the edges and handles land on top of the shape they describe.
+            if( r->editOverlay.visible ) {
+                StaticMeshPush editPush = {};
+                editPush.mvp = view.viewProjection * r->editOverlay.transform;
+                editPush.tint = kNoTint;
+                editPush.pointSize = r->largePoints ? kEditPointSize : 1.0f;
+                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
+                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                    0, (u32)sizeof( editPush ), &editPush );
+
+                // The cage samples the white fallback, so its vertex colours
+                // come through as written.
+                vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
+                                         0, 1, &whiteSet, 0, nullptr );
+
+                VkDeviceSize editOffset = 0;
+                if( r->editOverlay.lineVertexCount > 0 ) {
+                    vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->editLinePipeline );
+                    vkCmdBindVertexBuffers( cmd, 0, 1, &r->editOverlay.lineBuffer, &editOffset );
+                    vkCmdDraw( cmd, (u32)r->editOverlay.lineVertexCount, 1, 0, 0 );
+                }
+
+                if( r->editOverlay.pointVertexCount > 0 ) {
+                    vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->editPointPipeline );
+                    vkCmdBindVertexBuffers( cmd, 0, 1, &r->editOverlay.pointBuffer, &editOffset );
+                    vkCmdDraw( cmd, (u32)r->editOverlay.pointVertexCount, 1, 0, 0 );
+                }
             }
         }
 
@@ -1654,6 +1714,76 @@ namespace sol {
 
     void RendererSetGridVisible( Renderer * r, bool visible ) {
         r->gridVisible = visible;
+    }
+
+    static void DestroyEditOverlayBuffers( Renderer * r ) {
+        if( r->editOverlay.lineBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->editOverlay.lineBuffer, r->editOverlay.lineAllocation );
+        }
+        if( r->editOverlay.pointBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->editOverlay.pointBuffer, r->editOverlay.pointAllocation );
+        }
+        r->editOverlay = {};
+    }
+
+    // Both halves go through the same upload, so this is the whole difference
+    // between them.
+    static bool CreateEditOverlayBuffer( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount,
+                                         VkBuffer * outBuffer, VmaAllocation * outAllocation ) {
+        const u64 byteCount = (u64)vertexCount * sizeof( StaticMeshVertex );
+        bool ok = CreateBuffer( r, byteCount,
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+                                outBuffer, outAllocation, nullptr );
+        return ok && UploadBuffer( r, *outBuffer, vertices, byteCount );
+    }
+
+    bool RendererSetEditOverlay( Renderer * r, const StaticMeshVertex * lineVertices, i32 lineVertexCount,
+                                 const StaticMeshVertex * pointVertices, i32 pointVertexCount,
+                                 const Mat4 & transform ) {
+        // The buffers being replaced may still be referenced by a frame the GPU
+        // has not finished with.
+        vkDeviceWaitIdle( r->device );
+        DestroyEditOverlayBuffers( r );
+
+        bool ok = true;
+        if( lineVertexCount > 0 ) {
+            ok = CreateEditOverlayBuffer( r, lineVertices, lineVertexCount,
+                                          &r->editOverlay.lineBuffer, &r->editOverlay.lineAllocation );
+            if( ok ) {
+                r->editOverlay.lineVertexCount = lineVertexCount;
+            }
+        }
+
+        if( ok && pointVertexCount > 0 ) {
+            ok = CreateEditOverlayBuffer( r, pointVertices, pointVertexCount,
+                                          &r->editOverlay.pointBuffer, &r->editOverlay.pointAllocation );
+            if( ok ) {
+                r->editOverlay.pointVertexCount = pointVertexCount;
+            }
+        }
+
+        if( !ok ) {
+            fprintf( stderr, "Failed to build the edit overlay\n" );
+            DestroyEditOverlayBuffers( r );
+            return false;
+        }
+
+        r->editOverlay.transform = transform;
+        r->editOverlay.visible = true;
+        return true;
+    }
+
+    void RendererClearEditOverlay( Renderer * r ) {
+        // Nothing up means nothing to idle the device for, which is what makes
+        // this safe to call on every selection change.
+        if( r->editOverlay.lineBuffer == VK_NULL_HANDLE &&
+            r->editOverlay.pointBuffer == VK_NULL_HANDLE ) {
+            r->editOverlay.visible = false;
+            return;
+        }
+
+        vkDeviceWaitIdle( r->device );
+        DestroyEditOverlayBuffers( r );
     }
 
     bool RendererSetGridSpacing( Renderer * r, f32 spacing ) {
@@ -1823,6 +1953,15 @@ namespace sol {
             r->gridVertexBuffer = VK_NULL_HANDLE;
             r->gridVertexAllocation = VK_NULL_HANDLE;
             r->gridVertexCount = 0;
+        }
+        DestroyEditOverlayBuffers( r );
+        if( r->editPointPipeline != VK_NULL_HANDLE ) {
+            vkDestroyPipeline( r->device, r->editPointPipeline, nullptr );
+            r->editPointPipeline = VK_NULL_HANDLE;
+        }
+        if( r->editLinePipeline != VK_NULL_HANDLE ) {
+            vkDestroyPipeline( r->device, r->editLinePipeline, nullptr );
+            r->editLinePipeline = VK_NULL_HANDLE;
         }
         if( r->gridPipeline != VK_NULL_HANDLE ) {
             vkDestroyPipeline( r->device, r->gridPipeline, nullptr );

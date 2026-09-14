@@ -14,6 +14,7 @@ layout( set = 0, binding = 0 ) uniform sampler2D texSampler;
 layout( push_constant, row_major ) uniform PushConstants {
     mat4 mvp;
     vec4 tint;
+    float pointSize;
 } push;
 
 // A fixed key light, until there are real lights in the world. Without it a

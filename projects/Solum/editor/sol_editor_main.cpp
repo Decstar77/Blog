@@ -109,7 +109,7 @@ int main( int argc, char ** argv ) {
                             "Right pane: top-down. Right-drag to pan, wheel to zoom.    "
                             "Left-click to select, click empty space to deselect, "
                             "left-drag on empty space to place a plane.    "
-                            "Delete removes the selection.    "
+                            "Delete removes the selection, Tab toggles edit mode, which locks it.    "
                             "Keys 1-6 set the grid size." ) );
         mainWindow.showMaximized();
 
