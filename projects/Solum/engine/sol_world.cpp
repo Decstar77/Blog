@@ -239,6 +239,7 @@ namespace sol {
     constexpr Vec3 kEditOverlayNormal = { 0.41646f, 0.83291f, 0.36440f };
     constexpr Vec3 kEditEdgeColor = { 0.88f, 0.89f, 0.91f };
     constexpr Vec3 kEditVertexColor = { 0.09f, 0.16f, 0.42f };
+    constexpr Vec3 kEditSelectedVertexColor = { 1.0f, 0.62f, 0.12f };
 
     static void EditOverlayPushVertex( List<StaticMeshVertex> & vertices, Vec3 position, Vec3 color ) {
         StaticMeshVertex vertex = {};
@@ -250,7 +251,7 @@ namespace sol {
         ListAdd( vertices, vertex );
     }
 
-    bool WorldSetEditOverlay( World & world, Renderer * r, i32 primitive ) {
+    bool WorldSetEditOverlay( World & world, Renderer * r, i32 primitive, i32 selectedVertex ) {
         if( primitive < 0 || primitive >= world.primitives.count ) {
             return false;
         }
@@ -278,7 +279,8 @@ namespace sol {
         }
 
         for( i32 v = 0; v < halfMesh.vertices.count; v++ ) {
-            EditOverlayPushVertex( points, halfMesh.vertices[v].position, kEditVertexColor );
+            EditOverlayPushVertex( points, halfMesh.vertices[v].position,
+                                   v == selectedVertex ? kEditSelectedVertexColor : kEditVertexColor );
         }
 
         const bool ok = RendererSetEditOverlay( r, lines.data, lines.count,
@@ -286,6 +288,56 @@ namespace sol {
         ListFree( lines );
         ListFree( points );
         return ok;
+    }
+
+    static bool WorldVertexInRange( const World & world, i32 primitive, i32 vertex ) {
+        return primitive >= 0 && primitive < world.primitives.count &&
+               vertex >= 0 && vertex < world.primitives[primitive].halfMesh.vertices.count;
+    }
+
+    bool WorldGetVertexPosition( const World & world, i32 primitive, i32 vertex, Vec3 * outWorld ) {
+        if( !WorldVertexInRange( world, primitive, vertex ) ) {
+            return false;
+        }
+
+        const Primitive & entry = world.primitives[primitive];
+        *outWorld = Mat4MulPoint( TransformToMat4( entry.transform ), entry.halfMesh.vertices[vertex].position );
+        return true;
+    }
+
+    bool WorldSetVertexPosition( World & world, i32 primitive, i32 vertex, Vec3 worldPosition ) {
+        if( !WorldVertexInRange( world, primitive, vertex ) ) {
+            return false;
+        }
+
+        Primitive & entry = world.primitives[primitive];
+        const Transform & transform = entry.transform;
+
+        // The inverse of translate * rotate * scale, taken apart rather than
+        // through a general matrix inverse: a rotation's inverse is its
+        // transpose, and the scale is undone per axis.
+        const Mat4 rotation = Mat4FromEuler( transform.rotation );
+        Mat4 inverseRotation = {};
+        for( i32 row = 0; row < 4; row++ ) {
+            for( i32 column = 0; column < 4; column++ ) {
+                inverseRotation.m[row][column] = rotation.m[column][row];
+            }
+        }
+
+        // A flattened axis cannot be undone, so a vertex on it keeps the
+        // local coordinate it already had there.
+        const Vec3 previous = entry.halfMesh.vertices[vertex].position;
+        const Vec3 unrotated = Mat4MulDir( inverseRotation, worldPosition - transform.position );
+        Vec3 local = previous;
+        if( transform.scale.x != 0.0f ) { local.x = unrotated.x / transform.scale.x; }
+        if( transform.scale.y != 0.0f ) { local.y = unrotated.y / transform.scale.y; }
+        if( transform.scale.z != 0.0f ) { local.z = unrotated.z / transform.scale.z; }
+
+        entry.halfMesh.vertices[vertex].position = local;
+        // Every face touching the vertex may have tilted, and the triangulator
+        // shades from the stored normals rather than recomputing them.
+        HalfMeshComputeFaceNormals( entry.halfMesh );
+        return true;
     }
 
     i32 WorldRemapPrimitive( i32 held, i32 removed ) {

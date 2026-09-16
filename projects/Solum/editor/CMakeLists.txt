@@ -11,8 +11,13 @@ endif ()
 
 set (CMAKE_AUTOMOC ON)
 
-add_executable (editor "sol_editor_main.cpp" "sol_editor_view.cpp" "sol_editor_import.cpp" "sol_editor_gizmo.h" "sol_editor_gizmo.cpp")
+add_executable (editor "sol_editor_main.cpp" "sol_editor_view.cpp" "sol_editor_import.cpp" "sol_editor_gizmo.h" "sol_editor_gizmo.cpp" "sol_editor_assets.h" "sol_editor_assets.cpp")
 target_link_libraries (editor PRIVATE solum stb Qt6::Widgets Qt6::Gui Qt6::Core)
+# The asset browser and importer work against the source tree's assets folder.
+target_compile_definitions (editor PRIVATE SOLUM_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../assets")
+# Qt's slots/signals/emit macros clash with engine names like Pool::slots, and
+# would otherwise break any file that includes a Qt header before the engine's.
+target_compile_definitions (editor PRIVATE QT_NO_KEYWORDS)
 set_property (TARGET editor PROPERTY CXX_STANDARD 20)
 
 # Qt's DLLs live outside the build tree, so stage them next to the exe.

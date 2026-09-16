@@ -10,6 +10,7 @@
 #include <QVulkanInstance>
 #include <QWheelEvent>
 
+#include <cmath>
 #include <cstdio>
 
 namespace sol {
@@ -24,13 +25,17 @@ namespace sol {
     constexpr f32 kGridSteps[] = { 0.125f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };
     constexpr i32 kGridStepCount = (i32)( sizeof( kGridSteps ) / sizeof( kGridSteps[0] ) );
 
+    // How far, in logical pixels, a click may land from a vertex and still pick it.
+    constexpr f32 kVertexPickRadius = 10.0f;
+
     VulkanView::VulkanView( Renderer * renderer )
         : renderer( renderer ), world( WorldCreate() ), started( false ), startFailed( false ),
           camera( FlyCameraDefault() ), topCamera( OrthoCameraDefault( OrthoAxis_Top ) ),
           input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
           createPrimitive( kNoPrimitive ), createStart(),
           createPending( false ), createPressPosition(),
-          editPrimitive( kNoPrimitive ), gizmo( GizmoCreate() ),
+          editPrimitive( kNoPrimitive ), editVertex( kHMNone ), editGeometryDirty( false ),
+          gizmo( GizmoCreate() ),
           dragAnchor(), frameTimer() {
         setSurfaceType( QSurface::VulkanSurface );
     }
@@ -137,6 +142,14 @@ namespace sol {
         views[1].height = 1.0f;
         views[1].viewProjection = OrthoCameraViewProjection( topCamera, rightWidth, surfaceHeight );
 
+        // However many times the vertex moved since the last frame, the mesh
+        // and its cage are rebuilt once.
+        if( editGeometryDirty ) {
+            editGeometryDirty = false;
+            WorldRebuildPrimitive( world, renderer, editPrimitive );
+            RefreshEditOverlay();
+        }
+
         UpdateGizmo();
 
         RendererSetViews( renderer, views, 2 );
@@ -214,6 +227,67 @@ namespace sol {
         return WorldPick( world, renderer, origin, direction, outPrimitive );
     }
 
+    Mat4 VulkanView::PaneViewProjection( Pane pane ) const {
+        const i32 splitX = (i32)( width() * kSplitFraction );
+        if( pane == Pane_Perspective ) {
+            return FlyCameraViewProjection( camera, splitX, height() );
+        }
+        return OrthoCameraViewProjection( topCamera, width() - splitX, height() );
+    }
+
+    bool VulkanView::PickVertexAt( QPoint position, Pane pane, i32 * outVertex ) const {
+        if( editPrimitive == kNoPrimitive ) {
+            return false;
+        }
+
+        const i32 splitX = (i32)( width() * kSplitFraction );
+        const f32 paneX = pane == Pane_Perspective ? 0.0f : (f32)splitX;
+        const f32 paneWidth = pane == Pane_Perspective ? (f32)splitX : (f32)( width() - splitX );
+        const f32 paneHeight = (f32)height();
+        const Mat4 viewProjection = PaneViewProjection( pane );
+
+        const i32 vertexCount = world.primitives[editPrimitive].halfMesh.vertices.count;
+        i32 best = kHMNone;
+        f32 bestDistance = kVertexPickRadius;
+        f32 bestDepth = 0.0f;
+
+        for( i32 v = 0; v < vertexCount; v++ ) {
+            Vec3 worldPosition = {};
+            if( !WorldGetVertexPosition( world, editPrimitive, v, &worldPosition ) ) {
+                continue;
+            }
+
+            const Vec4 clip = viewProjection * Vec4{ worldPosition.x, worldPosition.y, worldPosition.z, 1.0f };
+            // Behind the camera, where the divide would mirror it back on screen.
+            if( clip.w <= 0.0f ) {
+                continue;
+            }
+
+            // The renderer's negative viewport height puts clip +y at the top,
+            // so screen y runs the other way from it.
+            const f32 screenX = paneX + ( clip.x / clip.w * 0.5f + 0.5f ) * paneWidth;
+            const f32 screenY = ( 0.5f - clip.y / clip.w * 0.5f ) * paneHeight;
+            const f32 dx = screenX - (f32)position.x();
+            const f32 dy = screenY - (f32)position.y();
+            const f32 distance = sqrtf( dx * dx + dy * dy );
+            const f32 depth = clip.z / clip.w;
+
+            // Vertices stacked on screen - every corner of a cube seen from the
+            // top - are a tie on distance, and the one nearest the camera wins.
+            constexpr f32 kTie = 0.5f;
+            const bool closer = distance < bestDistance - kTie;
+            const bool tiedAndNearer = distance < bestDistance + kTie && best != kHMNone && depth < bestDepth;
+            if( distance <= kVertexPickRadius && ( best == kHMNone || closer || tiedAndNearer ) ) {
+                best = v;
+                bestDistance = distance;
+                bestDepth = depth;
+            }
+        }
+
+        *outVertex = best;
+        return best != kHMNone;
+    }
+
     void VulkanView::SetGizmoMode( GizmoMode mode ) {
         // The same key twice is how you put the gizmo away.
         gizmo.mode = gizmo.mode == mode ? GizmoMode_None : mode;
@@ -223,12 +297,32 @@ namespace sol {
         }
     }
 
+    bool VulkanView::GizmoSubject( Transform * outTransform ) const {
+        if( gizmo.mode == GizmoMode_None ) {
+            return false;
+        }
+
+        if( editPrimitive == kNoPrimitive ) {
+            return WorldGetPrimitiveTransform( world, world.selected, outTransform );
+        }
+
+        // In edit mode the object itself stays put; only a selected vertex
+        // can be moved, and a vertex has no orientation to rotate.
+        if( gizmo.mode != GizmoMode_Translate || editVertex == kHMNone ) {
+            return false;
+        }
+
+        Transform transform = TransformDefault();
+        if( !WorldGetVertexPosition( world, editPrimitive, editVertex, &transform.position ) ) {
+            return false;
+        }
+        *outTransform = transform;
+        return true;
+    }
+
     void VulkanView::UpdateGizmo() {
-        // Edit mode owns the object's geometry, so the object-level gizmo steps
-        // aside rather than offering to move the thing being edited.
         Transform transform = {};
-        const bool show = gizmo.mode != GizmoMode_None && editPrimitive == kNoPrimitive &&
-                          WorldGetPrimitiveTransform( world, world.selected, &transform );
+        const bool show = GizmoSubject( &transform );
 
         RendererSetGizmoVisible( renderer, show );
         if( !show ) {
@@ -254,8 +348,7 @@ namespace sol {
 
     bool VulkanView::BeginGizmoDrag( QPoint position, Pane pane ) {
         Transform transform = {};
-        if( gizmo.mode == GizmoMode_None || editPrimitive != kNoPrimitive ||
-            !WorldGetPrimitiveTransform( world, world.selected, &transform ) ) {
+        if( !GizmoSubject( &transform ) ) {
             return false;
         }
 
@@ -377,6 +470,7 @@ namespace sol {
             // reading as selected the moment its cage came down.
             const i32 previous = editPrimitive;
             editPrimitive = kNoPrimitive;
+            editVertex = kHMNone;
             WorldSetPrimitiveHighlight( world, renderer, previous, true );
         } else {
             // Nothing selected is nothing to edit, so Tab is a no-op rather
@@ -385,6 +479,7 @@ namespace sol {
                 return;
             }
             editPrimitive = world.selected;
+            editVertex = kHMNone;
             // The cage shows which object is the subject far better than a
             // tint does, so the tint comes off rather than competing with it.
             WorldSetPrimitiveHighlight( world, renderer, editPrimitive, false );
@@ -396,12 +491,14 @@ namespace sol {
     void VulkanView::RefreshEditOverlay() {
         // A primitive that can no longer produce a cage takes the mode down
         // with it, so edit mode never outlives what it was editing.
-        if( editPrimitive == kNoPrimitive || !WorldSetEditOverlay( world, renderer, editPrimitive ) ) {
+        if( editPrimitive == kNoPrimitive || !WorldSetEditOverlay( world, renderer, editPrimitive, editVertex ) ) {
             // A cage that could not be built leaves edit mode off, so whatever
             // was about to wear it gets its highlight back rather than sitting
             // selected with nothing showing it.
             const i32 previous = editPrimitive;
             editPrimitive = kNoPrimitive;
+            editVertex = kHMNone;
+            editGeometryDirty = false;
             RendererClearEditOverlay( renderer );
             WorldSetPrimitiveHighlight( world, renderer, previous, true );
         }
@@ -463,8 +560,17 @@ namespace sol {
             // Edit mode locks on to its subject. While the cage is up a left
             // click is not a way to pick a different object, nor to place a new
             // one - both would move the selection out from under the cage.
-            // Tab puts the cage away and hands object picking back.
-            if( editPrimitive == kNoPrimitive ) {
+            // It picks a vertex of the subject instead, and clicking away from
+            // every vertex drops the one selected. Tab puts the cage away and
+            // hands object picking back.
+            if( editPrimitive != kNoPrimitive ) {
+                i32 vertex = kHMNone;
+                PickVertexAt( position, PaneAt( position ), &vertex );
+                if( vertex != editVertex ) {
+                    editVertex = vertex;
+                    RefreshEditOverlay();
+                }
+            } else {
                 // Selecting wins over creating: a click that lands on something
                 // picks it, and only empty space starts a new plane. Placing one
                 // on top of another therefore needs the space cleared first.
@@ -507,7 +613,13 @@ namespace sol {
             if( gizmo.active != GizmoAxis_None ) {
                 Transform transform = {};
                 if( GizmoUpdateDrag( gizmo, origin, direction, renderer->gridSpacing, &transform ) ) {
-                    WorldSetPrimitiveTransform( world, renderer, world.selected, transform );
+                    if( editPrimitive != kNoPrimitive ) {
+                        if( WorldSetVertexPosition( world, editPrimitive, editVertex, transform.position ) ) {
+                            editGeometryDirty = true;
+                        }
+                    } else {
+                        WorldSetPrimitiveTransform( world, renderer, world.selected, transform );
+                    }
                 }
             } else {
                 gizmo.hovered = GizmoPick( gizmo, origin, direction );

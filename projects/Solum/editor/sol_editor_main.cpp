@@ -1,12 +1,20 @@
 // sol_editor_main.cpp : Qt shell hosting the engine's Vulkan viewport.
 //
 
+#include "sol_editor_assets.h"
 #include "sol_editor_import.h"
 #include "sol_editor_view.h"
 #include "sol_render.h"
 
+#include <QAction>
 #include <QApplication>
+#include <QDockWidget>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QMainWindow>
+#include <QMenu>
+#include <QMenuBar>
+#include <QMessageBox>
 #include <QStatusBar>
 #include <QVulkanInstance>
 #include <QWidget>
@@ -61,6 +69,35 @@ namespace {
         return 0;
     }
 
+    // File > Import Texture. Asks for source art and writes the asset pair into
+    // the asset directory, named after the source file. The browser picks the
+    // new .meta up from the folder on its own.
+    void ImportTextureInteractive( QWidget * parent, const QString & assetDirectory ) {
+        const QString sourcePath = QFileDialog::getOpenFileName(
+            parent, QStringLiteral( "Import Texture" ), QString(),
+            QStringLiteral( "Images (*.png *.jpg *.jpeg *.tga *.bmp *.psd *.hdr *.gif);;All files (*)" ) );
+        if( sourcePath.isEmpty() ) {
+            return;
+        }
+
+        // The byte arrays own the UTF-8 the views below borrow, so they have to
+        // outlive the import call.
+        const QByteArray sourceBytes = sourcePath.toUtf8();
+        const QByteArray directoryBytes = assetDirectory.toUtf8();
+        const QByteArray nameBytes = QFileInfo( sourcePath ).completeBaseName().toUtf8();
+
+        const bool ok = sol::ImportTexture( sol::StringView( sourceBytes.constData(), (sol::i32)sourceBytes.size() ),
+                                            sol::StringView( directoryBytes.constData(), (sol::i32)directoryBytes.size() ),
+                                            sol::StringView( nameBytes.constData(), (sol::i32)nameBytes.size() ),
+                                            sol::TextureFormat_RGBA8_SRGB,
+                                            sol::TextureFilter_Linear,
+                                            sol::TextureWrap_Repeat );
+        if( !ok ) {
+            QMessageBox::warning( parent, QStringLiteral( "Import Texture" ),
+                                  QStringLiteral( "Failed to import '%1'." ).arg( sourcePath ) );
+        }
+    }
+
 } // namespace
 
 int main( int argc, char ** argv ) {
@@ -100,9 +137,33 @@ int main( int argc, char ** argv ) {
         viewport->setMinimumSize( 640, 360 );
         viewport->setFocusPolicy( Qt::StrongFocus );
 
-        // The viewport is the whole window. The controls live in the status bar
-        // rather than a caption strip taking a row off the top of the render.
+        // The viewport is the centre of the window. The controls live in the
+        // status bar rather than a caption strip taking a row off the render.
         mainWindow.setCentralWidget( viewport );
+
+        const QString assetDirectory = QStringLiteral( SOLUM_ASSET_DIR );
+        sol::AssetBrowser * assetBrowser = new sol::AssetBrowser( assetDirectory );
+
+        QDockWidget * assetDock = new QDockWidget( QStringLiteral( "Assets" ), &mainWindow );
+        assetDock->setObjectName( QStringLiteral( "AssetDock" ) );
+        assetDock->setAllowedAreas( Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea );
+        assetDock->setWidget( assetBrowser );
+        mainWindow.addDockWidget( Qt::LeftDockWidgetArea, assetDock );
+        mainWindow.resizeDocks( { assetDock }, { 280 }, Qt::Horizontal );
+
+        QMenu * fileMenu = mainWindow.menuBar()->addMenu( QStringLiteral( "&File" ) );
+        QAction * importAction = fileMenu->addAction( QStringLiteral( "&Import Texture..." ) );
+        QObject::connect( importAction, &QAction::triggered, &mainWindow, [&mainWindow, assetDirectory]() {
+            ImportTextureInteractive( &mainWindow, assetDirectory );
+        } );
+        fileMenu->addSeparator();
+        QAction * exitAction = fileMenu->addAction( QStringLiteral( "E&xit" ) );
+        QObject::connect( exitAction, &QAction::triggered, &mainWindow, &QMainWindow::close );
+
+        // The dock's own toggle action, so the menu tick always matches whether
+        // the panel is actually showing, including after closing it by its X.
+        QMenu * viewMenu = mainWindow.menuBar()->addMenu( QStringLiteral( "&View" ) );
+        viewMenu->addAction( assetDock->toggleViewAction() );
         mainWindow.statusBar()->showMessage(
             QStringLiteral( "Left pane: perspective. WASD to move, right-drag to look, "
                             "Space/Ctrl for up and down, Shift to sprint.    "
@@ -110,6 +171,7 @@ int main( int argc, char ** argv ) {
                             "Left-click to select, click empty space to deselect, "
                             "left-drag on empty space to place a plane.    "
                             "Delete removes the selection, Tab toggles edit mode, which locks it.    "
+                            "In edit mode, click a vertex to select it and T to move it.    "
                             "T and R put the move and rotate gizmo on the selection.    "
                             "Keys 1-6 set the grid size." ) );
         mainWindow.showMaximized();

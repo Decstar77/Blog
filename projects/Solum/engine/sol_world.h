@@ -44,7 +44,15 @@ namespace sol {
     bool                WorldPick( const World & world, Renderer * r, Vec3 rayOrigin, Vec3 rayDirection, i32 * outPrimitive );
     void                WorldSetSelected( World & world, Renderer * r, i32 primitive );
     void                WorldSetPrimitiveHighlight( World & world, Renderer * r, i32 primitive, bool highlight );
-    bool                WorldSetEditOverlay( World & world, Renderer * r, i32 primitive );
+    // selectedVertex is drawn in its own colour, or kHMNone for none.
+    bool                WorldSetEditOverlay( World & world, Renderer * r, i32 primitive, i32 selectedVertex );
+
+    // Half-mesh vertices addressed in world space, so an editor can hand them
+    // to the same gizmo that moves whole objects. Setting one only changes the
+    // authored mesh and its face normals: follow it with WorldRebuildPrimitive
+    // to see the result, which lets a drag batch many moves into one rebuild.
+    bool                WorldGetVertexPosition( const World & world, i32 primitive, i32 vertex, Vec3 * outWorld );
+    bool                WorldSetVertexPosition( World & world, i32 primitive, i32 vertex, Vec3 worldPosition );
     bool                WorldRemovePrimitive( World & world, Renderer * r, i32 primitive );
     i32                 WorldRemapPrimitive( i32 held, i32 removed );
 

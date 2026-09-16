@@ -70,9 +70,22 @@ namespace sol {
         // point falls in.
         bool PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const;
 
+        // The pane's camera matrix at Qt's logical size, which is what cursor
+        // positions are measured in.
+        Mat4 PaneViewProjection( Pane pane ) const;
+
+        // Nearest vertex of the edited primitive within a few pixels of the
+        // cursor. Tested on screen rather than along a ray, since a vertex has
+        // no size to hit and the tolerance should not shrink with distance.
+        bool PickVertexAt( QPoint position, Pane pane, i32 * outVertex ) const;
+
         // T and R put the translate and rotate gizmo up on the selection, and
         // pressing the same key again takes it down.
         void SetGizmoMode( GizmoMode mode );
+        // What the gizmo drives right now, as a transform: the selected object
+        // in object mode, or the selected vertex (position only) in edit mode.
+        // False when there is nothing for it to act on.
+        bool GizmoSubject( Transform * outTransform ) const;
         // Moves the gizmo onto the selection and sizes it for this frame. Also
         // what makes it pickable, since picking reads that centre and size.
         void UpdateGizmo();
@@ -135,8 +148,16 @@ namespace sol {
         // clicks stop picking objects, so the subject cannot change without
         // leaving edit mode first.
         i32                 editPrimitive;
-        // Drives the selection's transform. Only up in object mode: in edit
-        // mode the subject is the geometry, not the object.
+        // The half-mesh vertex selected inside editPrimitive, or kHMNone.
+        // Always kHMNone outside edit mode.
+        i32                 editVertex;
+        // Set when a vertex drag has changed the mesh. The rebuild happens once
+        // in the next Render, since each one idles the device and the mouse
+        // can move many times a frame.
+        bool                editGeometryDirty;
+        // Drives the selection's transform in object mode, and the selected
+        // vertex's position in edit mode. Rotation has no meaning for a single
+        // vertex, so only translate is shown there.
         Gizmo               gizmo;
         // Screen position the cursor is warped back to while dragging, which is
         // how an unbounded drag is emulated without GLFW's disabled-cursor mode.
