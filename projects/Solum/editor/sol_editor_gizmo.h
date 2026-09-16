@@ -19,13 +19,11 @@ namespace sol {
         GizmoAxis_Z,
     };
 
-    // Three arrows then three rings, in X, Y, Z order.
     constexpr i32 kGizmoRangeCount = 6;
 
     struct Gizmo {
         GizmoMode           mode;
         GizmoAxis           hovered;
-        // GizmoAxis_None unless a drag is running.
         GizmoAxis           active;
 
         // Where the gizmo was last drawn, and the world size it was drawn at.
@@ -44,32 +42,14 @@ namespace sol {
         RenderGizmoRange    ranges[kGizmoRangeCount];
     };
 
-    Gizmo GizmoCreate();
-
-    // Local-space line geometry, uploaded once. Fills gizmo.ranges with the
-    // slice of it each handle occupies.
-    void GizmoBuildGeometry( Gizmo & gizmo, List<StaticMeshVertex> & outVertices );
-
-    // World size that keeps the gizmo roughly constant on screen.
-    f32 GizmoScaleFor( Vec3 center, Vec3 cameraPosition );
-
-    // Nearest handle the ray touches, or GizmoAxis_None.
-    GizmoAxis GizmoPick( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection );
-
-    bool GizmoBeginDrag( Gizmo & gizmo, GizmoAxis axis, const Transform & transform,
-                         Vec3 rayOrigin, Vec3 rayDirection );
-
-    // The subject's transform for this cursor ray. snapStep <= 0 disables
-    // translation snapping; rotation is never snapped.
-    bool GizmoUpdateDrag( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection, f32 snapStep,
-                          Transform * outTransform );
-
-    void GizmoEndDrag( Gizmo & gizmo );
-
-    // Which slices to draw this frame and how to tint them. Returns the count.
-    i32 GizmoDrawRanges( const Gizmo & gizmo, RenderGizmoRange * outRanges );
-
-    // Where to draw them: the gizmo sits on the subject at its own world size.
-    Mat4 GizmoDrawTransform( const Gizmo & gizmo );
+    Gizmo       GizmoCreate();
+    void        GizmoBuildGeometry( Gizmo & gizmo, List<StaticMeshVertex> & outVertices );
+    f32         GizmoScaleFor( Vec3 center, Vec3 cameraPosition );
+    GizmoAxis   GizmoPick( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection );
+    bool        GizmoBeginDrag( Gizmo & gizmo, GizmoAxis axis, const Transform & transform, Vec3 rayOrigin, Vec3 rayDirection );
+    bool        GizmoUpdateDrag( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection, f32 snapStep, Transform * outTransform );
+    void        GizmoEndDrag( Gizmo & gizmo );
+    i32         GizmoDrawRanges( const Gizmo & gizmo, RenderGizmoRange * outRanges );
+    Mat4        GizmoDrawTransform( const Gizmo & gizmo );
 
 } // namespace sol
