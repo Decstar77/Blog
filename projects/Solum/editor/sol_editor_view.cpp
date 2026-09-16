@@ -15,9 +15,9 @@
 
 namespace sol {
 
-    // Fraction of the surface the perspective pane gets; the top-down pane
-    // takes the rest.
-    constexpr f32 kSplitFraction = 0.5f;
+    // The quad layout is the widest this goes, and it is exactly what the
+    // renderer will draw in one frame.
+    static_assert( kMaxRenderViews >= 4, "the quad layout needs four render views" );
 
     // Selectable grid sizes, smallest first, bound to the 1-6 keys. The snap
     // step follows whichever is current, so the grid is not decoration - it is
@@ -28,16 +28,61 @@ namespace sol {
     // How far, in logical pixels, a click may land from a vertex and still pick it.
     constexpr f32 kVertexPickRadius = 10.0f;
 
+    // Slot 0 is the perspective pane in every layout, which is what lets the
+    // gizmo reach for a perspective camera without searching for one.
+    constexpr i32 kPerspectivePane = 0;
+
+    // Builds the cameras for all four slots once. A layout change rewrites
+    // rectangles only, so a camera framed up in the quad layout is still
+    // pointing the same way when that layout comes back.
+    static void PanesInit( EditorPane * panes ) {
+        panes[0] = {};
+        panes[0].kind = PaneKind_Perspective;
+        panes[0].fly = FlyCameraDefault();
+
+        panes[1] = {};
+        panes[1].kind = PaneKind_Ortho;
+        panes[1].ortho = OrthoCameraDefault( OrthoAxis_Top );
+
+        panes[2] = {};
+        panes[2].kind = PaneKind_Ortho;
+        panes[2].ortho = OrthoCameraDefault( OrthoAxis_Front );
+
+        panes[3] = {};
+        panes[3].kind = PaneKind_Ortho;
+        panes[3].ortho = OrthoCameraDefault( OrthoAxis_Side );
+    }
+
+    static void PaneSetRect( EditorPane & pane, f32 x, f32 y, f32 width, f32 height ) {
+        pane.x = x;
+        pane.y = y;
+        pane.width = width;
+        pane.height = height;
+    }
+
+    // Movement keys live on the window while look deltas live on the pane, so
+    // the two halves of a fly camera's input meet here, once per frame, for
+    // whichever pane the keyboard is currently spending itself on.
+    static FlyCameraInput FlyInputCombine( const FlyCameraInput & pane, const FlyCameraInput & movement ) {
+        FlyCameraInput input = movement;
+        input.looking = pane.looking;
+        input.lookDeltaX = pane.lookDeltaX;
+        input.lookDeltaY = pane.lookDeltaY;
+        return input;
+    }
+
     VulkanView::VulkanView( Renderer * renderer )
         : renderer( renderer ), world( WorldCreate() ), started( false ), startFailed( false ),
-          camera( FlyCameraDefault() ), topCamera( OrthoCameraDefault( OrthoAxis_Top ) ),
-          input(), topInput(), dragging( false ), dragPane( Pane_Perspective ),
-          createPrimitive( kNoPrimitive ), createStart(),
+          panes(), paneCount( 0 ), layout( PaneLayout_Split ), activePane( kPerspectivePane ),
+          movement(), dragging( false ), dragPane( kPerspectivePane ),
+          createPrimitive( kNoPrimitive ), createPane( -1 ), createStart(),
           createPending( false ), createPressPosition(),
           editPrimitive( kNoPrimitive ), editVertex( kHMNone ), editGeometryDirty( false ),
           gizmo( GizmoCreate() ),
           dragAnchor(), frameTimer() {
         setSurfaceType( QSurface::VulkanSurface );
+        PanesInit( panes );
+        SetLayout( PaneLayout_Single );
     }
 
     VulkanView::~VulkanView() {
@@ -48,6 +93,48 @@ namespace sol {
         // Runs before the QWindow base destructor, so Qt's surface is still
         // alive while the swapchain that references it is torn down.
         RendererShutdownDevice( renderer );
+    }
+
+    void VulkanView::SetLayout( PaneLayout next ) {
+        // A drag is measured against the pane it started in. Letting one
+        // survive a layout change would finish it against a rectangle that has
+        // moved out from under it.
+        EndDrag();
+        EndCreate();
+
+        layout = next;
+        switch( next ) {
+            case PaneLayout_Single:
+                paneCount = 1;
+                PaneSetRect( panes[0], 0.0f, 0.0f, 1.0f, 1.0f );
+                break;
+
+            case PaneLayout_Quad:
+                paneCount = 4;
+                PaneSetRect( panes[0], 0.0f, 0.0f, 0.5f, 0.5f );
+                PaneSetRect( panes[1], 0.5f, 0.0f, 0.5f, 0.5f );
+                PaneSetRect( panes[2], 0.0f, 0.5f, 0.5f, 0.5f );
+                PaneSetRect( panes[3], 0.5f, 0.5f, 0.5f, 0.5f );
+                break;
+
+            case PaneLayout_Split:
+            default:
+                layout = PaneLayout_Split;
+                paneCount = 2;
+                PaneSetRect( panes[0], 0.0f, 0.0f, 0.5f, 1.0f );
+                PaneSetRect( panes[1], 0.5f, 0.0f, 0.5f, 1.0f );
+                break;
+        }
+
+        // A pane that just went away must not keep a camera stuck in look or
+        // pan mode for the next time the layout brings it back.
+        for( i32 i = paneCount; i < kMaxRenderViews; i++ ) {
+            panes[i].flyInput.looking = false;
+            panes[i].orthoInput = {};
+        }
+        if( activePane >= paneCount ) {
+            activePane = kPerspectivePane;
+        }
     }
 
     bool VulkanView::EnsureStarted() {
@@ -92,8 +179,57 @@ namespace sol {
         return true;
     }
 
-    VulkanView::Pane VulkanView::PaneAt( QPoint position ) const {
-        return position.x() < (i32)( width() * kSplitFraction ) ? Pane_Perspective : Pane_Top;
+    QRect VulkanView::PaneRect( i32 pane ) const {
+        const EditorPane & p = panes[pane];
+        const i32 left = (i32)( p.x * (f32)width() );
+        const i32 top = (i32)( p.y * (f32)height() );
+        // The far edges come from the next boundary rather than from a scaled
+        // width, so neighbouring panes meet exactly instead of leaving a
+        // one-pixel seam that belongs to nobody.
+        const i32 right = (i32)( ( p.x + p.width ) * (f32)width() );
+        const i32 bottom = (i32)( ( p.y + p.height ) * (f32)height() );
+        return QRect( left, top, right - left, bottom - top );
+    }
+
+    i32 VulkanView::PaneAt( QPoint position ) const {
+        for( i32 i = 0; i < paneCount; i++ ) {
+            if( PaneRect( i ).contains( position ) ) {
+                return i;
+            }
+        }
+        // A position off the window entirely - which a drag past the edge
+        // produces - keeps working the pane it was already working.
+        return activePane;
+    }
+
+    void VulkanView::SetActivePane( i32 pane ) {
+        if( pane < 0 || pane >= paneCount ) {
+            return;
+        }
+        activePane = pane;
+    }
+
+    i32 VulkanView::MovementPane() const {
+        if( panes[activePane].kind == PaneKind_Perspective ) {
+            return activePane;
+        }
+        // Hovering an orthographic pane still flies the perspective one, which
+        // is what keeps WASD from going dead over most of a quad layout.
+        for( i32 i = 0; i < paneCount; i++ ) {
+            if( panes[i].kind == PaneKind_Perspective ) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    i32 VulkanView::TopPane() const {
+        for( i32 i = 0; i < paneCount; i++ ) {
+            if( panes[i].kind == PaneKind_Ortho && panes[i].ortho.axis == OrthoAxis_Top ) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     void VulkanView::Render() {
@@ -110,37 +246,45 @@ namespace sol {
         const qreal dpr = devicePixelRatio();
         const i32 surfaceWidth = (i32)( width() * dpr );
         const i32 surfaceHeight = (i32)( height() * dpr );
-        const i32 leftWidth = (i32)( surfaceWidth * kSplitFraction );
-        const i32 rightWidth = surfaceWidth - leftWidth;
+        const i32 movePane = MovementPane();
 
-        FlyCameraUpdate( &camera, input, dt );
-        // Logical height, not the pixel one: the pan deltas come from Qt cursor
-        // positions, which are logical too, and mixing the two would scale
-        // panning by the display's device pixel ratio.
-        OrthoCameraUpdate( &topCamera, topInput, height() );
+        RenderView views[kMaxRenderViews] = {};
+        for( i32 i = 0; i < paneCount; i++ ) {
+            EditorPane & pane = panes[i];
 
-        // Deltas are per-frame: whatever the mouse did before this update has
-        // been applied, so the next frame starts from zero.
-        input.lookDeltaX = 0.0f;
-        input.lookDeltaY = 0.0f;
-        topInput.panDeltaX = 0.0f;
-        topInput.panDeltaY = 0.0f;
-        topInput.zoomTicks = 0.0f;
+            // Each pane's projection uses its own pixel size, or every one of
+            // them would be stretched by the whole surface's aspect.
+            const i32 paneWidth = (i32)( pane.width * (f32)surfaceWidth );
+            const i32 paneHeight = (i32)( pane.height * (f32)surfaceHeight );
 
-        // Each pane's projection uses its own pixel size, or the halves would
-        // both be stretched by the full surface's aspect.
-        RenderView views[2] = {};
-        views[0].x = 0.0f;
-        views[0].y = 0.0f;
-        views[0].width = kSplitFraction;
-        views[0].height = 1.0f;
-        views[0].viewProjection = FlyCameraViewProjection( camera, leftWidth, surfaceHeight );
+            if( pane.kind == PaneKind_Perspective ) {
+                const FlyCameraInput keys = i == movePane ? movement : FlyCameraInput{};
+                FlyCameraUpdate( &pane.fly, FlyInputCombine( pane.flyInput, keys ), dt );
 
-        views[1].x = kSplitFraction;
-        views[1].y = 0.0f;
-        views[1].width = 1.0f - kSplitFraction;
-        views[1].height = 1.0f;
-        views[1].viewProjection = OrthoCameraViewProjection( topCamera, rightWidth, surfaceHeight );
+                // Deltas are per-frame: whatever the mouse did before this
+                // update has been applied, so the next frame starts from zero.
+                pane.flyInput.lookDeltaX = 0.0f;
+                pane.flyInput.lookDeltaY = 0.0f;
+
+                views[i].viewProjection = FlyCameraViewProjection( pane.fly, paneWidth, paneHeight );
+            } else {
+                // Logical height, not the pixel one: the pan deltas come from
+                // Qt cursor positions, which are logical too, and mixing the
+                // two would scale panning by the display's device pixel ratio.
+                OrthoCameraUpdate( &pane.ortho, pane.orthoInput, (i32)( pane.height * (f32)height() ) );
+
+                pane.orthoInput.panDeltaX = 0.0f;
+                pane.orthoInput.panDeltaY = 0.0f;
+                pane.orthoInput.zoomTicks = 0.0f;
+
+                views[i].viewProjection = OrthoCameraViewProjection( pane.ortho, paneWidth, paneHeight );
+            }
+
+            views[i].x = pane.x;
+            views[i].y = pane.y;
+            views[i].width = pane.width;
+            views[i].height = pane.height;
+        }
 
         // However many times the vertex moved since the last frame, the mesh
         // and its cage are rebuilt once.
@@ -152,7 +296,7 @@ namespace sol {
 
         UpdateGizmo();
 
-        RendererSetViews( renderer, views, 2 );
+        RendererSetViews( renderer, views, paneCount );
         RendererDrawFrame( renderer );
 
         // Presenting is FIFO, so this self-scheduling loop paces itself on vsync
@@ -162,31 +306,35 @@ namespace sol {
 
     void VulkanView::SetMovementKey( int key, bool pressed ) {
         switch( key ) {
-            case Qt::Key_W:         input.forward = pressed; break;
-            case Qt::Key_S:         input.back = pressed;    break;
-            case Qt::Key_D:         input.right = pressed;   break;
-            case Qt::Key_A:         input.left = pressed;    break;
-            case Qt::Key_Space:     input.up = pressed;      break;
-            case Qt::Key_Control:   input.down = pressed;    break;
-            case Qt::Key_Shift:     input.fast = pressed;    break;
+            case Qt::Key_W:         movement.forward = pressed; break;
+            case Qt::Key_S:         movement.back = pressed;    break;
+            case Qt::Key_D:         movement.right = pressed;   break;
+            case Qt::Key_A:         movement.left = pressed;    break;
+            case Qt::Key_Space:     movement.up = pressed;      break;
+            case Qt::Key_Control:   movement.down = pressed;    break;
+            case Qt::Key_Shift:     movement.fast = pressed;    break;
             default: break;
         }
     }
 
-    void VulkanView::BeginDrag( Pane pane ) {
-        if( dragging ) {
+    void VulkanView::BeginDrag( i32 pane ) {
+        if( dragging || pane < 0 || pane >= paneCount ) {
             return;
         }
         dragging = true;
         dragPane = pane;
+        SetActivePane( pane );
 
         // Anchor where the drag started and hide the pointer, so the cursor
-        // does not wander into the other pane or hit a screen edge mid-drag.
+        // does not wander into another pane or hit a screen edge mid-drag.
         dragAnchor = QCursor::pos();
         setCursor( Qt::BlankCursor );
 
-        input.looking = pane == Pane_Perspective;
-        topInput.panning = pane == Pane_Top;
+        if( panes[pane].kind == PaneKind_Perspective ) {
+            panes[pane].flyInput.looking = true;
+        } else {
+            panes[pane].orthoInput.panning = true;
+        }
     }
 
     void VulkanView::EndDrag() {
@@ -194,56 +342,67 @@ namespace sol {
             return;
         }
         dragging = false;
-        input.looking = false;
-        topInput.panning = false;
+        // Cleared across every slot rather than just the dragged one, so a
+        // layout change during a drag cannot strand a camera in look or pan
+        // mode with no press left to end it.
+        for( i32 i = 0; i < kMaxRenderViews; i++ ) {
+            panes[i].flyInput.looking = false;
+            panes[i].orthoInput.panning = false;
+        }
 
         unsetCursor();
         QCursor::setPos( dragAnchor );
     }
 
-    Vec3 VulkanView::OrthoWorldAt( QPoint position ) const {
-        const i32 splitX = (i32)( width() * kSplitFraction );
-        const i32 paneWidth = width() - splitX;
-        return OrthoCameraScreenToWorld( topCamera, (f32)( position.x() - splitX ),
-                                         (f32)position.y(), paneWidth, height() );
+    Vec3 VulkanView::OrthoWorldAt( QPoint position, i32 pane ) const {
+        const QRect rect = PaneRect( pane );
+        return OrthoCameraScreenToWorld( panes[pane].ortho,
+                                         (f32)( position.x() - rect.x() ),
+                                         (f32)( position.y() - rect.y() ),
+                                         rect.width(), rect.height() );
     }
 
-    void VulkanView::RayAt( QPoint position, Pane pane, Vec3 * outOrigin, Vec3 * outDirection ) const {
-        const i32 splitX = (i32)( width() * kSplitFraction );
+    void VulkanView::RayAt( QPoint position, i32 pane, Vec3 * outOrigin, Vec3 * outDirection ) const {
+        const QRect rect = PaneRect( pane );
+        const f32 localX = (f32)( position.x() - rect.x() );
+        const f32 localY = (f32)( position.y() - rect.y() );
 
-        if( pane == Pane_Perspective ) {
-            FlyCameraScreenRay( camera, (f32)position.x(), (f32)position.y(),
-                                splitX, height(), outOrigin, outDirection );
+        if( panes[pane].kind == PaneKind_Perspective ) {
+            FlyCameraScreenRay( panes[pane].fly, localX, localY,
+                                rect.width(), rect.height(), outOrigin, outDirection );
         } else {
-            OrthoCameraScreenRay( topCamera, (f32)( position.x() - splitX ), (f32)position.y(),
-                                  width() - splitX, height(), outOrigin, outDirection );
+            OrthoCameraScreenRay( panes[pane].ortho, localX, localY,
+                                  rect.width(), rect.height(), outOrigin, outDirection );
         }
     }
 
-    bool VulkanView::PickAt( QPoint position, Pane pane, i32 * outPrimitive ) const {
+    bool VulkanView::PickAt( QPoint position, i32 pane, i32 * outPrimitive ) const {
         Vec3 origin = {};
         Vec3 direction = {};
         RayAt( position, pane, &origin, &direction );
         return WorldPick( world, renderer, origin, direction, outPrimitive );
     }
 
-    Mat4 VulkanView::PaneViewProjection( Pane pane ) const {
-        const i32 splitX = (i32)( width() * kSplitFraction );
-        if( pane == Pane_Perspective ) {
-            return FlyCameraViewProjection( camera, splitX, height() );
+    Mat4 VulkanView::PaneViewProjection( i32 pane ) const {
+        // Logical pixels are enough here: only the aspect ratio reaches the
+        // projection, and that is the same either side of the pixel ratio.
+        const QRect rect = PaneRect( pane );
+        if( panes[pane].kind == PaneKind_Perspective ) {
+            return FlyCameraViewProjection( panes[pane].fly, rect.width(), rect.height() );
         }
-        return OrthoCameraViewProjection( topCamera, width() - splitX, height() );
+        return OrthoCameraViewProjection( panes[pane].ortho, rect.width(), rect.height() );
     }
 
-    bool VulkanView::PickVertexAt( QPoint position, Pane pane, i32 * outVertex ) const {
+    bool VulkanView::PickVertexAt( QPoint position, i32 pane, i32 * outVertex ) const {
         if( editPrimitive == kNoPrimitive ) {
             return false;
         }
 
-        const i32 splitX = (i32)( width() * kSplitFraction );
-        const f32 paneX = pane == Pane_Perspective ? 0.0f : (f32)splitX;
-        const f32 paneWidth = pane == Pane_Perspective ? (f32)splitX : (f32)( width() - splitX );
-        const f32 paneHeight = (f32)height();
+        const QRect rect = PaneRect( pane );
+        const f32 paneX = (f32)rect.x();
+        const f32 paneY = (f32)rect.y();
+        const f32 paneWidth = (f32)rect.width();
+        const f32 paneHeight = (f32)rect.height();
         const Mat4 viewProjection = PaneViewProjection( pane );
 
         const i32 vertexCount = world.primitives[editPrimitive].halfMesh.vertices.count;
@@ -266,7 +425,7 @@ namespace sol {
             // The renderer's negative viewport height puts clip +y at the top,
             // so screen y runs the other way from it.
             const f32 screenX = paneX + ( clip.x / clip.w * 0.5f + 0.5f ) * paneWidth;
-            const f32 screenY = ( 0.5f - clip.y / clip.w * 0.5f ) * paneHeight;
+            const f32 screenY = paneY + ( 0.5f - clip.y / clip.w * 0.5f ) * paneHeight;
             const f32 dx = screenX - (f32)position.x();
             const f32 dy = screenY - (f32)position.y();
             const f32 distance = sqrtf( dx * dx + dy * dy );
@@ -336,9 +495,9 @@ namespace sol {
         if( gizmo.active == GizmoAxis_None ) {
             gizmo.center = transform.position;
             // Sized off the perspective camera, which is where objects are
-            // mostly handled. The top-down pane draws it at that same world
-            // size rather than one of its own.
-            gizmo.scale = GizmoScaleFor( gizmo.center, camera.position );
+            // mostly handled. Every orthographic pane draws it at that same
+            // world size rather than one of its own.
+            gizmo.scale = GizmoScaleFor( gizmo.center, panes[kPerspectivePane].fly.position );
         }
 
         RenderGizmoRange ranges[kGizmoRangeCount] = {};
@@ -346,7 +505,7 @@ namespace sol {
         RendererSetGizmoDraw( renderer, GizmoDrawTransform( gizmo ), ranges, rangeCount );
     }
 
-    bool VulkanView::BeginGizmoDrag( QPoint position, Pane pane ) {
+    bool VulkanView::BeginGizmoDrag( QPoint position, i32 pane ) {
         Transform transform = {};
         if( !GizmoSubject( &transform ) ) {
             return false;
@@ -364,7 +523,7 @@ namespace sol {
         return GizmoBeginDrag( gizmo, axis, transform, origin, direction );
     }
 
-    void VulkanView::ArmCreate( QPoint position ) {
+    void VulkanView::ArmCreate( QPoint position, i32 pane ) {
         if( !started ) {
             return;
         }
@@ -373,18 +532,19 @@ namespace sol {
         // selection or the start of a new plane is not knowable until the
         // mouse either moves far enough or comes back up.
         createPending = true;
+        createPane = pane;
         createPressPosition = position;
     }
 
     void VulkanView::BeginCreate( QPoint position ) {
-        if( createPrimitive != kNoPrimitive || !started ) {
+        if( createPrimitive != kNoPrimitive || createPane < 0 || !started ) {
             return;
         }
 
         createPending = false;
 
         const f32 step = renderer->gridSpacing;
-        createStart = Vec3SnapTo( OrthoWorldAt( position ), step );
+        createStart = Vec3SnapTo( OrthoWorldAt( position, createPane ), step );
 
         // A unit quad centred on its own origin, so the transform alone can
         // place and size it. The mesh never has to be rebuilt while dragging.
@@ -408,12 +568,12 @@ namespace sol {
     }
 
     void VulkanView::UpdateCreate( QPoint position ) {
-        if( createPrimitive == kNoPrimitive ) {
+        if( createPrimitive == kNoPrimitive || createPane < 0 ) {
             return;
         }
 
         const f32 step = renderer->gridSpacing;
-        const Vec3 corner = Vec3SnapTo( OrthoWorldAt( position ), step );
+        const Vec3 corner = Vec3SnapTo( OrthoWorldAt( position, createPane ), step );
 
         f32 minX = Min( createStart.x, corner.x );
         f32 maxX = Max( createStart.x, corner.x );
@@ -437,6 +597,7 @@ namespace sol {
         // click having done nothing but clear the selection.
         createPending = false;
         createPrimitive = kNoPrimitive;
+        createPane = -1;
     }
 
     void VulkanView::DeleteSelected() {
@@ -515,6 +676,20 @@ namespace sol {
                 RendererSetGridSpacing( renderer, kGridSteps[step] );
             }
 
+            // Layouts sit on the function keys because the number row already
+            // belongs to the grid sizes.
+            if( event->key() == Qt::Key_F1 ) {
+                SetLayout( PaneLayout_Single );
+            }
+
+            if( event->key() == Qt::Key_F2 ) {
+                SetLayout( PaneLayout_Split );
+            }
+
+            if( event->key() == Qt::Key_F3 ) {
+                SetLayout( PaneLayout_Quad );
+            }
+
             if( event->key() == Qt::Key_Delete ) {
                 DeleteSelected();
             }
@@ -547,12 +722,15 @@ namespace sol {
         requestActivate();
 
         const QPoint position = event->position().toPoint();
+        const i32 pane = PaneAt( position );
+        SetActivePane( pane );
+
         if( event->button() == Qt::RightButton ) {
-            BeginDrag( PaneAt( position ) );
+            BeginDrag( pane );
         } else if( event->button() == Qt::LeftButton ) {
             // A press on a handle is a drag of the selection, never a pick of
             // whatever happens to lie behind it.
-            if( BeginGizmoDrag( position, PaneAt( position ) ) ) {
+            if( BeginGizmoDrag( position, pane ) ) {
                 QWindow::mousePressEvent( event );
                 return;
             }
@@ -565,7 +743,7 @@ namespace sol {
             // hands object picking back.
             if( editPrimitive != kNoPrimitive ) {
                 i32 vertex = kHMNone;
-                PickVertexAt( position, PaneAt( position ), &vertex );
+                PickVertexAt( position, pane, &vertex );
                 if( vertex != editVertex ) {
                     editVertex = vertex;
                     RefreshEditOverlay();
@@ -574,7 +752,6 @@ namespace sol {
                 // Selecting wins over creating: a click that lands on something
                 // picks it, and only empty space starts a new plane. Placing one
                 // on top of another therefore needs the space cleared first.
-                const Pane pane = PaneAt( position );
                 i32 hit = kNoPrimitive;
                 if( PickAt( position, pane, &hit ) ) {
                     WorldSetSelected( world, renderer, hit );
@@ -583,8 +760,10 @@ namespace sol {
                     // new plane if the press turns into a drag, so a click on
                     // nothing deselects and leaves the scene alone.
                     WorldSetSelected( world, renderer, kNoPrimitive );
-                    if( pane == Pane_Top ) {
-                        ArmCreate( position );
+                    // Planes are drawn out in xz, so the top-down pane is the
+                    // only one that can start one.
+                    if( pane == TopPane() ) {
+                        ArmCreate( position, pane );
                     }
                 }
             }
@@ -605,10 +784,17 @@ namespace sol {
     void VulkanView::mouseMoveEvent( QMouseEvent * event ) {
         const QPoint position = event->position().toPoint();
 
+        // The pane under the cursor takes the keyboard, except while a drag is
+        // warping the pointer back to its anchor, where the reported position
+        // says nothing about what the user is pointing at.
+        if( !dragging ) {
+            SetActivePane( PaneAt( position ) );
+        }
+
         if( gizmo.mode != GizmoMode_None && !dragging ) {
             Vec3 origin = {};
             Vec3 direction = {};
-            RayAt( position, PaneAt( position ), &origin, &direction );
+            RayAt( position, activePane, &origin, &direction );
 
             if( gizmo.active != GizmoAxis_None ) {
                 Transform transform = {};
@@ -651,12 +837,13 @@ namespace sol {
             // The warp below generates its own move event landing exactly on
             // the anchor; ignoring a zero delta is what stops it recursing.
             if( !delta.isNull() ) {
-                if( dragPane == Pane_Perspective ) {
-                    input.lookDeltaX += (f32)delta.x();
-                    input.lookDeltaY += (f32)delta.y();
+                EditorPane & pane = panes[dragPane];
+                if( pane.kind == PaneKind_Perspective ) {
+                    pane.flyInput.lookDeltaX += (f32)delta.x();
+                    pane.flyInput.lookDeltaY += (f32)delta.y();
                 } else {
-                    topInput.panDeltaX += (f32)delta.x();
-                    topInput.panDeltaY += (f32)delta.y();
+                    pane.orthoInput.panDeltaX += (f32)delta.x();
+                    pane.orthoInput.panDeltaY += (f32)delta.y();
                 }
                 QCursor::setPos( dragAnchor );
             }
@@ -665,11 +852,12 @@ namespace sol {
     }
 
     void VulkanView::wheelEvent( QWheelEvent * event ) {
-        // Zoom belongs to the pane under the cursor, and only the orthographic
+        // Zoom belongs to the pane under the cursor, and only an orthographic
         // one has a zoom to speak of.
-        if( PaneAt( event->position().toPoint() ) == Pane_Top ) {
+        const i32 pane = PaneAt( event->position().toPoint() );
+        if( panes[pane].kind == PaneKind_Ortho ) {
             // A notch is 120 eighths of a degree by Qt's convention.
-            topInput.zoomTicks += (f32)event->angleDelta().y() / 120.0f;
+            panes[pane].orthoInput.zoomTicks += (f32)event->angleDelta().y() / 120.0f;
         }
         QWindow::wheelEvent( event );
     }
@@ -680,8 +868,11 @@ namespace sol {
         EndDrag();
         EndCreate();
         GizmoEndDrag( gizmo );
-        input = {};
-        topInput = {};
+        movement = {};
+        for( i32 i = 0; i < kMaxRenderViews; i++ ) {
+            panes[i].flyInput = {};
+            panes[i].orthoInput = {};
+        }
         QWindow::focusOutEvent( event );
     }
 

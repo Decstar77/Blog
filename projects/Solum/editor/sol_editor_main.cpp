@@ -7,6 +7,7 @@
 #include "sol_render.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -164,12 +165,65 @@ int main( int argc, char ** argv ) {
         // the panel is actually showing, including after closing it by its X.
         QMenu * viewMenu = mainWindow.menuBar()->addMenu( QStringLiteral( "&View" ) );
         viewMenu->addAction( assetDock->toggleViewAction() );
+
+        // The same three layouts the function keys reach. Exclusive, so the
+        // menu reads as a choice rather than three independent toggles.
+        QMenu * layoutMenu = viewMenu->addMenu( QStringLiteral( "&Layout" ) );
+        QActionGroup * layoutGroup = new QActionGroup( layoutMenu );
+        layoutGroup->setExclusive( true );
+
+        struct LayoutEntry {
+            sol::PaneLayout layout;
+            const char *    text;
+            const char *    shortcut;
+        };
+        const LayoutEntry layoutEntries[] = {
+            { sol::PaneLayout_Single, "&Single",          "F1" },
+            { sol::PaneLayout_Split,  "S&plit",           "F2" },
+            { sol::PaneLayout_Quad,   "&Quad",            "F3" },
+        };
+
+        for( size_t i = 0; i < SPLATS_ARRAY_COUNT( layoutEntries ); i++ ) {
+            const LayoutEntry & entry = layoutEntries[i];
+            QAction * action = layoutMenu->addAction( QString::fromUtf8( entry.text ) );
+            action->setCheckable( true );
+            action->setChecked( view->CurrentLayout() == entry.layout );
+            // The layout each action names, so the refresh below can read it
+            // back off the group without a parallel array to keep in step.
+            action->setData( (int)entry.layout );
+            // A hint only, and deliberately scoped to a widget that never has
+            // focus: the viewport handles the function keys itself, and a live
+            // shortcut here would make the binding ambiguous.
+            action->setShortcut( QKeySequence( QString::fromUtf8( entry.shortcut ) ) );
+            action->setShortcutContext( Qt::WidgetShortcut );
+            layoutGroup->addAction( action );
+
+            const sol::PaneLayout target = entry.layout;
+            QObject::connect( action, &QAction::triggered, view, [view, target]() {
+                view->SetLayout( target );
+                // The menu took focus on the way in, and the viewport is where
+                // the keyboard belongs.
+                view->requestActivate();
+            } );
+        }
+
+        // The function keys change the layout without going through the menu,
+        // so the ticks are refreshed on the way in rather than only on click.
+        QObject::connect( layoutMenu, &QMenu::aboutToShow, layoutMenu, [view, layoutGroup]() {
+            const QList<QAction *> actions = layoutGroup->actions();
+            for( QAction * action : actions ) {
+                action->setChecked( (int)view->CurrentLayout() == action->data().toInt() );
+            }
+        } );
+
         mainWindow.statusBar()->showMessage(
-            QStringLiteral( "Left pane: perspective. WASD to move, right-drag to look, "
+            QStringLiteral( "F1/F2/F3 switch to one, two and four panes. "
+                            "The pane under the cursor takes the input.    "
+                            "Perspective pane: WASD to move, right-drag to look, "
                             "Space/Ctrl for up and down, Shift to sprint.    "
-                            "Right pane: top-down. Right-drag to pan, wheel to zoom.    "
+                            "Top, front and side panes: right-drag to pan, wheel to zoom.    "
                             "Left-click to select, click empty space to deselect, "
-                            "left-drag on empty space to place a plane.    "
+                            "left-drag on empty space in the top pane to place a plane.    "
                             "Delete removes the selection, Tab toggles edit mode, which locks it.    "
                             "In edit mode, click a vertex to select it and T to move it.    "
                             "T and R put the move and rotate gizmo on the selection.    "
