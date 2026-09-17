@@ -1287,9 +1287,15 @@ namespace sol {
         ListAdd( vertices, vertex );
     }
 
+    // Built in the grid's own space - the xz plane, centred on the origin -
+    // never in world space. RendererSetGridTransform is what puts it somewhere,
+    // so a grid that is re-aimed or moved costs nothing beyond a push constant.
     static bool CreateGrid( Renderer * r, f32 spacing ) {
         const Vec3 minorColor = { 0.28f, 0.28f, 0.32f };
         const Vec3 majorColor = { 0.42f, 0.42f, 0.48f };
+        // The two lines through the grid's own origin, marking its u and v axes.
+        // On an unmoved grid they land on the world x and z axes, which is
+        // where the colours come from.
         const Vec3 axisXColor = { 0.75f, 0.25f, 0.30f };
         const Vec3 axisZColor = { 0.25f, 0.45f, 0.80f };
 
@@ -1323,6 +1329,45 @@ namespace sol {
             r->gridSpacing = spacing;
         } else {
             fprintf( stderr, "Failed to build the grid\n" );
+        }
+
+        ListFree( vertices );
+        return ok;
+    }
+
+    // How many pixels thick the mode border is. Drawn as that many concentric
+    // rectangles one pixel apart rather than as a wide line: wideLines is an
+    // optional device feature, and a one-pixel line is the only width Vulkan
+    // guarantees.
+    constexpr i32 kBorderThickness = 3;
+
+    // A unit rectangle in clip space as four lines, which is what lets the
+    // border be drawn with no camera and survive a resize untouched. The
+    // colour is white so the tint carries the mode's colour whole.
+    static bool CreateBorder( Renderer * r ) {
+        const Vec3 corners[] = {
+            { -1.0f, -1.0f, 0.0f },
+            {  1.0f, -1.0f, 0.0f },
+            {  1.0f,  1.0f, 0.0f },
+            { -1.0f,  1.0f, 0.0f },
+        };
+
+        constexpr i32 kCornerCount = (i32)SPLATS_ARRAY_COUNT( corners );
+        List<StaticMeshVertex> vertices = {};
+        for( i32 i = 0; i < kCornerCount; i++ ) {
+            GridPushLine( vertices, corners[i], corners[( i + 1 ) % kCornerCount],
+                          Vec3{ 1.0f, 1.0f, 1.0f } );
+        }
+
+        const u64 byteCount = (u64)vertices.count * sizeof( StaticMeshVertex );
+        bool ok = CreateBuffer( r, byteCount,
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+                                &r->borderVertexBuffer, &r->borderVertexAllocation, nullptr );
+        ok = ok && UploadBuffer( r, r->borderVertexBuffer, vertices.data, byteCount );
+        if( ok ) {
+            r->borderVertexCount = vertices.count;
+        } else {
+            fprintf( stderr, "Failed to build the viewport border\n" );
         }
 
         ListFree( vertices );
@@ -1564,12 +1609,12 @@ namespace sol {
             if( r->gridVisible && r->gridVertexCount > 0 ) {
                 vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->gridPipeline );
 
-                // Already in world space, so the view matrix is the whole mvp -
-                // there is no model transform to premultiply. The whole block
-                // goes every time: pushing only part of it would leave the
-                // fragment shader reading bytes nothing ever wrote.
+                // The grid is authored on its own xz plane, so its transform
+                // is the model half of the mvp. The whole block goes every
+                // time: pushing only part of it would leave the fragment
+                // shader reading bytes nothing ever wrote.
                 StaticMeshPush gridPush = {};
-                gridPush.mvp = view.viewProjection;
+                gridPush.mvp = view.viewProjection * r->gridTransform;
                 gridPush.tint = kNoTint;
                 gridPush.pointSize = 1.0f;
                 vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
@@ -1672,6 +1717,49 @@ namespace sol {
             }
         }
 
+        // Over every view and outside the loop: the border frames the whole
+        // surface, not each pane, so it takes the surface's own viewport back
+        // from whichever view set one last. The line pipeline has the depth
+        // test off, so nothing drawn above can bury it.
+        if( r->borderVisible && r->borderVertexCount > 0 ) {
+            VkViewport full = {};
+            full.x = 0.0f;
+            full.y = surfaceHeight;
+            full.width = surfaceWidth;
+            full.height = -surfaceHeight;
+            full.minDepth = 0.0f;
+            full.maxDepth = 1.0f;
+            vkCmdSetViewport( cmd, 0, 1, &full );
+
+            VkRect2D fullScissor = {};
+            fullScissor.extent = r->swapchainExtent;
+            vkCmdSetScissor( cmd, 0, 1, &fullScissor );
+
+            vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->editLinePipeline );
+            vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
+                                     0, 1, &whiteSet, 0, nullptr );
+
+            VkDeviceSize borderOffset = 0;
+            vkCmdBindVertexBuffers( cmd, 0, 1, &r->borderVertexBuffer, &borderOffset );
+
+            for( i32 i = 0; i < kBorderThickness; i++ ) {
+                // Ring i sits on pixel i in from the edge. A rectangle left at
+                // the clip-space edge would land half off the attachment, hence
+                // the half-pixel: 2 / extent is one pixel in clip space.
+                const f32 inset = (f32)( 2 * i + 1 );
+                StaticMeshPush borderPush = {};
+                borderPush.mvp = Mat4Scale( Vec3{ 1.0f - inset / surfaceWidth,
+                                                  1.0f - inset / surfaceHeight,
+                                                  1.0f } );
+                borderPush.tint = Vec4{ r->borderColor.x, r->borderColor.y, r->borderColor.z, 1.0f };
+                borderPush.pointSize = 1.0f;
+                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
+                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                    0, (u32)sizeof( borderPush ), &borderPush );
+                vkCmdDraw( cmd, (u32)r->borderVertexCount, 1, 0, 0 );
+            }
+        }
+
         vkCmdEndRenderPass( cmd );
 
         VK_CHECK( vkEndCommandBuffer( cmd ) );
@@ -1696,6 +1784,9 @@ namespace sol {
         r->fallbackWidth = width;
         r->fallbackHeight = height;
         RendererSetViewProjection( r, Mat4Identity() );
+        // A zeroed Mat4 would collapse the grid to a point, so the identity has
+        // to be there before the first frame whether anyone re-aims it or not.
+        RendererSetGridTransform( r, Mat4Identity() );
 
         return PickPhysicalDevice( r ) &&
                CreateLogicalDevice( r ) &&
@@ -1715,7 +1806,8 @@ namespace sol {
                // Needs the command pool and descriptor pool above.
                CreateWhiteTexture( r ) &&
                // Needs the white texture, which its descriptor set binds.
-               CreateGrid( r, kGridDefaultSpacing );
+               CreateGrid( r, kGridDefaultSpacing ) &&
+               CreateBorder( r );
     }
 
     void RendererSetSize( Renderer * r, i32 width, i32 height ) {
@@ -1770,6 +1862,12 @@ namespace sol {
         // The buffers being replaced may still be referenced by a frame the GPU
         // has not finished with.
         vkDeviceWaitIdle( r->device );
+        if( r->borderVertexBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->borderVertexBuffer, r->borderVertexAllocation );
+            r->borderVertexBuffer = VK_NULL_HANDLE;
+            r->borderVertexAllocation = VK_NULL_HANDLE;
+            r->borderVertexCount = 0;
+        }
         DestroyEditOverlayBuffers( r );
 
         bool ok = true;
@@ -1868,6 +1966,15 @@ namespace sol {
         }
 
         return CreateGrid( r, spacing );
+    }
+
+    void RendererSetBorder( Renderer * r, bool visible, Vec3 color ) {
+        r->borderVisible = visible;
+        r->borderColor = color;
+    }
+
+    void RendererSetGridTransform( Renderer * r, const Mat4 & transform ) {
+        r->gridTransform = transform;
     }
 
     void RendererSetViews( Renderer * r, const RenderView * views, i32 count ) {

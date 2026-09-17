@@ -2,11 +2,9 @@
 
 #include <QCursor>
 #include <QFocusEvent>
-#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QResizeEvent>
-#include <QStyleHints>
 #include <QVulkanInstance>
 #include <QWheelEvent>
 
@@ -24,6 +22,22 @@ namespace sol {
     // the thing geometry lands on.
     constexpr f32 kGridSteps[] = { 0.125f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };
     constexpr i32 kGridStepCount = (i32)( sizeof( kGridSteps ) / sizeof( kGridSteps[0] ) );
+
+    // The three axis planes the grid can be put on, cycled by G. Anything
+    // further - a grid laid on the face of an object - would come from a pick
+    // rather than a key, and would land on the same EditorGrid.
+    constexpr Vec3 kGridNormals[] = {
+        { 0.0f, 1.0f, 0.0f },
+        { 0.0f, 0.0f, 1.0f },
+        { 1.0f, 0.0f, 0.0f },
+    };
+    constexpr i32 kGridNormalCount = (i32)( sizeof( kGridNormals ) / sizeof( kGridNormals[0] ) );
+
+    // The two modes that take the left button over. Neither changes what the
+    // scene looks like, so without a border on the viewport there is nothing
+    // on screen saying a click is about to build or edit rather than select.
+    constexpr Vec3 kBuildBorderColor = { 0.58f, 0.36f, 0.16f };
+    constexpr Vec3 kEditBorderColor = { 0.26f, 0.68f, 0.32f };
 
     // How far, in logical pixels, a click may land from a vertex and still pick it.
     constexpr f32 kVertexPickRadius = 10.0f;
@@ -71,12 +85,44 @@ namespace sol {
         return input;
     }
 
+    // Axis-aligned rectangle in grid coordinates spanned by two snapped
+    // corners. Never smaller than one cell: a press that never travelled still
+    // has to produce something you can see.
+    static void GridRect( const EditorGrid & grid, Vec3 a, Vec3 b, Vec3 * outMin, Vec3 * outMax ) {
+        Vec3 min = Vec3{ Min( a.x, b.x ), Min( a.y, b.y ), 0.0f };
+        Vec3 max = Vec3{ Max( a.x, b.x ), Max( a.y, b.y ), 0.0f };
+        if( max.x - min.x < grid.step ) { max.x = min.x + grid.step; }
+        if( max.y - min.y < grid.step ) { max.y = min.y + grid.step; }
+        *outMin = min;
+        *outMax = max;
+    }
+
+    // Places a unit primitive - the base quad, or the cube it becomes - across a
+    // grid rectangle. Both are centred on their own origin and lie in local xz
+    // with local +y up, which is exactly the space EditorGridRotation lands on
+    // the grid, so the transform alone does all the placing and no mesh is ever
+    // rebuilt while dragging. A height of zero is the flat case: a quad has no
+    // extent along local y, so that axis stays at 1 rather than collapsing the
+    // matrix. A negative height builds the box below the grid.
+    static Transform GridBoxTransform( const EditorGrid & grid, Vec3 min, Vec3 max, f32 height ) {
+        Transform transform = TransformDefault();
+        transform.rotation = EditorGridRotation( grid );
+        transform.position = EditorGridToWorld( grid, Vec3{ 0.5f * ( min.x + max.x ),
+                                                            0.5f * ( min.y + max.y ),
+                                                            0.5f * height } );
+        transform.scale = Vec3{ max.x - min.x,
+                                height == 0.0f ? 1.0f : fabsf( height ),
+                                max.y - min.y };
+        return transform;
+    }
+
     VulkanView::VulkanView( Renderer * renderer )
         : renderer( renderer ), world( WorldCreate() ), started( false ), startFailed( false ),
           panes(), paneCount( 0 ), layout( PaneLayout_Split ), activePane( kPerspectivePane ),
           movement(), dragging( false ), dragPane( kPerspectivePane ),
-          createPrimitive( kNoPrimitive ), createPane( -1 ), createStart(),
-          createPending( false ), createPressPosition(),
+          grid( EditorGridDefault() ),
+          buildStage( BuildStage_Off ), buildPrimitive( kNoPrimitive ), buildPane( -1 ),
+          buildStart(), buildMin(), buildMax(), buildHeight( 0.0f ),
           editPrimitive( kNoPrimitive ), editVertex( kHMNone ), editGeometryDirty( false ),
           gizmo( GizmoCreate() ),
           dragAnchor(), frameTimer() {
@@ -100,7 +146,7 @@ namespace sol {
         // survive a layout change would finish it against a rectangle that has
         // moved out from under it.
         EndDrag();
-        EndCreate();
+        CancelBuild();
 
         layout = next;
         switch( next ) {
@@ -223,15 +269,6 @@ namespace sol {
         return -1;
     }
 
-    i32 VulkanView::TopPane() const {
-        for( i32 i = 0; i < paneCount; i++ ) {
-            if( panes[i].kind == PaneKind_Ortho && panes[i].ortho.axis == OrthoAxis_Top ) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     void VulkanView::Render() {
         if( !isExposed() || !EnsureStarted() ) {
             return;
@@ -296,6 +333,21 @@ namespace sol {
 
         UpdateGizmo();
 
+        // Build mode is checked first: it is the mode a click is answering to
+        // when both are somehow up.
+        if( buildStage != BuildStage_Off ) {
+            RendererSetBorder( renderer, true, kBuildBorderColor );
+        } else if( editPrimitive != kNoPrimitive ) {
+            RendererSetBorder( renderer, true, kEditBorderColor );
+        } else {
+            RendererSetBorder( renderer, false, Vec3{} );
+        }
+
+        // The drawn grid and the grid geometry snaps to are one grid, so the
+        // renderer is told where it is every frame rather than at the moments
+        // someone remembers to. CPU-only, the same as the views below.
+        RendererSetGridTransform( renderer, EditorGridTransform( grid ) );
+
         RendererSetViews( renderer, views, paneCount );
         RendererDrawFrame( renderer );
 
@@ -352,14 +404,6 @@ namespace sol {
 
         unsetCursor();
         QCursor::setPos( dragAnchor );
-    }
-
-    Vec3 VulkanView::OrthoWorldAt( QPoint position, i32 pane ) const {
-        const QRect rect = PaneRect( pane );
-        return OrthoCameraScreenToWorld( panes[pane].ortho,
-                                         (f32)( position.x() - rect.x() ),
-                                         (f32)( position.y() - rect.y() ),
-                                         rect.width(), rect.height() );
     }
 
     void VulkanView::RayAt( QPoint position, i32 pane, Vec3 * outOrigin, Vec3 * outDirection ) const {
@@ -523,81 +567,233 @@ namespace sol {
         return GizmoBeginDrag( gizmo, axis, transform, origin, direction );
     }
 
-    void VulkanView::ArmCreate( QPoint position, i32 pane ) {
+    bool VulkanView::GridPointAt( QPoint position, i32 pane, Vec3 * outLocal ) const {
+        if( pane < 0 || pane >= paneCount ) {
+            return false;
+        }
+
+        Vec3 origin = {};
+        Vec3 direction = {};
+        RayAt( position, pane, &origin, &direction );
+        return EditorGridRaycast( grid, origin, direction, outLocal );
+    }
+
+    void VulkanView::CycleGridPlane() {
         if( !started ) {
             return;
         }
 
-        // Nothing is built yet. Whether this press is a click that clears the
-        // selection or the start of a new plane is not knowable until the
-        // mouse either moves far enough or comes back up.
-        createPending = true;
-        createPane = pane;
-        createPressPosition = position;
+        // Anything half drawn was drawn on the old plane, and would finish on
+        // the new one.
+        CancelBuild();
+
+        // A normal that is not one of the three - nothing sets one today - is
+        // read as the first, so the key always lands somewhere known.
+        i32 current = 0;
+        for( i32 i = 0; i < kGridNormalCount; i++ ) {
+            if( Vec3Dot( grid.normal, kGridNormals[i] ) > 0.99f ) {
+                current = i;
+                break;
+            }
+        }
+
+        grid.normal = kGridNormals[( current + 1 ) % kGridNormalCount];
     }
 
-    void VulkanView::BeginCreate( QPoint position ) {
-        if( createPrimitive != kNoPrimitive || createPane < 0 || !started ) {
+    void VulkanView::ToggleBuildMode() {
+        if( !started ) {
             return;
         }
 
-        createPending = false;
+        if( buildStage == BuildStage_Off ) {
+            // Build mode takes the left button whole. Anything the pointer was
+            // already part way through has to end here rather than run on
+            // underneath a mode that will never send it another event.
+            GizmoEndDrag( gizmo );
+            buildStage = BuildStage_Ready;
+        } else {
+            CancelBuild();
+            buildStage = BuildStage_Off;
+        }
+    }
 
-        const f32 step = renderer->gridSpacing;
-        createStart = Vec3SnapTo( OrthoWorldAt( position, createPane ), step );
+    bool VulkanView::BuildMousePress( QPoint position, i32 pane ) {
+        if( buildStage == BuildStage_Off || !started ) {
+            return false;
+        }
 
-        // A unit quad centred on its own origin, so the transform alone can
-        // place and size it. The mesh never has to be rebuilt while dragging.
+        // The click that ends an extrude. Taken on the press rather than the
+        // release, so the box is finished the moment you commit to it and the
+        // release that follows lands on a Ready stage with nothing to do.
+        if( buildStage == BuildStage_Height ) {
+            CommitBuild();
+            return true;
+        }
+
+        // Mid-base, a second button is not a second box. Swallowed all the
+        // same: in build mode a left click is never a selection.
+        if( buildStage != BuildStage_Ready ) {
+            return true;
+        }
+
+        Vec3 local = {};
+        if( !GridPointAt( position, pane, &local ) ) {
+            return true;
+        }
+
+        buildPane = pane;
+        buildStart = EditorGridSnapLocal( grid, local );
+        buildHeight = 0.0f;
+        GridRect( grid, buildStart, buildStart, &buildMin, &buildMax );
+
+        // The base starts as a quad because that is what it is - a flat
+        // rectangle on the grid. It only becomes a box when the release below
+        // says the base is done.
         HalfMesh quad = {};
         HalfMeshCreateQuad( quad, 1.0f );
 
         RenderMaterial material = RenderMaterialDefault();
         material.albedo = Vec3{ 0.45f, 0.62f, 0.50f };
 
-        createPrimitive = WorldAddPrimitive( world, renderer, quad, material, TransformDefault() );
+        buildPrimitive = WorldAddPrimitive( world, renderer, quad, material, TransformDefault() );
         HalfMeshFree( quad );
 
-        if( createPrimitive == kNoPrimitive ) {
-            fprintf( stderr, "Failed to create a plane\n" );
+        if( buildPrimitive == kNoPrimitive ) {
+            fprintf( stderr, "Failed to start a build\n" );
+            return true;
+        }
+
+        WorldSetSelected( world, renderer, buildPrimitive );
+        buildStage = BuildStage_Base;
+        ApplyBuildTransform();
+        return true;
+    }
+
+    void VulkanView::BuildMouseMove( QPoint position ) {
+        if( buildPrimitive == kNoPrimitive ) {
             return;
         }
 
-        // Whatever you just made is what you are working on.
-        WorldSetSelected( world, renderer, createPrimitive );
-        UpdateCreate( position );
-    }
-
-    void VulkanView::UpdateCreate( QPoint position ) {
-        if( createPrimitive == kNoPrimitive || createPane < 0 ) {
+        if( buildStage == BuildStage_Base ) {
+            // The cursor leaving the grid - dragging past the horizon in a
+            // perspective pane - holds the last good rectangle rather than
+            // collapsing the base to nothing.
+            Vec3 local = {};
+            if( !GridPointAt( position, buildPane, &local ) ) {
+                return;
+            }
+            GridRect( grid, buildStart, EditorGridSnapLocal( grid, local ), &buildMin, &buildMax );
+            ApplyBuildTransform();
             return;
         }
 
-        const f32 step = renderer->gridSpacing;
-        const Vec3 corner = Vec3SnapTo( OrthoWorldAt( position, createPane ), step );
+        if( buildStage == BuildStage_Height ) {
+            // An extrude is not on the grid any more, so it is measured against
+            // the line the box is growing along instead: the normal through the
+            // middle of the locked base.
+            const Vec3 base = EditorGridToWorld( grid, Vec3{ 0.5f * ( buildMin.x + buildMax.x ),
+                                                             0.5f * ( buildMin.y + buildMax.y ),
+                                                             0.0f } );
+            Vec3 origin = {};
+            Vec3 direction = {};
+            RayAt( position, buildPane, &origin, &direction );
 
-        f32 minX = Min( createStart.x, corner.x );
-        f32 maxX = Max( createStart.x, corner.x );
-        f32 minZ = Min( createStart.z, corner.z );
-        f32 maxZ = Max( createStart.z, corner.z );
+            f32 height = 0.0f;
+            // A pane looking straight down that line - the top view of a flat
+            // grid - has no height in it at all. The last one stands and the
+            // click still commits, which beats snapping the box to zero.
+            if( !EditorGridRaycastHeight( grid, base, origin, direction, &height ) ) {
+                return;
+            }
 
-        // A press that never moves still has to produce something visible, so
-        // the smallest plane is one cell rather than nothing.
-        if( maxX - minX < step ) { maxX = minX + step; }
-        if( maxZ - minZ < step ) { maxZ = minZ + step; }
+            height = SnapTo( height, grid.step );
+            if( fabsf( height ) < grid.step ) {
+                // One cell is the smallest box, the same floor the base has.
+                // Which way it points follows the drag, and only falls back to
+                // the current side when the drag is sitting exactly on zero.
+                const bool below = height < 0.0f || ( height == 0.0f && buildHeight < 0.0f );
+                height = below ? -grid.step : grid.step;
+            }
 
-        Transform transform = TransformDefault();
-        transform.position = Vec3{ 0.5f * ( minX + maxX ), 0.0f, 0.5f * ( minZ + maxZ ) };
-        transform.scale = Vec3{ maxX - minX, 1.0f, maxZ - minZ };
-
-        WorldSetPrimitiveTransform( world, renderer, createPrimitive, transform );
+            buildHeight = height;
+            ApplyBuildTransform();
+        }
     }
 
-    void VulkanView::EndCreate() {
-        // Disarms a press that never travelled, which is what leaves a plain
-        // click having done nothing but clear the selection.
-        createPending = false;
-        createPrimitive = kNoPrimitive;
-        createPane = -1;
+    void VulkanView::BuildMouseRelease() {
+        // Only the base drag ends on a button release. The extrude ends on the
+        // next press, so the release that locked the base cannot also finish it.
+        if( buildStage != BuildStage_Base ) {
+            return;
+        }
+
+        if( buildPrimitive == kNoPrimitive ) {
+            CancelBuild();
+            return;
+        }
+
+        BuildToBox();
+        // Opens at one cell rather than at nothing, so the box reads as a box
+        // from the first frame of the extrude.
+        buildHeight = grid.step;
+        ApplyBuildTransform();
+        buildStage = BuildStage_Height;
+    }
+
+    void VulkanView::ApplyBuildTransform() {
+        if( buildPrimitive == kNoPrimitive ) {
+            return;
+        }
+        WorldSetPrimitiveTransform( world, renderer, buildPrimitive,
+                                    GridBoxTransform( grid, buildMin, buildMax, buildHeight ) );
+    }
+
+    void VulkanView::BuildToBox() {
+        if( buildPrimitive == kNoPrimitive ) {
+            return;
+        }
+
+        // Swapping the authored mesh under the primitive, rather than deleting
+        // it and adding another, keeps its index and the selection pointing at
+        // the same thing across the change.
+        Primitive & primitive = world.primitives[buildPrimitive];
+        HalfMeshFree( primitive.halfMesh );
+        primitive.halfMesh = {};
+        HalfMeshCreateCube( primitive.halfMesh, 1 );
+
+        // Idles the device, which is why this is on the release that locks the
+        // base and not on every mouse move.
+        WorldRebuildPrimitive( world, renderer, buildPrimitive );
+    }
+
+    void VulkanView::CommitBuild() {
+        // What was built stays, and stays selected. The mode does not: it drops
+        // back to Ready so one B gets you as many boxes as you want.
+        buildPrimitive = kNoPrimitive;
+        buildPane = -1;
+        buildHeight = 0.0f;
+        buildStage = BuildStage_Ready;
+    }
+
+    void VulkanView::CancelBuild() {
+        if( buildPrimitive != kNoPrimitive ) {
+            const i32 removed = buildPrimitive;
+            buildPrimitive = kNoPrimitive;
+            if( WorldRemovePrimitive( world, renderer, removed ) ) {
+                // Same bookkeeping a delete does: removal shifts every index
+                // above it, and anything still holding one has to follow.
+                editPrimitive = WorldRemapPrimitive( editPrimitive, removed );
+                RefreshEditOverlay();
+            }
+        }
+
+        buildPane = -1;
+        buildHeight = 0.0f;
+        // A cancel mid-box drops to Ready, not out of the mode: one bad drag
+        // should not put the tool away.
+        if( buildStage != BuildStage_Off ) {
+            buildStage = BuildStage_Ready;
+        }
     }
 
     void VulkanView::DeleteSelected() {
@@ -610,10 +806,13 @@ namespace sol {
             return;
         }
 
-        // A plane being dragged out right now is a primitive like any other, so
-        // the index tracking it has to follow the removal - and stop naming
-        // anything at all if it was what just went.
-        createPrimitive = WorldRemapPrimitive( createPrimitive, removed );
+        // A box being built right now is a primitive like any other, so the
+        // index tracking it has to follow the removal. If it was the box itself
+        // that went, the build has nothing left to shape and goes back to Ready.
+        buildPrimitive = WorldRemapPrimitive( buildPrimitive, removed );
+        if( buildPrimitive == kNoPrimitive ) {
+            CancelBuild();
+        }
 
         // Same for the cage, which additionally has to come down if what it was
         // describing is what was deleted.
@@ -673,7 +872,10 @@ namespace sol {
 
             const i32 step = event->key() - Qt::Key_1;
             if( step >= 0 && step < kGridStepCount && started ) {
-                RendererSetGridSpacing( renderer, kGridSteps[step] );
+                // The drawn grid and the grid geometry snaps to are the same
+                // grid, so neither is allowed to change without the other.
+                grid.step = kGridSteps[step];
+                RendererSetGridSpacing( renderer, grid.step );
             }
 
             // Layouts sit on the function keys because the number row already
@@ -705,6 +907,20 @@ namespace sol {
             if( event->key() == Qt::Key_R ) {
                 SetGizmoMode( GizmoMode_Rotate );
             }
+
+            if( event->key() == Qt::Key_B ) {
+                ToggleBuildMode();
+            }
+
+            if( event->key() == Qt::Key_G ) {
+                CycleGridPlane();
+            }
+
+            // Escape backs out one step: it throws away a box part way through
+            // and leaves the mode up, so the next drag starts clean.
+            if( event->key() == Qt::Key_Escape && buildStage != BuildStage_Off ) {
+                CancelBuild();
+            }
         }
         QWindow::keyPressEvent( event );
     }
@@ -728,6 +944,14 @@ namespace sol {
         if( event->button() == Qt::RightButton ) {
             BeginDrag( pane );
         } else if( event->button() == Qt::LeftButton ) {
+            // Build mode owns the left button outright: while it is up, a press
+            // draws or finishes a box and never selects, places or grabs a
+            // handle. B is the way back out.
+            if( BuildMousePress( position, pane ) ) {
+                QWindow::mousePressEvent( event );
+                return;
+            }
+
             // A press on a handle is a drag of the selection, never a pick of
             // whatever happens to lie behind it.
             if( BeginGizmoDrag( position, pane ) ) {
@@ -749,22 +973,14 @@ namespace sol {
                     RefreshEditOverlay();
                 }
             } else {
-                // Selecting wins over creating: a click that lands on something
-                // picks it, and only empty space starts a new plane. Placing one
-                // on top of another therefore needs the space cleared first.
+                // Outside build mode a left click only ever selects. A click
+                // that lands on something picks it, and empty space clears the
+                // selection; placing geometry is build mode's job.
                 i32 hit = kNoPrimitive;
                 if( PickAt( position, pane, &hit ) ) {
                     WorldSetSelected( world, renderer, hit );
                 } else {
-                    // Empty space always clears the selection. It only becomes a
-                    // new plane if the press turns into a drag, so a click on
-                    // nothing deselects and leaves the scene alone.
                     WorldSetSelected( world, renderer, kNoPrimitive );
-                    // Planes are drawn out in xz, so the top-down pane is the
-                    // only one that can start one.
-                    if( pane == TopPane() ) {
-                        ArmCreate( position, pane );
-                    }
                 }
             }
         }
@@ -775,7 +991,7 @@ namespace sol {
         if( event->button() == Qt::RightButton ) {
             EndDrag();
         } else if( event->button() == Qt::LeftButton ) {
-            EndCreate();
+            BuildMouseRelease();
             GizmoEndDrag( gizmo );
         }
         QWindow::mouseReleaseEvent( event );
@@ -789,6 +1005,12 @@ namespace sol {
         // says nothing about what the user is pointing at.
         if( !dragging ) {
             SetActivePane( PaneAt( position ) );
+        }
+
+        // A camera drag is warping the pointer back to an anchor, so the
+        // reported position says nothing about where a box should go.
+        if( !dragging ) {
+            BuildMouseMove( position );
         }
 
         if( gizmo.mode != GizmoMode_None && !dragging ) {
@@ -810,25 +1032,6 @@ namespace sol {
             } else {
                 gizmo.hovered = GizmoPick( gizmo, origin, direction );
             }
-        }
-
-        // The platform's own click-versus-drag threshold, so this matches what
-        // every other application on the machine considers a drag. Measured
-        // from the press, and skipped while a camera drag is warping the
-        // cursor around, which would otherwise read as enormous travel.
-        if( createPending && !dragging ) {
-            const i32 travel = ( position - createPressPosition ).manhattanLength();
-            if( travel >= QGuiApplication::styleHints()->startDragDistance() ) {
-                // Anchored at the press, not here, or the plane would start
-                // from wherever the cursor happened to cross the threshold.
-                BeginCreate( createPressPosition );
-            }
-        }
-
-        // Creating reads the real cursor position, so unlike the camera drags
-        // it must not warp the pointer back to an anchor.
-        if( createPrimitive != kNoPrimitive ) {
-            UpdateCreate( position );
         }
 
         if( dragging ) {
@@ -866,7 +1069,13 @@ namespace sol {
         // Releases arrive at whoever has focus, so a key or button still down
         // when focus leaves would otherwise stick on forever.
         EndDrag();
-        EndCreate();
+        // A base drag needs the button that is no longer being watched, so the
+        // half-built base goes rather than sitting there waiting for a release
+        // that will never arrive. An extrude is driven by moves and a click, so
+        // it survives and picks up where it was.
+        if( buildStage == BuildStage_Base ) {
+            CancelBuild();
+        }
         GizmoEndDrag( gizmo );
         movement = {};
         for( i32 i = 0; i < kMaxRenderViews; i++ ) {

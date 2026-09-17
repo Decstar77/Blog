@@ -218,16 +218,29 @@ namespace sol {
         i32                         gizmoRangeCount;
         Mat4                        gizmoTransform;
         bool                        gizmoVisible;
-        // World-space grid on the y = 0 plane, drawn in every view before the
-        // meshes. Vertices only: a line list has nothing to index.
+        // The grid, drawn in every view before the meshes. Vertices only: a
+        // line list has nothing to index. Built in its own local space - the
+        // xz plane, centred on the origin - and placed by gridTransform, so
+        // re-aiming it costs a push constant rather than a rebuild.
         VkBuffer                    gridVertexBuffer;
         VmaAllocation               gridVertexAllocation;
         i32                         gridVertexCount;
         bool                        gridVisible;
-        // World units between lines. The grid keeps a constant line count and
+        // Grid local space to world. Identity puts it on y = 0 the way it was
+        // built. Whoever owns the editing grid owns this.
+        Mat4                        gridTransform;
+        // Local units between lines. The grid keeps a constant line count and
         // grows its extent with this, so it stays useful at every zoom instead
         // of turning to mush when the spacing drops.
         f32                         gridSpacing;
+        // A frame around the whole surface, drawn last and over everything. The
+        // geometry is a rectangle in clip space, so it needs no camera and no
+        // rebuild on a resize. Off unless a shell turns it on.
+        VkBuffer                    borderVertexBuffer;
+        VmaAllocation               borderVertexAllocation;
+        i32                         borderVertexCount;
+        bool                        borderVisible;
+        Vec3                        borderColor;
         // Drawn in slot order every frame. The renderer owns these and frees
         // them on shutdown. A pool rather than a list because the world stores
         // references to individual meshes, and a list index stops naming the
@@ -277,6 +290,17 @@ namespace sol {
     // Rebuilds the grid at a new spacing. Idles the device first, so it is a
     // stall - fine for a key press, not for something driven per frame.
     bool RendererSetGridSpacing( Renderer * r, f32 spacing );
+
+    // A coloured frame around the whole surface, over every view. Meant for a
+    // shell saying the viewport is in a mode that has taken the mouse over -
+    // the one thing a user cannot read off the scene itself. CPU-only state, so
+    // it is safe to set every frame.
+    void RendererSetBorder( Renderer * r, bool visible, Vec3 color );
+
+    // Where the grid sits and which way it faces, as grid local space to world.
+    // The grid is built once on the xz plane and only ever moved by this, so
+    // unlike the spacing it is CPU-only state and safe to set every frame.
+    void RendererSetGridTransform( Renderer * r, const Mat4 & transform );
 
     // Replaces the edit cage. Both vertex lists are in the edited primitive's
     // local space and are drawn with transform. Either count may be zero.

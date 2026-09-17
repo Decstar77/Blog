@@ -2,6 +2,7 @@
 
 #include "sol_camera.h"
 #include "sol_editor_gizmo.h"
+#include "sol_editor_grid.h"
 #include "sol_render.h"
 #include "sol_world.h"
 
@@ -49,6 +50,17 @@ namespace sol {
         PaneLayout_Count,
     };
 
+    // Build mode is two operations back to back, and the stage is what says
+    // which one a mouse event belongs to. Off and Ready are the same mode from
+    // the scene's point of view - nothing is half-built - but only Ready takes
+    // a press as the start of a box.
+    enum BuildStage {
+        BuildStage_Off,     // not in build mode; clicks select as usual
+        BuildStage_Ready,   // in build mode, waiting for the press that starts a base
+        BuildStage_Base,    // dragging the base rectangle out, button still down
+        BuildStage_Height,  // base locked, moving the mouse extrudes, a click commits
+    };
+
     class VulkanView : public QWindow {
     public:
         explicit VulkanView( Renderer * renderer );
@@ -87,15 +99,10 @@ namespace sol {
         // The pane whose camera WASD drives: the active one when it is a
         // perspective pane, otherwise the first that is.
         i32 MovementPane() const;
-        // Index of the top-down pane if this layout has one, else -1. Placing
-        // planes builds them in xz, so only that pane can start one.
-        i32 TopPane() const;
-
         void SetMovementKey( int key, bool pressed );
         void BeginDrag( i32 pane );
         void EndDrag();
 
-        Vec3 OrthoWorldAt( QPoint position, i32 pane ) const;
         void RayAt( QPoint position, i32 pane, Vec3 * outOrigin, Vec3 * outDirection ) const;
         bool PickAt( QPoint position, i32 pane, i32 * outPrimitive ) const;
 
@@ -106,10 +113,33 @@ namespace sol {
         void UpdateGizmo();
         bool BeginGizmoDrag( QPoint position, i32 pane );
 
-        void ArmCreate( QPoint position, i32 pane );
-        void BeginCreate( QPoint position );
-        void UpdateCreate( QPoint position );
-        void EndCreate();
+        // Moves the grid onto the next of the three axis planes. Everything
+        // that reads the grid - snapping, placing, the drawn lines - follows
+        // from the one field this writes.
+        void CycleGridPlane();
+        // Grid coordinates of whatever a pixel is pointing at on the grid.
+        // False when that pane cannot see the grid plane at all.
+        bool GridPointAt( QPoint position, i32 pane, Vec3 * outLocal ) const;
+
+        void ToggleBuildMode();
+        // Presses and moves, routed by the stage. Each returns whether build
+        // mode consumed the event, so the ordinary select-and-place path can
+        // be skipped without testing the stage twice.
+        bool BuildMousePress( QPoint position, i32 pane );
+        void BuildMouseMove( QPoint position );
+        void BuildMouseRelease();
+        // Writes the box's transform from the base rectangle and the height.
+        // CPU-only, so it is safe to call on every mouse move.
+        void ApplyBuildTransform();
+        // Swaps the flat base quad for a cube once the base is locked. Rebuilds
+        // the GPU mesh, so it happens once, on the release that locks it.
+        void BuildToBox();
+        // Keeps whatever has been built and returns to Ready, so one B gets you
+        // as many boxes as you want.
+        void CommitBuild();
+        // Throws the half-built primitive away. Leaves build mode alone: a
+        // cancel mid-box drops back to Ready, not out of the mode.
+        void CancelBuild();
 
         void DeleteSelected();
 
@@ -135,11 +165,23 @@ namespace sol {
         bool                dragging;
         i32                 dragPane;
 
-        i32                 createPrimitive;
-        i32                 createPane;
-        Vec3                createStart;
-        bool                createPending;
-        QPoint              createPressPosition;
+        // The plane every placement snaps to. The renderer still draws its grid
+        // on y = 0, so this starts matching it; everything that places geometry
+        // goes through here rather than through world axes, which is what will
+        // let the grid be re-aimed later.
+        EditorGrid          grid;
+
+        BuildStage          buildStage;
+        i32                 buildPrimitive;
+        i32                 buildPane;
+        // Base rectangle in grid coordinates, min and max on each in-plane
+        // axis. z is unused - the base is on the plane by construction.
+        Vec3                buildStart;
+        Vec3                buildMin;
+        Vec3                buildMax;
+        // Signed, along the grid normal, so a box can be pulled down as well as
+        // up. Magnitude is never below one cell.
+        f32                 buildHeight;
 
         i32                 editPrimitive;
         i32                 editVertex;
