@@ -283,8 +283,7 @@ namespace sol {
                                    v == selectedVertex ? kEditSelectedVertexColor : kEditVertexColor );
         }
 
-        const bool ok = RendererSetEditOverlay( r, lines.data, lines.count,
-                                                points.data, points.count, mesh->transform );
+        const bool ok = RendererSetEditOverlay( r, lines.data, lines.count, points.data, points.count, mesh->transform );
         ListFree( lines );
         ListFree( points );
         return ok;

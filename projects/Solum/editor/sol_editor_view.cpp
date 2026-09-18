@@ -610,6 +610,11 @@ namespace sol {
             // already part way through has to end here rather than run on
             // underneath a mode that will never send it another event.
             GizmoEndDrag( gizmo );
+            // The two modes answer the same clicks in different ways, so only
+            // one of them is ever up: entering build mode drops edit mode.
+            if( editPrimitive != kNoPrimitive ) {
+                ToggleEditMode();
+            }
             buildStage = BuildStage_Ready;
         } else {
             CancelBuild();
@@ -833,6 +838,13 @@ namespace sol {
             editVertex = kHMNone;
             WorldSetPrimitiveHighlight( world, renderer, previous, true );
         } else {
+            // Exclusive with build mode, same as the other direction: whatever
+            // box was part way through is thrown away and the mode comes down.
+            // First, because the cancel can take the selection with it.
+            if( buildStage != BuildStage_Off ) {
+                CancelBuild();
+                buildStage = BuildStage_Off;
+            }
             // Nothing selected is nothing to edit, so Tab is a no-op rather
             // than a mode with no subject.
             if( world.selected == kNoPrimitive ) {
@@ -922,6 +934,16 @@ namespace sol {
                 CancelBuild();
             }
         }
+
+        // Tab is edit mode's key here, but it is also Qt's focus-navigation
+        // key. Handing it to the base class moves focus to the next widget and
+        // takes every later key with it, which reads as the viewport going
+        // deaf rather than as focus having moved, so it stops here.
+        if( event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab ) {
+            event->accept();
+            return;
+        }
+
         QWindow::keyPressEvent( event );
     }
 
@@ -929,6 +951,14 @@ namespace sol {
         if( !event->isAutoRepeat() ) {
             SetMovementKey( event->key(), false );
         }
+
+        // Same reason as the press: the release of a focus key is a second
+        // chance for Qt to navigate on it.
+        if( event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab ) {
+            event->accept();
+            return;
+        }
+
         QWindow::keyReleaseEvent( event );
     }
 

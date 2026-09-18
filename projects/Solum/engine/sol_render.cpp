@@ -1339,11 +1339,7 @@ namespace sol {
     // rectangles one pixel apart rather than as a wide line: wideLines is an
     // optional device feature, and a one-pixel line is the only width Vulkan
     // guarantees.
-    constexpr i32 kBorderThickness = 3;
-
-    // A unit rectangle in clip space as four lines, which is what lets the
-    // border be drawn with no camera and survive a resize untouched. The
-    // colour is white so the tint carries the mode's colour whole.
+    constexpr i32 kBorderThickness = 10;
     static bool CreateBorder( Renderer * r ) {
         const Vec3 corners[] = {
             { -1.0f, -1.0f, 0.0f },
@@ -1355,14 +1351,11 @@ namespace sol {
         constexpr i32 kCornerCount = (i32)SPLATS_ARRAY_COUNT( corners );
         List<StaticMeshVertex> vertices = {};
         for( i32 i = 0; i < kCornerCount; i++ ) {
-            GridPushLine( vertices, corners[i], corners[( i + 1 ) % kCornerCount],
-                          Vec3{ 1.0f, 1.0f, 1.0f } );
+            GridPushLine( vertices, corners[i], corners[( i + 1 ) % kCornerCount], Vec3{ 1.0f, 1.0f, 1.0f } );
         }
 
         const u64 byteCount = (u64)vertices.count * sizeof( StaticMeshVertex );
-        bool ok = CreateBuffer( r, byteCount,
-                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
-                                &r->borderVertexBuffer, &r->borderVertexAllocation, nullptr );
+        bool ok = CreateBuffer( r, byteCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0, &r->borderVertexBuffer, &r->borderVertexAllocation, nullptr );
         ok = ok && UploadBuffer( r, r->borderVertexBuffer, vertices.data, byteCount );
         if( ok ) {
             r->borderVertexCount = vertices.count;
@@ -1717,10 +1710,6 @@ namespace sol {
             }
         }
 
-        // Over every view and outside the loop: the border frames the whole
-        // surface, not each pane, so it takes the surface's own viewport back
-        // from whichever view set one last. The line pipeline has the depth
-        // test off, so nothing drawn above can bury it.
         if( r->borderVisible && r->borderVertexCount > 0 ) {
             VkViewport full = {};
             full.x = 0.0f;
@@ -1736,26 +1725,18 @@ namespace sol {
             vkCmdSetScissor( cmd, 0, 1, &fullScissor );
 
             vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->editLinePipeline );
-            vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
-                                     0, 1, &whiteSet, 0, nullptr );
+            vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout, 0, 1, &whiteSet, 0, nullptr );
 
             VkDeviceSize borderOffset = 0;
             vkCmdBindVertexBuffers( cmd, 0, 1, &r->borderVertexBuffer, &borderOffset );
 
             for( i32 i = 0; i < kBorderThickness; i++ ) {
-                // Ring i sits on pixel i in from the edge. A rectangle left at
-                // the clip-space edge would land half off the attachment, hence
-                // the half-pixel: 2 / extent is one pixel in clip space.
                 const f32 inset = (f32)( 2 * i + 1 );
                 StaticMeshPush borderPush = {};
-                borderPush.mvp = Mat4Scale( Vec3{ 1.0f - inset / surfaceWidth,
-                                                  1.0f - inset / surfaceHeight,
-                                                  1.0f } );
+                borderPush.mvp = Mat4Scale( Vec3{ 1.0f - inset / surfaceWidth, 1.0f - inset / surfaceHeight, 1.0f } );
                 borderPush.tint = Vec4{ r->borderColor.x, r->borderColor.y, r->borderColor.z, 1.0f };
                 borderPush.pointSize = 1.0f;
-                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
-                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                                    0, (u32)sizeof( borderPush ), &borderPush );
+                vkCmdPushConstants( cmd, r->staticMeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, (u32)sizeof( borderPush ), &borderPush );
                 vkCmdDraw( cmd, (u32)r->borderVertexCount, 1, 0, 0 );
             }
         }
@@ -1850,24 +1831,12 @@ namespace sol {
     static bool CreateEditOverlayBuffer( Renderer * r, const StaticMeshVertex * vertices, i32 vertexCount,
                                          VkBuffer * outBuffer, VmaAllocation * outAllocation ) {
         const u64 byteCount = (u64)vertexCount * sizeof( StaticMeshVertex );
-        bool ok = CreateBuffer( r, byteCount,
-                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
-                                outBuffer, outAllocation, nullptr );
+        bool ok = CreateBuffer( r, byteCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0, outBuffer, outAllocation, nullptr );
         return ok && UploadBuffer( r, *outBuffer, vertices, byteCount );
     }
 
-    bool RendererSetEditOverlay( Renderer * r, const StaticMeshVertex * lineVertices, i32 lineVertexCount,
-                                 const StaticMeshVertex * pointVertices, i32 pointVertexCount,
-                                 const Mat4 & transform ) {
-        // The buffers being replaced may still be referenced by a frame the GPU
-        // has not finished with.
+    bool RendererSetEditOverlay( Renderer * r, const StaticMeshVertex * lineVertices, i32 lineVertexCount, const StaticMeshVertex * pointVertices, i32 pointVertexCount, const Mat4 & transform ) {
         vkDeviceWaitIdle( r->device );
-        if( r->borderVertexBuffer != VK_NULL_HANDLE ) {
-            vmaDestroyBuffer( r->allocator, r->borderVertexBuffer, r->borderVertexAllocation );
-            r->borderVertexBuffer = VK_NULL_HANDLE;
-            r->borderVertexAllocation = VK_NULL_HANDLE;
-            r->borderVertexCount = 0;
-        }
         DestroyEditOverlayBuffers( r );
 
         bool ok = true;

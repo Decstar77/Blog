@@ -13,22 +13,13 @@
 
 namespace sol {
 
-    // Which camera a pane drives. The two kinds answer the same questions -
-    // a ray through a pixel, a view projection - so everything downstream of
-    // a pane only has to branch here.
     enum PaneKind {
         PaneKind_Perspective,
         PaneKind_Ortho,
     };
 
-    // One viewport rectangle and the camera behind it. Panes hold their own
-    // input accumulators because a drag belongs to the pane it started in,
-    // not to the window.
     struct EditorPane {
         PaneKind            kind;
-        // Fraction of the widget, origin top left, matching RenderView. A
-        // layout change rewrites these and nothing else, so the cameras keep
-        // wherever the user had put them.
         f32                 x;
         f32                 y;
         f32                 width;
@@ -40,9 +31,6 @@ namespace sol {
         OrthoCameraInput    orthoInput;
     };
 
-    // The pane slots are fixed in role - 0 perspective, 1 top, 2 front,
-    // 3 side - and a layout only decides how many of them are live and where
-    // they sit. That is what lets switching layouts preserve every camera.
     enum PaneLayout {
         PaneLayout_Single,
         PaneLayout_Split,
@@ -50,10 +38,6 @@ namespace sol {
         PaneLayout_Count,
     };
 
-    // Build mode is two operations back to back, and the stage is what says
-    // which one a mouse event belongs to. Off and Ready are the same mode from
-    // the scene's point of view - nothing is half-built - but only Ready takes
-    // a press as the start of a box.
     enum BuildStage {
         BuildStage_Off,     // not in build mode; clicks select as usual
         BuildStage_Ready,   // in build mode, waiting for the press that starts a base
@@ -68,8 +52,6 @@ namespace sol {
 
         bool startupFailed() const { return startFailed; }
 
-        // Public so the main window's View menu can drive it alongside the
-        // function keys.
         void SetLayout( PaneLayout next );
         PaneLayout CurrentLayout() const { return layout; }
 
@@ -89,19 +71,13 @@ namespace sol {
         bool EnsureStarted();
         void Render();
 
-        // Pane index of whatever is under the point. Never fails: a point
-        // outside every rect - which rounding at a seam can produce - lands on
-        // the active pane rather than on nothing.
-        i32 PaneAt( QPoint position ) const;
-        // Logical pixels, which is the space Qt hands mouse positions in.
-        QRect PaneRect( i32 pane ) const;
-        void SetActivePane( i32 pane );
-        // The pane whose camera WASD drives: the active one when it is a
-        // perspective pane, otherwise the first that is.
-        i32 MovementPane() const;
-        void SetMovementKey( int key, bool pressed );
-        void BeginDrag( i32 pane );
-        void EndDrag();
+        i32     PaneAt( QPoint position ) const;
+        QRect   PaneRect( i32 pane ) const;
+        void    SetActivePane( i32 pane );
+        i32     MovementPane() const;
+        void    SetMovementKey( int key, bool pressed );
+        void    BeginDrag( i32 pane );
+        void    EndDrag();
 
         void RayAt( QPoint position, i32 pane, Vec3 * outOrigin, Vec3 * outDirection ) const;
         bool PickAt( QPoint position, i32 pane, i32 * outPrimitive ) const;

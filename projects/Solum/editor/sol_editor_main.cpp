@@ -226,6 +226,7 @@ int main( int argc, char ** argv ) {
                             "B toggles build mode: drag out a base on the grid, release to lock it, "
                             "move to extrude it into a box, click to finish, Escape to cancel.    "
                             "Delete removes the selection, Tab toggles edit mode, which locks it.    "
+                            "Build and edit mode are exclusive: entering one leaves the other.    "
                             "In edit mode, click a vertex to select it and T to move it.    "
                             "T and R put the move and rotate gizmo on the selection.    "
                             "Keys 1-6 set the grid size, G cycles the grid's plane." ) );
