@@ -43,10 +43,17 @@ add_executable (project17-gaussian-renderer
   "gs_list.h"
   "gs_splats.h"
   "gs_splats.cpp"
+  "gs_scene.h"
+  "gs_scene.cpp"
   "main.cpp"
   "gs_window.cpp"
   "gs_glrenderer.cpp"
   "cuda_render.cu"
+)
+
+# cub (CCCL, shipped with the toolkit) hard-errors against MSVC's traditional preprocessor.
+target_compile_options(project17-gaussian-renderer PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>
 )
 
 target_link_libraries(project17-gaussian-renderer PRIVATE

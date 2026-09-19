@@ -5,6 +5,7 @@
 #include "gs_glrenderer.h"
 #include "gs_window.h"
 #include "gs_splats.h"
+#include "gs_scene.h"
 
 // Take about blog
 // EWA stands for Elliptical Weighted Average
@@ -24,18 +25,7 @@ int main() {
     }
 
     Scene scene = {};
-    scene.camera.position = glm::vec3( 0, 0, 3 );
-    scene.camera.yaw = 0.0f;
-    scene.camera.pitch = 0.0f;
-    camera_refresh( &scene.camera );
-
-    Gaussian g = {};
-    g.colour = glm::vec4( 0.8f, 0.2f, 0.2f, 1.0f );
-    g.position = glm::vec3( 0 );
-    g.rotation = glm::mat3( 1 );
-    g.scale = glm::vec3( 0.15f );
-
-    ListAdd( scene.gaussians, g );
+    scene_build_demo( &scene );
 
     while ( !gs_window_should_close( window ) ) {
         GsInput input = {};
