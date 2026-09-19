@@ -265,7 +265,7 @@ namespace sol {
     }
 
     bool GizmoUpdateDrag( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection, f32 snapStep,
-                          Transform * outTransform ) {
+                          f32 rotateSnapStep, Transform * outTransform ) {
         if( gizmo.active == GizmoAxis_None ) {
             return false;
         }
@@ -292,7 +292,10 @@ namespace sol {
 
             const f32 turned = Vec3Component( gizmo.startTransform.rotation, index ) +
                                ( angle - gizmo.startAngle );
-            Vec3SetComponent( &result.rotation, index, turned );
+            // Snapped to the absolute angle rather than to the amount turned,
+            // so a snapped drag always leaves the object on a multiple of the
+            // step even if it did not start on one.
+            Vec3SetComponent( &result.rotation, index, SnapTo( turned, rotateSnapStep ) );
         }
 
         *outTransform = result;

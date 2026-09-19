@@ -1747,8 +1747,7 @@ namespace sol {
         return true;
     }
 
-    bool RendererCreateInstance( Renderer * r, const char * const * requiredExtensions,
-                                 u32 requiredCount ) {
+    bool RendererCreateInstance( Renderer * r, const char * const * requiredExtensions, u32 requiredCount ) {
         *r = {};
 
         bool useValidation = kEnableValidation && HasValidationLayer();

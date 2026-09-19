@@ -21,6 +21,10 @@ namespace sol {
 
     constexpr i32 kGizmoRangeCount = 6;
 
+    // Rotation snaps to 15 degree steps unless the caller passes 0 to disable
+    // it, which is what holding Ctrl during a drag does.
+    constexpr f32 kGizmoRotateSnap = 15.0f * 3.14159265358979323846f / 180.0f;
+
     struct Gizmo {
         GizmoMode           mode;
         GizmoAxis           hovered;
@@ -47,7 +51,9 @@ namespace sol {
     f32         GizmoScaleFor( Vec3 center, Vec3 cameraPosition );
     GizmoAxis   GizmoPick( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection );
     bool        GizmoBeginDrag( Gizmo & gizmo, GizmoAxis axis, const Transform & transform, Vec3 rayOrigin, Vec3 rayDirection );
-    bool        GizmoUpdateDrag( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection, f32 snapStep, Transform * outTransform );
+    // snapStep is the grid step a translate lands on; rotateSnapStep is the angle
+    // in radians a rotation lands on. Either at 0 passes the raw value through.
+    bool        GizmoUpdateDrag( const Gizmo & gizmo, Vec3 rayOrigin, Vec3 rayDirection, f32 snapStep, f32 rotateSnapStep, Transform * outTransform );
     void        GizmoEndDrag( Gizmo & gizmo );
     i32         GizmoDrawRanges( const Gizmo & gizmo, RenderGizmoRange * outRanges );
     Mat4        GizmoDrawTransform( const Gizmo & gizmo );

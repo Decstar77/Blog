@@ -228,7 +228,8 @@ int main( int argc, char ** argv ) {
                             "Delete removes the selection, Tab toggles edit mode, which locks it.    "
                             "Build and edit mode are exclusive: entering one leaves the other.    "
                             "In edit mode, click a vertex to select it and T to move it.    "
-                            "T and R put the move and rotate gizmo on the selection.    "
+                            "T and R put the move and rotate gizmo on the selection, "
+                            "rotation snapping to 15 degrees unless Ctrl is held.    "
                             "Keys 1-6 set the grid size, G cycles the grid's plane." ) );
         mainWindow.showMaximized();
 

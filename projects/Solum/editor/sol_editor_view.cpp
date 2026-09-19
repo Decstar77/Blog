@@ -1050,7 +1050,9 @@ namespace sol {
 
             if( gizmo.active != GizmoAxis_None ) {
                 Transform transform = {};
-                if( GizmoUpdateDrag( gizmo, origin, direction, renderer->gridSpacing, &transform ) ) {
+                // Ctrl turns the rotation snap off for fine adjustment.
+                const f32 rotateSnap = ( event->modifiers() & Qt::ControlModifier ) ? 0.0f : kGizmoRotateSnap;
+                if( GizmoUpdateDrag( gizmo, origin, direction, renderer->gridSpacing, rotateSnap, &transform ) ) {
                     if( editPrimitive != kNoPrimitive ) {
                         if( WorldSetVertexPosition( world, editPrimitive, editVertex, transform.position ) ) {
                             editGeometryDirty = true;
