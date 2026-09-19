@@ -45,6 +45,8 @@ add_executable (project17-gaussian-renderer
   "gs_splats.cpp"
   "gs_scene.h"
   "gs_scene.cpp"
+  "gs_ply.h"
+  "gs_ply.cpp"
   "main.cpp"
   "gs_window.cpp"
   "gs_glrenderer.cpp"

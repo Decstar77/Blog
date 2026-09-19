@@ -6,13 +6,31 @@
 #include "gs_window.h"
 #include "gs_splats.h"
 #include "gs_scene.h"
+#include "gs_ply.h"
+
+#include <cstring>
 
 // Take about blog
 // EWA stands for Elliptical Weighted Average
 // Ray-Gaussian integration
 // 2D Gaussians / planar disks
 
-int main() {
+int main( int argc, char ** argv ) {
+    const char * ply_path = nullptr;
+    bool flip_to_y_up = false;
+
+    for ( int i = 1; i < argc; i++ ) {
+        if ( strcmp( argv[i], "--flip-y" ) == 0 ) {
+            flip_to_y_up = true;
+        } else if ( ply_path == nullptr ) {
+            ply_path = argv[i];
+        }
+    }
+
+    if ( ply_path != nullptr ) {
+        ply_path = "C:/Projects/2025/Blog/data/splats/gpu/scene.ply";
+    }
+
     GsWindow * window = gs_window_create( 1280, 720, "Gaussian Renderer" );
     if ( !window ) {
         return 1;
@@ -24,8 +42,13 @@ int main() {
         return 1;
     }
 
+    // With a .ply on the command line, show that; otherwise fall back to the procedural demo scene.
     Scene scene = {};
-    scene_build_demo( &scene );
+    if ( ply_path && ply_load_scene( ply_path, &scene, flip_to_y_up ) ) {
+        scene_frame_camera( &scene );
+    } else {
+        scene_build_demo( &scene );
+    }
 
     while ( !gs_window_should_close( window ) ) {
         GsInput input = {};

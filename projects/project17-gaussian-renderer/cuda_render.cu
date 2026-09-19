@@ -297,10 +297,11 @@ static bool buffer_reserve( DeviceBuffer * buffer, u64 bytes ) {
         return true;
     }
 
-    // Round up so a scene that grows a splat at a time does not reallocate every frame.
-    u64 want = buffer->cap != 0 ? buffer->cap : 1024;
-    while ( want < bytes ) {
-        want *= 2;
+    // Exact on the first allocation, then 1.5x, so a scene that grows a splat at a time does not
+    // reallocate every frame without rounding a 300 MB buffer up to 512.
+    u64 want = buffer->cap + buffer->cap / 2;
+    if ( want < bytes ) {
+        want = bytes;
     }
 
     void * ptr = nullptr;
@@ -339,6 +340,8 @@ static DeviceBuffer g_values_in = {};  // u32[total]
 static DeviceBuffer g_values_out = {};
 static DeviceBuffer g_ranges = {};     // uvec2[tiles]
 static DeviceBuffer g_scratch = {};    // cub temp storage
+
+static int g_uploaded_count = 0;       // splats currently resident in g_gaussians
 
 static int tile_id_bits( int tiles ) {
     int bits = 1;
@@ -390,6 +393,8 @@ void cuda_render_shutdown() {
     buffer_free( &g_values_out );
     buffer_free( &g_ranges );
     buffer_free( &g_scratch );
+
+    g_uploaded_count = 0;
 }
 
 // Sizes cub's temp storage for whichever of the two collective calls needs more, so both can share it.
@@ -417,15 +422,19 @@ void cuda_render_frame( Scene * scene, int width, int height, float time ) {
     const glm::ivec2 grid( ( width + kTileWidth - 1 ) / kTileWidth, ( height + kTileHeight - 1 ) / kTileHeight );
     const int tiles = grid.x * grid.y;
 
-    // The scene lives on the host and can be edited in place, so re-upload every frame rather than
-    // trusting the splat count to be the only thing that changes.
-    if ( count > 0 ) {
+    // A loaded capture is hundreds of megabytes, so the upload is driven by the scene's dirty flag
+    // rather than done every frame. The count check is a backstop for a caller that edits the list and
+    // forgets to set it; it cannot catch an in-place edit that leaves the count alone.
+    if ( count > 0 && ( scene->gaussians_dirty || g_uploaded_count != count ) ) {
         if ( !buffer_reserve( &g_gaussians, u64( count ) * sizeof( Gaussian ) ) ) {
             return;
         }
         if ( !check( cudaMemcpy( g_gaussians.ptr, scene->gaussians.data, u64( count ) * sizeof( Gaussian ), cudaMemcpyHostToDevice ), "cudaMemcpy scene" ) ) {
             return;
         }
+
+        g_uploaded_count = count;
+        scene->gaussians_dirty = false;
     }
 
     const bool sized = buffer_reserve( &g_views, u64( count ) * sizeof( SplatView ) ) &&

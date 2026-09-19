@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
+#include <cstdio>
 
 // A fixed demo scene, built to exercise the parts of the renderer a single splat cannot: thousands of
 // splats spread over most of the tile grid, translucent shells that only look right when the per-tile
@@ -136,6 +137,38 @@ static void build_ring( Scene * scene, Rng * rng, glm::vec3 centre, float radius
     }
 }
 
+void scene_frame_camera( Scene * scene ) {
+    const i32 count = scene->gaussians.count;
+    if ( count <= 0 ) {
+        return;
+    }
+
+    glm::dvec3 sum( 0.0 );
+    for ( i32 i = 0; i < count; i++ ) {
+        sum += glm::dvec3( scene->gaussians[i].position );
+    }
+    const glm::vec3 centre( sum / double( count ) );
+
+    // A bounding box would be dragged out to the horizon by the stray splats a capture leaves behind,
+    // so size the framing by spread instead.
+    glm::dvec3 variance( 0.0 );
+    for ( i32 i = 0; i < count; i++ ) {
+        const glm::dvec3 d = glm::dvec3( scene->gaussians[i].position ) - glm::dvec3( centre );
+        variance += d * d;
+    }
+    variance /= double( count );
+
+    const float spread = sqrtf( Max( Max( float( variance.x ), float( variance.y ) ), float( variance.z ) ) );
+    const float distance = Max( 0.5f, 2.5f * spread );
+
+    scene->camera.position = centre + glm::vec3( 0.0f, 0.35f * spread, distance );
+    scene->camera.yaw = 0.0f;
+    scene->camera.pitch = 0.0f;
+    camera_refresh( &scene->camera );
+
+    printf( "scene: %d splats, centre (%.2f, %.2f, %.2f), spread %.2f\n", count, centre.x, centre.y, centre.z, spread );
+}
+
 void scene_build_demo( Scene * scene ) {
     Rng rng = { kSeed };
 
@@ -155,4 +188,6 @@ void scene_build_demo( Scene * scene ) {
     scene->camera.yaw = 0.0f;
     scene->camera.pitch = -0.10f;
     camera_refresh( &scene->camera );
+
+    scene->gaussians_dirty = true;
 }

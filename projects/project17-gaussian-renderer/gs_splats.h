@@ -24,5 +24,6 @@ void camera_update( Camera * camera, const GsInput & input, float dt );
 struct Scene {
     Camera          camera;
     List<Gaussian>  gaussians;
+    bool            gaussians_dirty;  // set when the splat list changes; the renderer uploads and clears it
 };
 
