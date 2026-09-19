@@ -6,6 +6,11 @@
 #include "gs_window.h"
 #include "gs_splats.h"
 
+// Take about blog
+// EWA stands for Elliptical Weighted Average
+// Ray-Gaussian integration
+// 2D Gaussians / planar disks
+
 int main() {
     GsWindow * window = gs_window_create( 1280, 720, "Gaussian Renderer" );
     if ( !window ) {
@@ -20,7 +25,9 @@ int main() {
 
     Scene scene = {};
     scene.camera.position = glm::vec3( 0, 0, 3 );
-    scene.camera.rotation = glm::mat3( 1 );
+    scene.camera.yaw = 0.0f;
+    scene.camera.pitch = 0.0f;
+    camera_refresh( &scene.camera );
 
     Gaussian g = {};
     g.colour = glm::vec4( 0.8f, 0.2f, 0.2f, 1.0f );
@@ -31,10 +38,13 @@ int main() {
     ListAdd( scene.gaussians, g );
 
     while ( !gs_window_should_close( window ) ) {
+        GsInput input = {};
+        gs_window_poll_input( window, &input );
+        camera_update( &scene.camera, input, gs_window_delta_time() );
+
         int width, height;
         gs_window_framebuffer_size( window, &width, &height );
 
-        // A new target texture invalidates the old interop registration.
         if ( gs_glrenderer_resize_target( &renderer, width, height ) ) {
             cuda_render_init( renderer.target );
         }

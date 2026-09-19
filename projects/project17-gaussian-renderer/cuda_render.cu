@@ -136,7 +136,7 @@ __global__ void render_gaussian( cudaSurfaceObject_t surface, Gaussian * gaussia
         return;
     }
 
-    PixelCamera cam;
+    PixelCamera cam = {};
     cam.origin = cp;
     cam.view = glm::transpose( cv );
     cam.x = float( x ) + 0.5f;
@@ -149,7 +149,6 @@ __global__ void render_gaussian( cudaSurfaceObject_t surface, Gaussian * gaussia
 
     glm::vec3 colour( 0.0f );
     float transmittance = 1.0f;
-
     for ( int i = 0; i < count; i++ ) {
         const Gaussian g = gaussians[i];
         const float alpha = splat_alpha_ray( g, cam );
@@ -239,8 +238,7 @@ void cuda_render_frame( Scene * scene, int width, int height, float time ) {
             const dim3 grid( ( width + threads.x - 1 ) / threads.x, ( height + threads.y - 1 ) / threads.y );
             render_gaussian<<<grid, threads>>>( surface, d_gaussians, d_count, scene->camera.position, scene->camera.rotation, width, height );
             check( cudaGetLastError(), "render_gaussian launch" );
-
-            cudaDestroySurfaceObject( surface );
+            check( cudaDestroySurfaceObject( surface ), "cudaDestroySurfaceObject" );
         }
     }
 
