@@ -42,6 +42,19 @@ namespace sol {
     bool                WorldGetPrimitiveTransform( const World & world, i32 primitive, Transform * outTransform );
 
     bool                WorldPick( const World & world, Renderer * r, Vec3 rayOrigin, Vec3 rayDirection, i32 * outPrimitive );
+
+    // What a ray actually touches, rather than which bounding box it entered:
+    // every face of every primitive is fan triangulated in world space and
+    // tested, and the nearest hit wins. Slower than WorldPick and meant for the
+    // one off - aiming the grid at a face - not for hover.
+    //
+    // outNormal is the geometric normal of the hit face, taken from the
+    // transformed corners rather than from HMFace::normal, so a rotated or
+    // scaled primitive still reports the direction the face points in world
+    // space. It is flipped to oppose rayDirection, so the face a ray hit always
+    // comes back pointing at whoever cast it.
+    bool                WorldPickFace( const World & world, Renderer * r, Vec3 rayOrigin, Vec3 rayDirection,
+                                       i32 * outPrimitive, i32 * outFace, Vec3 * outPoint, Vec3 * outNormal );
     void                WorldSetSelected( World & world, Renderer * r, i32 primitive );
     void                WorldSetPrimitiveHighlight( World & world, Renderer * r, i32 primitive, bool highlight );
     // selectedVertex is drawn in its own colour, or kHMNone for none.

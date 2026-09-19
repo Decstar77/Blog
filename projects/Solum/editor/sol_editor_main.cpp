@@ -230,7 +230,8 @@ int main( int argc, char ** argv ) {
                             "In edit mode, click a vertex to select it and T to move it.    "
                             "T and R put the move and rotate gizmo on the selection, "
                             "rotation snapping to 15 degrees unless Ctrl is held.    "
-                            "Keys 1-6 set the grid size, G cycles the grid's plane." ) );
+                            "Keys 1-6 set the grid size, G cycles the grid's plane, "
+                            "Alt+click lands the grid on the face under the cursor." ) );
         mainWindow.showMaximized();
 
         exitCode = app.exec();

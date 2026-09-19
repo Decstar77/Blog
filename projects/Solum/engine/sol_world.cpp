@@ -191,6 +191,83 @@ namespace sol {
         return best != kNoPrimitive;
     }
 
+    bool WorldPickFace( const World & world, Renderer * r, Vec3 rayOrigin, Vec3 rayDirection,
+                        i32 * outPrimitive, i32 * outFace, Vec3 * outPoint, Vec3 * outNormal ) {
+        i32 bestPrimitive = kNoPrimitive;
+        i32 bestFace = kHMNone;
+        f32 bestDistance = 0.0f;
+        Vec3 bestNormal = {};
+
+        // One list for the whole sweep, refilled per face and freed at the end:
+        // HalfMeshFaceVertices clears before it writes, so the capacity carries
+        // over instead of being reallocated for every face in the world.
+        List<i32> faceVertices = {};
+
+        for( i32 i = 0; i < world.primitives.count; i++ ) {
+            const Primitive & primitive = world.primitives[i];
+            const RenderStaticMesh * mesh = RendererGetStaticMesh( r, primitive.renderMesh );
+            if( mesh == nullptr ) {
+                continue;
+            }
+
+            const HalfMesh & halfMesh = primitive.halfMesh;
+            const Mat4 & transform = mesh->transform;
+
+            for( i32 f = 0; f < halfMesh.faces.count; f++ ) {
+                HalfMeshFaceVertices( halfMesh, f, faceVertices );
+                if( faceVertices.count < 3 ) {
+                    continue;
+                }
+
+                // The same fan HalfMeshTriangulate uses, so a ray can only hit
+                // what the renderer actually drew.
+                const Vec3 a = Mat4MulPoint( transform, halfMesh.vertices[faceVertices[0]].position );
+                for( i32 t = 1; t + 1 < faceVertices.count; t++ ) {
+                    const Vec3 b = Mat4MulPoint( transform, halfMesh.vertices[faceVertices[t]].position );
+                    const Vec3 c = Mat4MulPoint( transform, halfMesh.vertices[faceVertices[t + 1]].position );
+
+                    f32 distance = 0.0f;
+                    if( !RayTriangleIntersect( rayOrigin, rayDirection, a, b, c, &distance ) ) {
+                        continue;
+                    }
+                    if( bestPrimitive != kNoPrimitive && distance >= bestDistance ) {
+                        continue;
+                    }
+
+                    Vec3 normal = Vec3Normalize( Vec3Cross( b - a, c - a ) );
+                    if( Vec3Dot( normal, rayDirection ) > 0.0f ) {
+                        normal = normal * -1.0f;
+                    }
+
+                    bestPrimitive = i;
+                    bestFace = f;
+                    bestDistance = distance;
+                    bestNormal = normal;
+                }
+            }
+        }
+
+        ListFree( faceVertices );
+
+        if( bestPrimitive == kNoPrimitive ) {
+            return false;
+        }
+
+        if( outPrimitive != nullptr ) {
+            *outPrimitive = bestPrimitive;
+        }
+        if( outFace != nullptr ) {
+            *outFace = bestFace;
+        }
+        if( outPoint != nullptr ) {
+            *outPoint = rayOrigin + rayDirection * bestDistance;
+        }
+        if( outNormal != nullptr ) {
+            *outNormal = bestNormal;
+        }
+        return true;
+    }
+
     void WorldSetSelected( World & world, Renderer * r, i32 primitive ) {
         if( world.selected == primitive ) {
             return;

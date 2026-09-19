@@ -95,6 +95,13 @@ namespace sol {
     bool    RayPlaneIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 planePoint, Vec3 planeNormal,
                                f32 * outDistance );
 
+    // Moller-Trumbore, two sided: a back face hits as readily as a front one,
+    // because the editor has to be able to pick the inside of a box it is
+    // standing in. outDistance is along direction and is never negative - a
+    // triangle behind the origin is a miss, not a negative hit.
+    bool    RayTriangleIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 a, Vec3 b, Vec3 c,
+                                  f32 * outDistance );
+
     // xorshift32. Seeded explicitly so a given seed always replays the same stream, and 0 is
     // folded to a non zero constant because a zero state gets stuck at zero.
     struct RandomSeries {

@@ -93,6 +93,11 @@ namespace sol {
         // that reads the grid - snapping, placing, the drawn lines - follows
         // from the one field this writes.
         void CycleGridPlane();
+        // Alt+click: re-aims the grid at whatever face the pixel is over, so
+        // the next thing built sits on that surface rather than on a world
+        // axis plane. False when the ray misses every primitive, which leaves
+        // the grid where it was.
+        bool AlignGridToFaceAt( QPoint position, i32 pane );
         // Grid coordinates of whatever a pixel is pointing at on the grid.
         // False when that pane cannot see the grid plane at all.
         bool GridPointAt( QPoint position, i32 pane, Vec3 * outLocal ) const;

@@ -39,8 +39,12 @@ __global__ void fill_kernel( cudaSurfaceObject_t surface, int width, int height,
     surf2Dwrite( pixel, surface, x * int( sizeof( uchar4 ) ), y );
 }
 
-__global__ void render_gaussian( cudaSurfaceObject_t surface, Gaussian * gaussians, glm::vec3 cp, glm::mat3 cv,int width, int height ) {
-
+__global__ void render_gaussian( cudaSurfaceObject_t surface, Gaussian * gaussians, int count, glm::vec3 cp, glm::mat3 cv,int width, int height ) {
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    for (int i = 0; i < count; i++) {
+        
+    }
 }
 
 bool cuda_render_init( uint32_t gl_texture ) {

@@ -600,6 +600,35 @@ namespace sol {
         grid.normal = kGridNormals[( current + 1 ) % kGridNormalCount];
     }
 
+    bool VulkanView::AlignGridToFaceAt( QPoint position, i32 pane ) {
+        if( !started || pane < 0 || pane >= paneCount ) {
+            return false;
+        }
+
+        Vec3 origin = {};
+        Vec3 direction = {};
+        RayAt( position, pane, &origin, &direction );
+
+        i32 primitive = kNoPrimitive;
+        i32 face = kHMNone;
+        Vec3 point = {};
+        Vec3 normal = {};
+        if( !WorldPickFace( world, renderer, origin, direction, &primitive, &face, &point, &normal ) ) {
+            return false;
+        }
+
+        // Same reason as CycleGridPlane: a half drawn box was drawn on the old
+        // plane and would be finished on the new one.
+        CancelBuild();
+
+        grid.normal = normal;
+        // The face itself, not a snapped point: the grid lines are what get
+        // snapped to, and they have to start on the surface the user pointed
+        // at or the first thing built floats off it.
+        grid.position = point;
+        return true;
+    }
+
     void VulkanView::ToggleBuildMode() {
         if( !started ) {
             return;
@@ -974,6 +1003,15 @@ namespace sol {
         if( event->button() == Qt::RightButton ) {
             BeginDrag( pane );
         } else if( event->button() == Qt::LeftButton ) {
+            // Alt is read before every mode below, build mode included: aiming
+            // the grid is a thing you do in the middle of building on it, so it
+            // cannot be a click that any mode gets to answer instead.
+            if( event->modifiers() & Qt::AltModifier ) {
+                AlignGridToFaceAt( position, pane );
+                QWindow::mousePressEvent( event );
+                return;
+            }
+
             // Build mode owns the left button outright: while it is up, a press
             // draws or finishes a box and never selects, places or grabs a
             // handle. B is the way back out.

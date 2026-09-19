@@ -277,6 +277,42 @@ namespace sol {
         return true;
     }
 
+    bool RayTriangleIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 a, Vec3 b, Vec3 c,
+                               f32 * outDistance ) {
+        const Vec3 ab = b - a;
+        const Vec3 ac = c - a;
+        const Vec3 pvec = Vec3Cross( rayDirection, ac );
+        const f32 det = Vec3Dot( ab, pvec );
+        // Near zero either way means the ray lies in the triangle's plane, or
+        // the triangle is degenerate. No sign test: both windings are hits.
+        if( det > -1e-8f && det < 1e-8f ) {
+            return false;
+        }
+
+        const f32 invDet = 1.0f / det;
+        const Vec3 tvec = rayOrigin - a;
+        const f32 u = Vec3Dot( tvec, pvec ) * invDet;
+        if( u < 0.0f || u > 1.0f ) {
+            return false;
+        }
+
+        const Vec3 qvec = Vec3Cross( tvec, ab );
+        const f32 v = Vec3Dot( rayDirection, qvec ) * invDet;
+        if( v < 0.0f || u + v > 1.0f ) {
+            return false;
+        }
+
+        const f32 distance = Vec3Dot( ac, qvec ) * invDet;
+        if( distance < 0.0f ) {
+            return false;
+        }
+
+        if( outDistance != nullptr ) {
+            *outDistance = distance;
+        }
+        return true;
+    }
+
     f32 FocalLengthFromFovX( f32 fovX, i32 imageWidth ) {
         return 0.5f * (f32)imageWidth / tanf( 0.5f * fovX );
     }
