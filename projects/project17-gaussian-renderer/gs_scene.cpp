@@ -54,7 +54,7 @@ static void add_splat( Scene * scene, glm::vec3 position, glm::mat3 rotation, gl
     g.rotation = rotation;
     g.scale = scale;
     g.colour = colour;
-    ListAdd( scene->gaussians, g );
+    list_add( scene->gaussians, g );
 }
 
 // A chequerboard of flat disks. Wide and thin is the anisotropic case, and at grazing angles it is also
@@ -172,7 +172,7 @@ void scene_frame_camera( Scene * scene ) {
 void scene_build_demo( Scene * scene ) {
     Rng rng = { kSeed };
 
-    ListReserve( scene->gaussians, kFloorSide * kFloorSide + 3 * kShellSplats + kRingSplats );
+    list_reserve( scene->gaussians, kFloorSide * kFloorSide + 3 * kShellSplats + kRingSplats );
 
     build_floor( scene, &rng );
 

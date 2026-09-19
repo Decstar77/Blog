@@ -244,8 +244,8 @@ bool ply_load_scene( const char * path, Scene * scene, bool flip_to_y_up ) {
         return false;
     }
 
-    ListClear( scene->gaussians );
-    ListReserve( scene->gaussians, i32( vertex_count ) );
+    list_clear( scene->gaussians );
+    list_reserve( scene->gaussians, i32( vertex_count ) );
     if ( scene->gaussians.cap < i32( vertex_count ) ) {
         printf( "ply: out of memory reserving %lld splats\n", (long long) vertex_count );
         free( chunk );
@@ -299,7 +299,7 @@ bool ply_load_scene( const char * path, Scene * scene, bool flip_to_y_up ) {
                 }
             }
 
-            ListAdd( scene->gaussians, g );
+            list_add( scene->gaussians, g );
         }
 
         loaded += batch;
