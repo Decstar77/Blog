@@ -1,0 +1,9 @@
+[submodule "projects/project17-gaussian-renderer/vendor/glfw"]
+	path = projects/project17-gaussian-renderer/vendor/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "projects/project17-gaussian-renderer/vendor/glm"]
+	path = projects/project17-gaussian-renderer/vendor/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "projects/project17-gaussian-renderer/vendor/glad"]
+	path = projects/project17-gaussian-renderer/vendor/glad
+	url = https://github.com/Dav1dde/glad.git

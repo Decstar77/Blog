@@ -27,9 +27,9 @@ int main( int argc, char ** argv ) {
         }
     }
 
-    if ( ply_path != nullptr ) {
-        ply_path = "C:/Projects/2025/Blog/data/splats/gpu/scene.ply";
-    }
+    // if ( ply_path == nullptr ) {
+    //     ply_path = "C:/Projects/2025/Blog/data/splats/gpu/scene.ply";
+    // }
 
     if ( !gs_window_create( 1280, 720, "Gaussian Renderer" ) ) {
         return 1;
