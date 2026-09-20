@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaussian Splat Renderer — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Graphics</span>
+            <h1 style="text-align: center;">Gaussian Splat Renderer</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-tag"></i> C++ &middot; CUDA &middot; OpenGL</span>
+                <span><i class="fas fa-hashtag"></i> Project 17</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                A real-time 3D Gaussian Splatting rasterizer written from scratch in CUDA, with an OpenGL
+                window for presentation. It loads a trained <code>.ply</code> capture (the format the INRIA
+                training code exports) and flies a camera through it. No splatting library is used. The
+                projection, tiling, sorting and compositing all live in <code>cuda_render.cu</code>; OpenGL
+                only owns the window and blits the CUDA-written texture to the screen.
+            </p>
+
+            <img src="images/gaussian-renderer.gif" style="width: 100%; height: auto;"
+                alt="The renderer running on the built-in demo scene" class="img-fluid">
+
+            <h2>How it renders a frame</h2>
+            <p>
+                Splatting is order-dependent alpha compositing over millions of primitives, so the whole
+                design is about getting them into per-pixel depth order cheaply. The frame runs as four GPU
+                passes.
+            </p>
+
+            <h3>1. Preprocess</h3>
+            <p>
+                <code>preprocess_splats</code> projects every splat once. The centre goes through a pinhole
+                projection; the 3D covariance <code>R S S&#7488; R&#7488;</code> is pushed through a local
+                affine approximation of that projection (the EWA method) to get a 2D covariance, which is
+                inverted into a conic so the render pass can evaluate a Gaussian with three multiplies. The
+                larger eigenvalue of the 2D covariance is the variance along the splat's long axis, so
+                3&sigma; of it bounds the on-screen footprint in every direction. That bound is clipped to the
+                16&times;16 tile grid, and the pass records how many tiles the splat covers.
+            </p>
+
+            <h3>2. Duplicate</h3>
+            <p>
+                <code>duplicate_splats</code> expands each splat into one entry per tile it touches. A prefix
+                sum over the per-splat tile counts gives each splat a private slice of the output array, so
+                the expansion needs no atomics. Each entry gets a 64-bit key: the tile id in the high 32 bits,
+                the float depth's raw bits in the low 32. Positive floats compare correctly as integers, so
+                one radix sort over that key groups entries by tile <em>and</em> orders them by depth within
+                each tile at the same time. Only the bits the tile id actually occupies are sorted above the
+                depth bits.
+            </p>
+
+            <h3>3. Tile ranges</h3>
+            <p>
+                <code>identify_tile_ranges</code> walks the sorted keys and records where each tile's run of
+                entries starts and ends.
+            </p>
+
+            <h3>4. Composite</h3>
+            <p>
+                <code>render_tiles</code> runs one block per tile and one thread per pixel. The block
+                cooperatively loads its tile's splats into shared memory in 256-entry batches and each thread
+                walks them front to back, accumulating colour and attenuating transmittance. A thread that
+                saturates stops accumulating but keeps reaching the barriers, so the early exit is a
+                block-wide <code>__syncthreads_count</code> rather than a per-thread <code>break</code>. The
+                result is written straight into an OpenGL texture through CUDA/GL interop, so the pixels never
+                travel back through host memory.
+            </p>
+
+            <div class="article-tags">
+                <span class="tag">CUDA</span>
+                <span class="tag">C++</span>
+                <span class="tag">Graphics</span>
+                <span class="tag">Gaussian Splatting</span>
+                <span class="tag">GPU</span>
+            </div>
+        </div>
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="index.html">&larr; Home</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
