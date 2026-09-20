@@ -36,6 +36,10 @@ struct PlyProperty {
     int       offset;
 };
 
+/*
+===================
+===================
+*/
 static PlyScalar ply_scalar_from_name( const char * name ) {
     if ( strcmp( name, "float" ) == 0 || strcmp( name, "float32" ) == 0 ) return kPlyF32;
     if ( strcmp( name, "double" ) == 0 || strcmp( name, "float64" ) == 0 ) return kPlyF64;
@@ -48,6 +52,10 @@ static PlyScalar ply_scalar_from_name( const char * name ) {
     return kPlyUnknown;
 }
 
+/*
+===================
+===================
+*/
 static int ply_scalar_size( PlyScalar scalar ) {
     switch ( scalar ) {
         case kPlyI8:
@@ -62,6 +70,10 @@ static int ply_scalar_size( PlyScalar scalar ) {
     }
 }
 
+/*
+===================
+===================
+*/
 static float ply_read( const u8 * vertex, const PlyProperty * property ) {
     const u8 * at = vertex + property->offset;
     switch ( property->scalar ) {
@@ -77,6 +89,10 @@ static float ply_read( const u8 * vertex, const PlyProperty * property ) {
     }
 }
 
+/*
+===================
+===================
+*/
 static const PlyProperty * find_property( const PlyProperty * properties, int count, const char * name ) {
     for ( int i = 0; i < count; i++ ) {
         if ( strcmp( properties[i].name, name ) == 0 ) {
@@ -86,14 +102,22 @@ static const PlyProperty * find_property( const PlyProperty * properties, int co
     return nullptr;
 }
 
-// Trims the trailing newline, and the carriage return a file written on Windows leaves behind.
+/*
+===================
+===================
+*/
 static void trim_line( char * line ) {
+    // Trims the trailing newline, and the carriage return a file written on Windows leaves behind.
     int length = int( strlen( line ) );
     while ( length > 0 && ( line[length - 1] == '\n' || line[length - 1] == '\r' ) ) {
         line[--length] = '\0';
     }
 }
 
+/*
+===================
+===================
+*/
 bool ply_load_scene( const char * path, Scene * scene, bool flip_to_y_up ) {
     FILE * file = fopen( path, "rb" );
     if ( !file ) {

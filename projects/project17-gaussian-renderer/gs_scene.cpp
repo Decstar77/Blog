@@ -25,6 +25,10 @@ struct Rng {
     u32 state;
 };
 
+/*
+===================
+===================
+*/
 static float rng_unit( Rng * rng ) {
     // xorshift32. This only drives jitter, so the quality bar is "not visibly periodic".
     u32 x = rng->state;
@@ -35,12 +39,18 @@ static float rng_unit( Rng * rng ) {
     return float( x >> 8 ) * ( 1.0f / 16777216.0f );
 }
 
+/*
+===================
+===================
+*/
 static float rng_range( Rng * rng, float lo, float hi ) {
     return lo + ( hi - lo ) * rng_unit( rng );
 }
 
-// An orthonormal basis whose third column is n. Covariance is R*S*(R*S)^T and R*S scales column i by
-// scale[i], so pairing this with a scale like (r, r, thin) gives a disk lying tangent to the surface.
+/*
+===================
+===================
+*/
 static glm::mat3 basis_from_normal( glm::vec3 n ) {
     const glm::vec3 guide = fabsf( n.y ) < 0.99f ? glm::vec3( 0, 1, 0 ) : glm::vec3( 1, 0, 0 );
     const glm::vec3 tangent = glm::normalize( glm::cross( guide, n ) );
@@ -48,6 +58,10 @@ static glm::mat3 basis_from_normal( glm::vec3 n ) {
     return glm::mat3( tangent, bitangent, n );
 }
 
+/*
+===================
+===================
+*/
 static void add_splat( Scene * scene, glm::vec3 position, glm::mat3 rotation, glm::vec3 scale, glm::vec4 colour ) {
     Gaussian g;
     g.position = position;
@@ -57,8 +71,10 @@ static void add_splat( Scene * scene, glm::vec3 position, glm::mat3 rotation, gl
     list_add( scene->gaussians, g );
 }
 
-// A chequerboard of flat disks. Wide and thin is the anisotropic case, and at grazing angles it is also
-// where the 2D covariance gets thinnest, so it is the honest test of the screen-space blur floor.
+/*
+===================
+===================
+*/
 static void build_floor( Scene * scene, Rng * rng ) {
     const glm::mat3 rotation = basis_from_normal( glm::vec3( 0, 1, 0 ) );
     const float step = 2.0f * kFloorExtent / float( kFloorSide - 1 );
@@ -85,8 +101,10 @@ static void build_floor( Scene * scene, Rng * rng ) {
     }
 }
 
-// A hollow sphere of surfels. At alpha 0.3 the far side shows through the near side, which is only
-// stable if every tile composites its splats strictly front to back.
+/*
+===================
+===================
+*/
 static void build_shell( Scene * scene, Rng * rng, glm::vec3 centre, float radius, glm::vec3 tint ) {
     const glm::vec3 light = glm::normalize( glm::vec3( 0.4f, 0.85f, 0.55f ) );
 
@@ -111,8 +129,10 @@ static void build_shell( Scene * scene, Rng * rng, glm::vec3 centre, float radiu
     }
 }
 
-// Streaks drawn out along the ring's tangent, tilted off every axis. Their long axis is neither a world
-// axis nor the view axis, so it only projects correctly if the full rotation reaches the conic.
+/*
+===================
+===================
+*/
 static void build_ring( Scene * scene, Rng * rng, glm::vec3 centre, float radius ) {
     const glm::mat3 tilt = glm::mat3( glm::rotate( glm::mat4( 1.0f ), 0.42f, glm::normalize( glm::vec3( 1.0f, 0.0f, 0.35f ) ) ) );
 
@@ -137,6 +157,10 @@ static void build_ring( Scene * scene, Rng * rng, glm::vec3 centre, float radius
     }
 }
 
+/*
+===================
+===================
+*/
 void scene_frame_camera( Scene * scene ) {
     const i32 count = scene->gaussians.count;
     if ( count <= 0 ) {
@@ -169,6 +193,10 @@ void scene_frame_camera( Scene * scene ) {
     printf( "scene: %d splats, centre (%.2f, %.2f, %.2f), spread %.2f\n", count, centre.x, centre.y, centre.z, spread );
 }
 
+/*
+===================
+===================
+*/
 void scene_build_demo( Scene * scene ) {
     Rng rng = { kSeed };
 

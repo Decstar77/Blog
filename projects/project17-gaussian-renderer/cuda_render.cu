@@ -48,6 +48,10 @@ struct PixelCamera {
     float     fx, fy;  // focal length, in pixels
 };
 
+/*
+===================
+===================
+*/
 static PixelCamera make_pixel_camera( glm::vec3 position, glm::mat3 rotation, int width, int height ) {
     PixelCamera cam;
     cam.origin = position;
@@ -59,6 +63,10 @@ static PixelCamera make_pixel_camera( glm::vec3 position, glm::mat3 rotation, in
     return cam;
 }
 
+/*
+===================
+===================
+*/
 __device__ inline glm::mat3 gaussian_covariance( const Gaussian & g ) {
     // 3D covariance Sigma = R S S^T R^T for a splat.
     glm::mat3 s( 0.0f );
@@ -343,6 +351,10 @@ static DeviceBuffer g_scratch = {};    // cub temp storage
 
 static int g_uploaded_count = 0;       // splats currently resident in g_gaussians
 
+/*
+===================
+===================
+*/
 static int tile_id_bits( int tiles ) {
     int bits = 1;
     while ( ( 1 << bits ) < tiles ) {
@@ -351,6 +363,10 @@ static int tile_id_bits( int tiles ) {
     return bits;
 }
 
+/*
+===================
+===================
+*/
 bool cuda_render_init( uint32_t gl_texture ) {
     int device_count = 0;
     if ( !check( cudaGetDeviceCount( &device_count ), "cudaGetDeviceCount" ) || device_count == 0 ) {
@@ -375,6 +391,10 @@ bool cuda_render_init( uint32_t gl_texture ) {
     return true;
 }
 
+/*
+===================
+===================
+*/
 void cuda_render_shutdown() {
     if ( g_resource ) {
         cudaGraphicsUnregisterResource( g_resource );
@@ -397,7 +417,10 @@ void cuda_render_shutdown() {
     g_uploaded_count = 0;
 }
 
-// Sizes cub's temp storage for whichever of the two collective calls needs more, so both can share it.
+/*
+===================
+===================
+*/
 static bool reserve_scratch( int count, int total, int end_bit ) {
     size_t scan_bytes = 0;
     cub::DeviceScan::InclusiveSum( nullptr, scan_bytes, buffer_as<u32>( &g_touched ), buffer_as<u32>( &g_offsets ), count );
@@ -411,6 +434,10 @@ static bool reserve_scratch( int count, int total, int end_bit ) {
     return buffer_reserve( &g_scratch, scan_bytes > sort_bytes ? scan_bytes : sort_bytes );
 }
 
+/*
+===================
+===================
+*/
 void cuda_render_frame( Scene * scene, int width, int height, float time ) {
     (void) time;
 

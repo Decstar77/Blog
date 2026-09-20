@@ -10,6 +10,10 @@ constexpr float kMoveSpeed = 2.0f;           // world units per second
 constexpr float kFastMultiplier = 4.0f;
 constexpr float kPitchLimit = kHalfPi - 0.01f;
 
+/*
+===================
+===================
+*/
 void camera_refresh( Camera * camera ) {
     const float cy = cosf( camera->yaw );
     const float sy = sinf( camera->yaw );
@@ -22,6 +26,10 @@ void camera_refresh( Camera * camera ) {
     camera->rotation = glm::mat3( right, up, -forward );
 }
 
+/*
+===================
+===================
+*/
 void camera_update( Camera * camera, const GsInput & input, float dt ) {
     camera->yaw -= input.mouse_dx * kLookSensitivity;
     camera->pitch -= input.mouse_dy * kLookSensitivity;

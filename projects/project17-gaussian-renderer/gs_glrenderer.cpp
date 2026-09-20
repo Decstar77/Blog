@@ -22,6 +22,10 @@ void main() {
 }
 )";
 
+/*
+===================
+===================
+*/
 static GLuint compile_shader( GLenum type, const char * source ) {
     GLuint shader = glCreateShader( type );
     glShaderSource( shader, 1, &source, nullptr );
@@ -39,7 +43,11 @@ static GLuint compile_shader( GLenum type, const char * source ) {
     return shader;
 }
 
-static GLuint build_blit_program( void ) {
+/*
+===================
+===================
+*/
+static GLuint build_blit_program() {
     GLuint vertex = compile_shader( GL_VERTEX_SHADER, kBlitVertexSource );
     GLuint fragment = compile_shader( GL_FRAGMENT_SHADER, kBlitFragmentSource );
     if ( !vertex || !fragment ) {
@@ -67,6 +75,10 @@ static GLuint build_blit_program( void ) {
     return program;
 }
 
+/*
+===================
+===================
+*/
 bool gs_glrenderer_init( GsGlRenderer * renderer ) {
     renderer->program = 0;
     renderer->vao = 0;
@@ -86,6 +98,10 @@ bool gs_glrenderer_init( GsGlRenderer * renderer ) {
     return true;
 }
 
+/*
+===================
+===================
+*/
 void gs_glrenderer_shutdown( GsGlRenderer * renderer ) {
     if ( renderer->target ) {
         glDeleteTextures( 1, &renderer->target );
@@ -103,6 +119,10 @@ void gs_glrenderer_shutdown( GsGlRenderer * renderer ) {
     renderer->target_height = 0;
 }
 
+/*
+===================
+===================
+*/
 bool gs_glrenderer_resize_target( GsGlRenderer * renderer, int width, int height ) {
     if ( width <= 0 || height <= 0 ) {
         return false;
@@ -132,6 +152,10 @@ bool gs_glrenderer_resize_target( GsGlRenderer * renderer, int width, int height
     return true;
 }
 
+/*
+===================
+===================
+*/
 void gs_glrenderer_draw( const GsGlRenderer * renderer, int viewport_width, int viewport_height ) {
     glViewport( 0, 0, viewport_width, viewport_height );
     glClearColor( 0.05f, 0.05f, 0.07f, 1.0f );

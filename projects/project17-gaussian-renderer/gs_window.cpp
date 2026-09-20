@@ -15,10 +15,12 @@ struct GsWindow {
     bool            looking;
 };
 
-// There is only ever one window, so it lives here rather than on the heap. A zeroed handle is also the
-// "not created yet" state.
 static GsWindow main_window = {};
 
+/*
+===================
+===================
+*/
 bool gs_window_create( int width, int height, const char * title ) {
     if ( !glfwInit() ) {
         printf( "failed to init glfw\n" );
@@ -53,6 +55,10 @@ bool gs_window_create( int width, int height, const char * title ) {
     return true;
 }
 
+/*
+===================
+===================
+*/
 void gs_window_destroy() {
     if ( !main_window.handle ) {
         return;
@@ -63,6 +69,10 @@ void gs_window_destroy() {
     main_window = {};
 }
 
+/*
+===================
+===================
+*/
 bool gs_window_should_close() {
     // Without a window there is nothing to keep a frame loop running.
     if ( !main_window.handle ) {
@@ -71,15 +81,27 @@ bool gs_window_should_close() {
     return glfwWindowShouldClose( main_window.handle ) != 0;
 }
 
+/*
+===================
+===================
+*/
 void gs_window_framebuffer_size( int * width, int * height ) {
     glfwGetFramebufferSize( main_window.handle, width, height );
 }
 
+/*
+===================
+===================
+*/
 void gs_window_present() {
     glfwSwapBuffers( main_window.handle );
     glfwPollEvents();
 }
 
+/*
+===================
+===================
+*/
 void gs_window_poll_input( GsInput * input ) {
     *input = {};
 
@@ -124,14 +146,26 @@ void gs_window_poll_input( GsInput * input ) {
     }
 }
 
+/*
+===================
+===================
+*/
 float gs_window_delta_time() {
     return main_window.delta_time;
 }
 
+/*
+===================
+===================
+*/
 float gs_window_time() {
     return (float) glfwGetTime();
 }
 
+/*
+===================
+===================
+*/
 float gs_window_aspect() {
     int width = 0;
     int height = 0;

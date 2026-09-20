@@ -22,12 +22,20 @@ struct List {
 
 constexpr i32 kListFirstCap = 8;
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 List<_type_> list_create() {
     List<_type_> list = {};
     return list;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_free( List<_type_> & list ) {
     ::free( list.data );
@@ -36,26 +44,46 @@ void list_free( List<_type_> & list ) {
     list.cap = 0;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_clear( List<_type_> & list ) {
     list.count = 0;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 bool list_is_empty( const List<_type_> & list ) {
     return list.count == 0;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 bool list_is_full( const List<_type_> & list ) {
     return list.count == list.cap;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 bool list_is_valid_index( const List<_type_> & list, i32 index ) {
     return index >= 0 && index < list.count;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_reserve( List<_type_> & list, i32 wanted_cap ) {
     if ( wanted_cap <= list.cap ) {
@@ -76,6 +104,10 @@ void list_reserve( List<_type_> & list, i32 wanted_cap ) {
     list.cap = new_cap;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_shrink_to_fit( List<_type_> & list ) {
     if ( list.cap == list.count ) {
@@ -96,6 +128,10 @@ void list_shrink_to_fit( List<_type_> & list ) {
     list.cap = list.count;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 _type_ * list_add( List<_type_> & list, const _type_ & value ) {
     list_reserve( list, list.count + 1 );
@@ -108,6 +144,10 @@ _type_ * list_add( List<_type_> & list, const _type_ & value ) {
     return &list.data[list.count - 1];
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 _type_ * list_add_empty( List<_type_> & list ) {
     list_reserve( list, list.count + 1 );
@@ -119,6 +159,10 @@ _type_ * list_add_empty( List<_type_> & list ) {
     return &list.data[list.count - 1];
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_add_range( List<_type_> & list, const _type_ * values, i32 value_count ) {
     if ( value_count <= 0 ) {
@@ -134,11 +178,19 @@ void list_add_range( List<_type_> & list, const _type_ * values, i32 value_count
     list.count += value_count;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_add_range( List<_type_> & list, const List<_type_> & other ) {
     list_add_range( list, other.data, other.count );
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 _type_ * list_insert( List<_type_> & list, i32 index, const _type_ & value ) {
     if ( index < 0 || index > list.count ) {
@@ -160,6 +212,10 @@ _type_ * list_insert( List<_type_> & list, i32 index, const _type_ & value ) {
     return &list.data[index];
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_remove_index( List<_type_> & list, i32 index ) {
     if ( list_is_valid_index( list, index ) == false ) {
@@ -174,6 +230,10 @@ void list_remove_index( List<_type_> & list, i32 index ) {
     list.count--;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_remove_index_fast( List<_type_> & list, i32 index ) {
     if ( list_is_valid_index( list, index ) == false ) {
@@ -184,6 +244,10 @@ void list_remove_index_fast( List<_type_> & list, i32 index ) {
     list.count--;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_remove_range( List<_type_> & list, i32 index, i32 remove_count ) {
     if ( list_is_valid_index( list, index ) == false || remove_count <= 0 ) {
@@ -203,6 +267,10 @@ void list_remove_range( List<_type_> & list, i32 index, i32 remove_count ) {
     list.count -= remove_count;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 _type_ list_pop( List<_type_> & list ) {
     if ( list.count == 0 ) {
@@ -214,6 +282,10 @@ _type_ list_pop( List<_type_> & list ) {
     return list.data[list.count];
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 _type_ * list_get( List<_type_> & list, i32 index ) {
     if ( list_is_valid_index( list, index ) == false ) {
@@ -222,6 +294,10 @@ _type_ * list_get( List<_type_> & list, i32 index ) {
     return &list.data[index];
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 _type_ * list_last( List<_type_> & list ) {
     if ( list.count == 0 ) {
@@ -230,6 +306,10 @@ _type_ * list_last( List<_type_> & list ) {
     return &list.data[list.count - 1];
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 i32 list_index_of( const List<_type_> & list, const _type_ & value ) {
     for ( i32 i = 0; i < list.count; i++ ) {
@@ -240,11 +320,19 @@ i32 list_index_of( const List<_type_> & list, const _type_ & value ) {
     return -1;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 bool list_contains( const List<_type_> & list, const _type_ & value ) {
     return list_index_of( list, value ) >= 0;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 bool list_remove_value( List<_type_> & list, const _type_ & value ) {
     i32 index = list_index_of( list, value );
@@ -256,6 +344,10 @@ bool list_remove_value( List<_type_> & list, const _type_ & value ) {
     return true;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 bool list_remove_value_fast( List<_type_> & list, const _type_ & value ) {
     i32 index = list_index_of( list, value );
@@ -267,6 +359,10 @@ bool list_remove_value_fast( List<_type_> & list, const _type_ & value ) {
     return true;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_, typename _pred_>
 i32 list_index_of_pred( const List<_type_> & list, _pred_ pred ) {
     for ( i32 i = 0; i < list.count; i++ ) {
@@ -277,6 +373,10 @@ i32 list_index_of_pred( const List<_type_> & list, _pred_ pred ) {
     return -1;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_, typename _pred_>
 _type_ * list_find( List<_type_> & list, _pred_ pred ) {
     i32 index = list_index_of_pred( list, pred );
@@ -286,6 +386,10 @@ _type_ * list_find( List<_type_> & list, _pred_ pred ) {
     return &list.data[index];
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_, typename _pred_>
 i32 list_remove_if( List<_type_> & list, _pred_ pred ) {
     i32 write = 0;
@@ -305,6 +409,10 @@ i32 list_remove_if( List<_type_> & list, _pred_ pred ) {
     return removed;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_resize( List<_type_> & list, i32 new_count ) {
     if ( new_count < 0 ) {
@@ -325,6 +433,10 @@ void list_resize( List<_type_> & list, i32 new_count ) {
     list.count = new_count;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_fill( List<_type_> & list, const _type_ & value ) {
     for ( i32 i = 0; i < list.count; i++ ) {
@@ -332,6 +444,10 @@ void list_fill( List<_type_> & list, const _type_ & value ) {
     }
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 List<_type_> list_copy( const List<_type_> & list ) {
     List<_type_> result = {};
@@ -339,6 +455,10 @@ List<_type_> list_copy( const List<_type_> & list ) {
     return result;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_swap( List<_type_> & list, i32 a, i32 b ) {
     if ( list_is_valid_index( list, a ) == false || list_is_valid_index( list, b ) == false ) {
@@ -350,6 +470,10 @@ void list_swap( List<_type_> & list, i32 a, i32 b ) {
     list.data[b] = temp;
 }
 
+/*
+===================
+===================
+*/
 template <typename _type_>
 void list_reverse( List<_type_> & list ) {
     for ( i32 i = 0, j = list.count - 1; i < j; i++, j-- ) {
