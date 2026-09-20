@@ -31,14 +31,13 @@ int main( int argc, char ** argv ) {
         ply_path = "C:/Projects/2025/Blog/data/splats/gpu/scene.ply";
     }
 
-    GsWindow * window = gs_window_create( 1280, 720, "Gaussian Renderer" );
-    if ( !window ) {
+    if ( !gs_window_create( 1280, 720, "Gaussian Renderer" ) ) {
         return 1;
     }
 
     GsGlRenderer renderer;
     if ( !gs_glrenderer_init( &renderer ) ) {
-        gs_window_destroy( window );
+        gs_window_destroy();
         return 1;
     }
 
@@ -50,13 +49,13 @@ int main( int argc, char ** argv ) {
         scene_build_demo( &scene );
     }
 
-    while ( !gs_window_should_close( window ) ) {
+    while ( !gs_window_should_close() ) {
         GsInput input = {};
-        gs_window_poll_input( window, &input );
+        gs_window_poll_input( &input );
         camera_update( &scene.camera, input, gs_window_delta_time() );
 
         int width, height;
-        gs_window_framebuffer_size( window, &width, &height );
+        gs_window_framebuffer_size( &width, &height );
 
         if ( gs_glrenderer_resize_target( &renderer, width, height ) ) {
             cuda_render_init( renderer.target );
@@ -65,11 +64,11 @@ int main( int argc, char ** argv ) {
         cuda_render_frame( &scene, renderer.target_width, renderer.target_height, gs_window_time() );
 
         gs_glrenderer_draw( &renderer, width, height );
-        gs_window_present( window );
+        gs_window_present();
     }
 
     cuda_render_shutdown();
     gs_glrenderer_shutdown( &renderer );
-    gs_window_destroy( window );
+    gs_window_destroy();
     return 0;
 }

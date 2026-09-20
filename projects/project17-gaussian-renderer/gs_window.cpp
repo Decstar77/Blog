@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
 
 struct GsWindow {
     GLFWwindow *    handle;
@@ -16,12 +15,14 @@ struct GsWindow {
     bool            looking;
 };
 
-static GsWindow * main_window = nullptr;
+// There is only ever one window, so it lives here rather than on the heap. A zeroed handle is also the
+// "not created yet" state.
+static GsWindow main_window = {};
 
-GsWindow * gs_window_create( int width, int height, const char * title ) {
+bool gs_window_create( int width, int height, const char * title ) {
     if ( !glfwInit() ) {
         printf( "failed to init glfw\n" );
-        return nullptr;
+        return false;
     }
 
     glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 4 );
@@ -32,7 +33,7 @@ GsWindow * gs_window_create( int width, int height, const char * title ) {
     if ( !handle ) {
         printf( "failed to create window\n" );
         glfwTerminate();
-        return nullptr;
+        return false;
     }
 
     glfwMakeContextCurrent( handle );
@@ -40,80 +41,75 @@ GsWindow * gs_window_create( int width, int height, const char * title ) {
         printf( "failed to load gl\n" );
         glfwDestroyWindow( handle );
         glfwTerminate();
-        return nullptr;
+        return false;
     }
     glfwSwapInterval( 1 );
 
     printf( "gl %s\n", glGetString( GL_VERSION ) );
 
-    GsWindow * window = (GsWindow *) malloc( sizeof( GsWindow ) );
-    if ( !window ) {
-        glfwDestroyWindow( handle );
-        glfwTerminate();
-        return nullptr;
-    }
-    window->handle = handle;
-    window->cursor_x = 0.0;
-    window->cursor_y = 0.0;
-    window->last_time = glfwGetTime();
-    window->delta_time = 0.0f;
-    window->looking = false;
-    main_window = window;
-    return window;
+    main_window = {};
+    main_window.handle = handle;
+    main_window.last_time = glfwGetTime();
+    return true;
 }
 
-void gs_window_destroy( GsWindow * window ) {
-    if ( !window ) {
+void gs_window_destroy() {
+    if ( !main_window.handle ) {
         return;
     }
-    glfwDestroyWindow( window->handle );
+
+    glfwDestroyWindow( main_window.handle );
     glfwTerminate();
-    free( window );
+    main_window = {};
 }
 
-bool gs_window_should_close( const GsWindow * window ) {
-    return glfwWindowShouldClose( window->handle ) != 0;
+bool gs_window_should_close() {
+    // Without a window there is nothing to keep a frame loop running.
+    if ( !main_window.handle ) {
+        return true;
+    }
+    return glfwWindowShouldClose( main_window.handle ) != 0;
 }
 
-void gs_window_framebuffer_size( const GsWindow * window, int * width, int * height ) {
-    glfwGetFramebufferSize( window->handle, width, height );
+void gs_window_framebuffer_size( int * width, int * height ) {
+    glfwGetFramebufferSize( main_window.handle, width, height );
 }
 
-void gs_window_present( GsWindow * window ) {
-    glfwSwapBuffers( window->handle );
+void gs_window_present() {
+    glfwSwapBuffers( main_window.handle );
     glfwPollEvents();
 }
 
-void gs_window_poll_input( GsWindow * window, GsInput * input ) {
+void gs_window_poll_input( GsInput * input ) {
     *input = {};
 
     const double now = glfwGetTime();
-    window->delta_time = (float) fmin( now - window->last_time, 0.1 );
-    window->last_time = now;
+    main_window.delta_time = (float) fmin( now - main_window.last_time, 0.1 );
+    main_window.last_time = now;
 
-    GLFWwindow * handle = window->handle;
+    GLFWwindow * handle = main_window.handle;
 
     const bool look = glfwGetMouseButton( handle, GLFW_MOUSE_BUTTON_RIGHT ) == GLFW_PRESS;
     double x = 0.0;
     double y = 0.0;
     glfwGetCursorPos( handle, &x, &y );
 
-    if ( look && !window->looking ) {
+    if ( look && !main_window.looking ) {
         glfwSetInputMode( handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED );
         if ( glfwRawMouseMotionSupported() ) {
             glfwSetInputMode( handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE );
         }
         glfwGetCursorPos( handle, &x, &y );
-    } else if ( !look && window->looking ) {
+    } else if ( !look && main_window.looking ) {
         glfwSetInputMode( handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL );
     } else if ( look ) {
-        input->mouse_dx = (float) ( x - window->cursor_x );
-        input->mouse_dy = (float) ( y - window->cursor_y );
+        input->mouse_dx = (float) ( x - main_window.cursor_x );
+        input->mouse_dy = (float) ( y - main_window.cursor_y );
     }
 
-    window->cursor_x = x;
-    window->cursor_y = y;
-    window->looking = look;
+    main_window.cursor_x = x;
+    main_window.cursor_y = y;
+    main_window.looking = look;
 
     if ( glfwGetKey( handle, GLFW_KEY_D ) == GLFW_PRESS ) input->move_right += 1.0f;
     if ( glfwGetKey( handle, GLFW_KEY_A ) == GLFW_PRESS ) input->move_right -= 1.0f;
@@ -129,16 +125,16 @@ void gs_window_poll_input( GsWindow * window, GsInput * input ) {
 }
 
 float gs_window_delta_time() {
-    return main_window->delta_time;
+    return main_window.delta_time;
 }
 
-float gs_window_time( void ) {
+float gs_window_time() {
     return (float) glfwGetTime();
 }
 
 float gs_window_aspect() {
     int width = 0;
     int height = 0;
-    glfwGetWindowSize( main_window->handle, &width, &height );
-    return width / height;
+    glfwGetWindowSize( main_window.handle, &width, &height );
+    return height > 0 ? float( width ) / float( height ) : 0.0f;
 }
