@@ -15,6 +15,7 @@
 // Ray-Gaussian integration
 // 2D Gaussians / planar disks
 
+
 int main( int argc, char ** argv ) {
     const char * ply_path = nullptr;
     bool flip_to_y_up = false;
