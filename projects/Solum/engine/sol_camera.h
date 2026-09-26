@@ -30,6 +30,9 @@ namespace sol {
 
     FlyCamera   FlyCameraDefault();
     Vec3        FlyCameraForward( const FlyCamera & camera );
+    // The camera's basis in world space, matching the one its projection and
+    // picking ray are built from.
+    void        FlyCameraAxes( const FlyCamera & camera, Vec3 * outRight, Vec3 * outUp, Vec3 * outForward );
     void        FlyCameraUpdate( FlyCamera * camera, const FlyCameraInput & input, f32 dt );
     Mat4        FlyCameraViewProjection( const FlyCamera & camera, i32 width, i32 height );
     void        FlyCameraScreenRay( const FlyCamera & camera, f32 pixelX, f32 pixelY, i32 pixelWidth, i32 pixelHeight, Vec3 * outOrigin, Vec3 * outDirection );
@@ -55,6 +58,9 @@ namespace sol {
     };
 
     OrthoCamera OrthoCameraDefault( OrthoAxis axis );
+    // Screen right, screen up and view direction in world space. Each is
+    // exactly a world axis, which is what lets a 2D pane snap in world axes.
+    void        OrthoCameraAxes( const OrthoCamera & camera, Vec3 * outRight, Vec3 * outUp, Vec3 * outForward );
     void        OrthoCameraUpdate( OrthoCamera * camera, const OrthoCameraInput & input, i32 pixelHeight );
     Mat4        OrthoCameraViewProjection( const OrthoCamera & camera, i32 width, i32 height );
     Vec3        OrthoCameraScreenToWorld( const OrthoCamera & camera, f32 pixelX, f32 pixelY, i32 pixelWidth, i32 pixelHeight );

@@ -79,28 +79,10 @@ namespace sol {
     Vec3    Mat4Forward( const Mat4 & a );
 
     f32     FocalLengthFromFovX( f32 fovX, i32 imageWidth );
-
-    // Slab test. outDistance is how far along direction the ray first meets the
-    // box, and is zero when the ray starts inside it. direction need not be
-    // normalised, but the distance comes back in units of it if it is not.
-    bool    RayAabbIntersect( Vec3 origin, Vec3 direction, Vec3 boundsMin, Vec3 boundsMax,
-                              f32 * outDistance );
-
-    // Point on the infinite line through linePoint that is nearest the ray.
-    // outLineT is the parameter along lineDir. False when the two are parallel.
-    bool    RayLineClosest( Vec3 rayOrigin, Vec3 rayDirection, Vec3 linePoint, Vec3 lineDirection,
-                            f32 * outLineT );
-
-    // Distance along the ray to the plane. False when the ray runs parallel to it.
-    bool    RayPlaneIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 planePoint, Vec3 planeNormal,
-                               f32 * outDistance );
-
-    // Moller-Trumbore, two sided: a back face hits as readily as a front one,
-    // because the editor has to be able to pick the inside of a box it is
-    // standing in. outDistance is along direction and is never negative - a
-    // triangle behind the origin is a miss, not a negative hit.
-    bool    RayTriangleIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 a, Vec3 b, Vec3 c,
-                                  f32 * outDistance );
+    bool    RayAabbIntersect( Vec3 origin, Vec3 direction, Vec3 boundsMin, Vec3 boundsMax, f32 * outDistance );
+    bool    RayLineClosest( Vec3 rayOrigin, Vec3 rayDirection, Vec3 linePoint, Vec3 lineDirection, f32 * outLineT );
+    bool    RayPlaneIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 planePoint, Vec3 planeNormal, f32 * outDistance );
+    bool    RayTriangleIntersect( Vec3 rayOrigin, Vec3 rayDirection, Vec3 a, Vec3 b, Vec3 c, f32 * outDistance );
 
     // xorshift32. Seeded explicitly so a given seed always replays the same stream, and 0 is
     // folded to a non zero constant because a zero state gets stuck at zero.

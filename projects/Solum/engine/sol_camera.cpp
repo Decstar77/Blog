@@ -27,6 +27,14 @@ namespace sol {
         };
     }
 
+    void FlyCameraAxes( const FlyCamera & camera, Vec3 * outRight, Vec3 * outUp, Vec3 * outForward ) {
+        const Vec3 forward = FlyCameraForward( camera );
+        const Vec3 right = Vec3Normalize( Vec3Cross( forward, Vec3{ 0.0f, 1.0f, 0.0f } ) );
+        *outRight = right;
+        *outUp = Vec3Cross( right, forward );
+        *outForward = forward;
+    }
+
     void FlyCameraUpdate( FlyCamera * camera, const FlyCameraInput & input, f32 dt ) {
         if( input.looking ) {
             camera->yaw += input.lookDeltaX * camera->lookSpeed;
@@ -84,6 +92,15 @@ namespace sol {
                 *outUp = Vec3{ 0.0f, 0.0f, -1.0f };
                 break;
         }
+    }
+
+    void OrthoCameraAxes( const OrthoCamera & camera, Vec3 * outRight, Vec3 * outUp, Vec3 * outForward ) {
+        Vec3 forward = {};
+        Vec3 up = {};
+        OrthoAxisBasis( camera.axis, &forward, &up );
+        *outRight = Vec3Cross( forward, up );
+        *outUp = up;
+        *outForward = forward;
     }
 
     OrthoCamera OrthoCameraDefault( OrthoAxis axis ) {

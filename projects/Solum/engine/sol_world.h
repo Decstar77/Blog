@@ -53,11 +53,9 @@ namespace sol {
     // scaled primitive still reports the direction the face points in world
     // space. It is flipped to oppose rayDirection, so the face a ray hit always
     // comes back pointing at whoever cast it.
-    bool                WorldPickFace( const World & world, Renderer * r, Vec3 rayOrigin, Vec3 rayDirection,
-                                       i32 * outPrimitive, i32 * outFace, Vec3 * outPoint, Vec3 * outNormal );
+    bool                WorldPickFace( const World & world, Renderer * r, Vec3 rayOrigin, Vec3 rayDirection, i32 * outPrimitive, i32 * outFace, Vec3 * outPoint, Vec3 * outNormal );
     void                WorldSetSelected( World & world, Renderer * r, i32 primitive );
     void                WorldSetPrimitiveHighlight( World & world, Renderer * r, i32 primitive, bool highlight );
-    // selectedVertex is drawn in its own colour, or kHMNone for none.
     bool                WorldSetEditOverlay( World & world, Renderer * r, i32 primitive, i32 selectedVertex );
 
     // Half-mesh vertices addressed in world space, so an editor can hand them

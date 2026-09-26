@@ -863,6 +863,57 @@ namespace sol {
                 ok = vkCreateGraphicsPipelines( r->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                                 &r->editPointPipeline ) == VK_SUCCESS;
             }
+
+            // The stream kinds. Every field any of them touches is set for
+            // each one, rather than inherited from whichever was built last.
+            for( i32 kind = 0; kind < RenderBatch_Count && ok; kind++ ) {
+                inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+                depthStencil.depthTestEnable = VK_TRUE;
+                depthStencil.depthWriteEnable = VK_FALSE;
+                depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+                raster.depthBiasEnable = VK_FALSE;
+                raster.depthBiasConstantFactor = 0.0f;
+                raster.depthBiasSlopeFactor = 0.0f;
+                blendAttachment.blendEnable = VK_FALSE;
+
+                switch( (RenderBatchKind)kind ) {
+                    case RenderBatch_Solid:
+                        depthStencil.depthWriteEnable = VK_TRUE;
+                        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+                        // Pushes faces back by a couple of depth steps plus a
+                        // pixel's worth of their own slope, which is what the
+                        // edges drawn over them at exactly the same depth need
+                        // to come out on top from every angle.
+                        raster.depthBiasEnable = VK_TRUE;
+                        raster.depthBiasConstantFactor = 2.0f;
+                        raster.depthBiasSlopeFactor = 1.5f;
+                        break;
+                    case RenderBatch_Translucent:
+                        blendAttachment.blendEnable = VK_TRUE;
+                        blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                        blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                        blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+                        blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                        blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                        blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+                        break;
+                    case RenderBatch_Lines:
+                        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+                        break;
+                    case RenderBatch_LinesOnTop:
+                        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+                        depthStencil.depthTestEnable = VK_FALSE;
+                        break;
+                    case RenderBatch_PointsOnTop:
+                    default:
+                        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+                        depthStencil.depthTestEnable = VK_FALSE;
+                        break;
+                }
+
+                ok = vkCreateGraphicsPipelines( r->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                                &r->streamPipelines[kind] ) == VK_SUCCESS;
+            }
         }
 
         // The modules are baked into the pipeline, so they go straight back.
@@ -1520,6 +1571,112 @@ namespace sol {
         return !HandleIsNull( handle );
     }
 
+    // Draws whichever of a stream's batches are meant for this view, out of the
+    // copy uploaded for the frame being recorded.
+    static void RecordStream( Renderer * r, VkCommandBuffer cmd, const RenderStream & stream, const RenderView & view,
+                              i32 viewIndex, VkDescriptorSet whiteSet ) {
+        const VkBuffer buffer = stream.buffers[r->currentFrame];
+        if( stream.batches.count == 0 || buffer == VK_NULL_HANDLE ) {
+            return;
+        }
+
+        VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers( cmd, 0, 1, &buffer, &offset );
+
+        const u32 viewBit = 1u << (u32)viewIndex;
+        VkPipeline bound = VK_NULL_HANDLE;
+        for( i32 i = 0; i < stream.batches.count; i++ ) {
+            const RenderBatch & batch = stream.batches[i];
+            if( ( batch.viewMask & viewBit ) == 0 || batch.vertexCount <= 0 || (u32)batch.kind >= (u32)RenderBatch_Count ) {
+                continue;
+            }
+            // A batch past the end of what was uploaded would read garbage.
+            if( batch.firstVertex < 0 || batch.firstVertex + batch.vertexCount > stream.vertices.count ) {
+                continue;
+            }
+
+            const VkPipeline pipeline = r->streamPipelines[batch.kind];
+            if( pipeline != bound ) {
+                vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline );
+                bound = pipeline;
+            }
+
+            StaticMeshPush push = {};
+            push.mvp = batch.screenSpace ? Mat4Identity() : view.viewProjection;
+            push.tint = batch.tint;
+            push.pointSize = ( batch.kind == RenderBatch_PointsOnTop && r->largePoints ) ? batch.pointSize : 1.0f;
+            vkCmdPushConstants( cmd, r->staticMeshPipelineLayout,
+                                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                0, (u32)sizeof( push ), &push );
+
+            const RenderTexture * texture = PoolGet( r->textures, batch.texture );
+            const VkDescriptorSet set = texture != nullptr ? texture->descriptorSet : whiteSet;
+            vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipelineLayout,
+                                     0, 1, &set, 0, nullptr );
+
+            vkCmdDraw( cmd, (u32)batch.vertexCount, 1, (u32)batch.firstVertex, 0 );
+        }
+    }
+
+    // Brings this frame slot's copy of a stream up to date. Only called after
+    // the slot's fence has been waited on, so replacing or growing the buffer
+    // cannot pull it out from under the GPU.
+    static bool UploadStream( Renderer * r, RenderStream & stream, i32 frame ) {
+        if( stream.uploadedVersion[frame] == stream.version ) {
+            return true;
+        }
+
+        const i32 needed = stream.vertices.count;
+        if( needed > stream.capacity[frame] ) {
+            if( stream.buffers[frame] != VK_NULL_HANDLE ) {
+                vmaDestroyBuffer( r->allocator, stream.buffers[frame], stream.allocations[frame] );
+                stream.buffers[frame] = VK_NULL_HANDLE;
+                stream.allocations[frame] = VK_NULL_HANDLE;
+                stream.mapped[frame] = nullptr;
+                stream.capacity[frame] = 0;
+            }
+
+            // Doubling, so a map growing a brush at a time reallocates a
+            // handful of times rather than on every edit.
+            i32 capacity = stream.capacity[frame] > 0 ? stream.capacity[frame] : 4096;
+            while( capacity < needed ) {
+                capacity *= 2;
+            }
+
+            VmaAllocationInfo info = {};
+            if( !CreateBuffer( r, (u64)capacity * sizeof( StaticMeshVertex ), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                               kStagingAllocFlags, &stream.buffers[frame], &stream.allocations[frame], &info ) ||
+                info.pMappedData == nullptr ) {
+                fprintf( stderr, "Failed to grow a render stream to %d vertices\n", capacity );
+                return false;
+            }
+            stream.mapped[frame] = info.pMappedData;
+            stream.capacity[frame] = capacity;
+        }
+
+        if( needed > 0 ) {
+            const u64 bytes = (u64)needed * sizeof( StaticMeshVertex );
+            memcpy( stream.mapped[frame], stream.vertices.data, (size_t)bytes );
+            vmaFlushAllocation( r->allocator, stream.allocations[frame], 0, bytes );
+        }
+        stream.uploadedVersion[frame] = stream.version;
+        return true;
+    }
+
+    static void DestroyStreams( Renderer * r ) {
+        for( i32 s = 0; s < RenderStream_Count; s++ ) {
+            RenderStream & stream = r->streams[s];
+            for( i32 f = 0; f < kFramesInFlight; f++ ) {
+                if( stream.buffers[f] != VK_NULL_HANDLE ) {
+                    vmaDestroyBuffer( r->allocator, stream.buffers[f], stream.allocations[f] );
+                }
+            }
+            ListFree( stream.vertices );
+            ListFree( stream.batches );
+            stream = {};
+        }
+    }
+
     static bool RecordCommandBuffer( Renderer * r, VkCommandBuffer cmd, i32 imageIndex ) {
         // The grid binds this, and so does every mesh whose texture handle is
         // null or stale. Startup fails without it, so losing it is a
@@ -1599,7 +1756,7 @@ namespace sol {
 
             // Grid first. It writes no depth, so drawing it before the meshes
             // is what lets them paint over it rather than the reverse.
-            if( r->gridVisible && r->gridVertexCount > 0 ) {
+            if( r->gridVisible && !view.hideGrid && r->gridVertexCount > 0 ) {
                 vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->gridPipeline );
 
                 // The grid is authored on its own xz plane, so its transform
@@ -1620,6 +1777,8 @@ namespace sol {
                 vkCmdBindVertexBuffers( cmd, 0, 1, &r->gridVertexBuffer, &gridOffset );
                 vkCmdDraw( cmd, (u32)r->gridVertexCount, 1, 0, 0 );
             }
+
+            RecordStream( r, cmd, r->streams[RenderStream_Background], view, v, whiteSet );
 
             vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->staticMeshPipeline );
 
@@ -1652,6 +1811,8 @@ namespace sol {
                 vkCmdDrawIndexed( cmd, (u32)mesh->indexCount, 1, 0, 0, 0 );
             }
 
+            RecordStream( r, cmd, r->streams[RenderStream_World], view, v, whiteSet );
+
             // Last in the view, with the depth test off in both cage pipelines,
             // so the edges and handles land on top of the shape they describe.
             if( r->editOverlay.visible ) {
@@ -1681,6 +1842,8 @@ namespace sol {
                     vkCmdDraw( cmd, (u32)r->editOverlay.pointVertexCount, 1, 0, 0 );
                 }
             }
+
+            RecordStream( r, cmd, r->streams[RenderStream_Overlay], view, v, whiteSet );
 
             // One draw per range so each handle can carry its own tint, which
             // is what lets the hovered axis light up without a second buffer.
@@ -1918,6 +2081,19 @@ namespace sol {
         r->gizmoVisible = visible;
     }
 
+    void RendererSetStream( Renderer * r, RenderStreamId id, const StaticMeshVertex * vertices, i32 vertexCount,
+                            const RenderBatch * batches, i32 batchCount ) {
+        if( (u32)id >= (u32)RenderStream_Count ) {
+            return;
+        }
+        RenderStream & stream = r->streams[id];
+        ListClear( stream.vertices );
+        ListAddRange( stream.vertices, vertices, vertexCount );
+        ListClear( stream.batches );
+        ListAddRange( stream.batches, batches, batchCount );
+        stream.version++;
+    }
+
     bool RendererSetGridSpacing( Renderer * r, f32 spacing ) {
         if( spacing <= 0.0f || spacing == r->gridSpacing ) {
             return true;
@@ -1990,6 +2166,12 @@ namespace sol {
         r->imagesInFlight[imageIndex] = fence;
 
         vkResetFences( r->device, 1, &fence );
+
+        // After the fence wait above, which is what makes this slot's stream
+        // buffers safe to overwrite.
+        for( i32 s = 0; s < RenderStream_Count; s++ ) {
+            UploadStream( r, r->streams[s], r->currentFrame );
+        }
 
         VkCommandBuffer cmd = r->commandBuffers[r->currentFrame];
         vkResetCommandBuffer( cmd, 0 );
@@ -2095,7 +2277,20 @@ namespace sol {
             r->gridVertexAllocation = VK_NULL_HANDLE;
             r->gridVertexCount = 0;
         }
+        if( r->borderVertexBuffer != VK_NULL_HANDLE ) {
+            vmaDestroyBuffer( r->allocator, r->borderVertexBuffer, r->borderVertexAllocation );
+            r->borderVertexBuffer = VK_NULL_HANDLE;
+            r->borderVertexAllocation = VK_NULL_HANDLE;
+            r->borderVertexCount = 0;
+        }
         DestroyEditOverlayBuffers( r );
+        DestroyStreams( r );
+        for( i32 kind = 0; kind < RenderBatch_Count; kind++ ) {
+            if( r->streamPipelines[kind] != VK_NULL_HANDLE ) {
+                vkDestroyPipeline( r->device, r->streamPipelines[kind], nullptr );
+                r->streamPipelines[kind] = VK_NULL_HANDLE;
+            }
+        }
         if( r->gizmoVertexBuffer != VK_NULL_HANDLE ) {
             vmaDestroyBuffer( r->allocator, r->gizmoVertexBuffer, r->gizmoVertexAllocation );
             r->gizmoVertexBuffer = VK_NULL_HANDLE;

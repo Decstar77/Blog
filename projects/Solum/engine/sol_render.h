@@ -128,6 +128,10 @@ namespace sol {
         f32     width;
         f32     height;
         Mat4    viewProjection;
+        // The built-in grid is a plane in the world, which reads well in a
+        // perspective view and as a single line in an orthographic one seen
+        // edge on. Inverted so a zeroed view still draws it.
+        bool    hideGrid;
     };
 
     // Four is a full quad-view layout, which is as far as this needs to go.
@@ -135,6 +139,72 @@ namespace sol {
 
     // Two frames in flight: the CPU records frame N+1 while the GPU chews on N.
     constexpr i32 kFramesInFlight = 2;
+
+    // How a stream batch is rasterised. Each kind is its own pipeline sharing
+    // the static mesh shaders, layout and vertex format.
+    enum RenderBatchKind : u32 {
+        // Lit triangles, depth tested and written. Pushed back by a depth bias,
+        // so an edge drawn over its own face with RenderBatch_Lines wins the
+        // depth test instead of stippling against it.
+        RenderBatch_Solid,
+        // Alpha blended by tint.w, depth tested less-or-equal, never written:
+        // highlights laid over a face that is already there.
+        RenderBatch_Translucent,
+        // Depth tested less-or-equal, not written.
+        RenderBatch_Lines,
+        // No depth test at all, so they draw over everything before them.
+        RenderBatch_LinesOnTop,
+        RenderBatch_PointsOnTop,
+        RenderBatch_Count,
+    };
+
+    constexpr u32 kRenderAllViews = 0xFFFFFFFFu;
+
+    // One draw out of a stream: a run of its vertices and how to draw them.
+    struct RenderBatch {
+        RenderBatchKind         kind;
+        i32                     firstVertex;
+        i32                     vertexCount;
+        // Null binds the white fallback, so the vertex colour comes through.
+        RenderTextureHandle     texture;
+        Vec4                    tint;
+        // Pixels, points only. Pinned to 1 on a device without largePoints.
+        f32                     pointSize;
+        // Bit i draws the batch in view i, which is how a stream serves a
+        // perspective pane and an orthographic one differently.
+        u32                     viewMask;
+        // Vertices are already in clip space and skip the view's camera:
+        // borders, rubber bands, anything pinned to the pane rather than the
+        // world.
+        bool                    screenSpace;
+    };
+
+    // Geometry the CPU rewrites while the user works on it. Static meshes cost
+    // a device idle to replace, which is fine at load and ruinous under a drag;
+    // a stream is instead re-copied into a host-visible buffer per frame in
+    // flight, and only when its version moves, so an unchanged stream costs
+    // nothing and a changed one costs a memcpy.
+    enum RenderStreamId {
+        RenderStream_Background,    // before every mesh: 2D grids
+        RenderStream_World,         // after the static meshes: authored geometry
+        RenderStream_Overlay,       // after the edit cage: tool feedback
+        RenderStream_Count,
+    };
+
+    struct RenderStream {
+        List<StaticMeshVertex>  vertices;
+        List<RenderBatch>       batches;
+        u32                     version;
+
+        // One buffer per frame in flight. A slot is only rewritten after its
+        // frame's fence has been waited on, so the GPU is never reading the
+        // bytes being replaced.
+        VkBuffer                buffers[kFramesInFlight];
+        VmaAllocation           allocations[kFramesInFlight];
+        void *                  mapped[kFramesInFlight];
+        i32                     capacity[kFramesInFlight];
+        u32                     uploadedVersion[kFramesInFlight];
+    };
     // Swapchains on desktop drivers hand back 2-4 images; 8 is slack.
     constexpr i32 kMaxSwapchainImages = 8;
 
@@ -204,6 +274,9 @@ namespace sol {
         // instead of z-fighting with it.
         VkPipeline                  editLinePipeline;
         VkPipeline                  editPointPipeline;
+        // Indexed by RenderBatchKind.
+        VkPipeline                  streamPipelines[RenderBatch_Count];
+        RenderStream                streams[RenderStream_Count];
         // False on a device without the largePoints feature, which pins vertex
         // handles to a single pixel - Vulkan permits no other size there.
         bool                        largePoints;
@@ -320,6 +393,12 @@ namespace sol {
     // only, so this is the per-frame call.
     void RendererSetGizmoDraw( Renderer * r, const Mat4 & transform, const RenderGizmoRange * ranges, i32 rangeCount );
     void RendererSetGizmoVisible( Renderer * r, bool visible );
+
+    // Replaces a stream's contents, copying both lists. CPU-only: the copy to
+    // the GPU happens inside RendererDrawFrame, once per frame slot that has
+    // not seen this version yet. Safe to call every frame, and free to skip
+    // when nothing changed - the last contents keep drawing.
+    void RendererSetStream( Renderer * r, RenderStreamId stream, const StaticMeshVertex * vertices, i32 vertexCount, const RenderBatch * batches, i32 batchCount );
 
     void RendererDrawFrame( Renderer * r );
 

@@ -11,7 +11,7 @@ endif ()
 
 set (CMAKE_AUTOMOC ON)
 
-add_executable (editor "sol_editor_main.cpp" "sol_editor_view.cpp" "sol_editor_import.cpp" "sol_editor_gizmo.h" "sol_editor_grid.h" "sol_editor_gizmo.cpp" "sol_editor_assets.h" "sol_editor_assets.cpp")
+add_executable (editor "sol_editor_main.cpp" "sol_editor_view.h" "sol_editor_view.cpp" "sol_editor_tools.cpp" "sol_editor_doc.h" "sol_editor_doc.cpp" "sol_editor_draw.h" "sol_editor_draw.cpp" "sol_editor_inspector.h" "sol_editor_inspector.cpp" "sol_editor_import.cpp" "sol_editor_gizmo.h" "sol_editor_grid.h" "sol_editor_gizmo.cpp" "sol_editor_assets.h" "sol_editor_assets.cpp")
 target_link_libraries (editor PRIVATE solum stb Qt6::Widgets Qt6::Gui Qt6::Core)
 # The asset browser and importer work against the source tree's assets folder.
 target_compile_definitions (editor PRIVATE SOLUM_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../assets")

@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class QFileSystemModel;
+class QModelIndex;
 class QTreeView;
 
 namespace sol {
@@ -21,6 +22,13 @@ namespace sol {
         explicit AssetBrowser( const QString & rootDirectory, QWidget * parent = nullptr );
 
         const QString & rootDirectory() const { return root; }
+
+        // The tree itself, for hooking up clicks. Clicking an asset is how a
+        // material is picked for the brushes.
+        QTreeView * treeView() const { return tree; }
+        // An entry as the name a face stores for it: its path under the root,
+        // without the extension. Empty for a directory.
+        QString assetName( const QModelIndex & index ) const;
 
     private:
         QString             root;
