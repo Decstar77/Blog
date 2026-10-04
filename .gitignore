@@ -28,3 +28,4 @@ obj
 # the wasm rule above is for build artifacts; the demo bundles actually served
 # by nginx have to be committed
 !site/demos/**/*.wasm
+*.stex
