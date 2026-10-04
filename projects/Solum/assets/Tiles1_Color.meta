@@ -1,0 +1,9 @@
+# Solum texture asset
+version = 1
+type = texture
+source = C:/Projects/Assets/Textures/Yoge-Vol6-Tiles/Tiles1Textures/Tiles1_Color.png
+binary = Tiles1_Color.stex
+format = srgb
+filter = linear
+wrap = repeat
+mips = false
