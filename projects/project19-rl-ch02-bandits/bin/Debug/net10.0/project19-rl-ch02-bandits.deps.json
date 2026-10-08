@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "project19-rl-ch02-bandits/1.0.0": {
+        "runtime": {
+          "project19-rl-ch02-bandits.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "project19-rl-ch02-bandits/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
