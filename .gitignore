@@ -23,9 +23,13 @@ vendor-local-backup
 
 # emscripten out-of-source build (fetches and builds raylib, ~500MB)
 build-web/
+
+# C# stuff
 obj
+bin
 
 # the wasm rule above is for build artifacts; the demo bundles actually served
 # by nginx have to be committed
 !site/demos/**/*.wasm
 *.stex
+

@@ -8,7 +8,6 @@ namespace rl
         {
             double expected = 0;
             // sum_s'r P(s', r | s, a) * [r + y * V(s')]
-            
         }
 
         public static void PolicyIteration()
