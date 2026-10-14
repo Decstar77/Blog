@@ -145,7 +145,7 @@ namespace rl
             }
         }
 
-        public static void Main()
+        public static void Run()
         {
             PolicyIteration();
         }
