@@ -5,6 +5,7 @@ namespace rl
     {
         private Random random = new Random();
         private int piece = 0;
+        
         public void NewGame(int piece)
         {
             this.piece = piece;

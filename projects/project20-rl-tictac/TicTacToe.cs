@@ -22,6 +22,31 @@ namespace rl
         public const int W = 3;
         public const int H = 3;
         public int[,] State = new int[W, H];
+        private static readonly int[] PowersOf3 = { 1, 3, 9, 27, 81, 243, 729, 2187, 6561 };
+
+        public void NewGame()
+        {
+            for (int x = 0; x < W; x++)
+            {
+                for (int y = 0; y < H; y++)
+                {
+                    State[x, y] = Empty;
+                }
+            }
+        }
+
+        public int StateHash()
+        {
+            int hash = 0;
+            for (int x = 0; x < W; x++)
+            {
+                for (int y = 0; y < H; y++)
+                {
+                    hash += State[x, y] * PowersOf3[ x + y * 3 ];
+                }
+            }
+            return hash;
+        }
 
         public GameState PlayMove(GameMove move)
         {
