@@ -1,16 +1,19 @@
-﻿// Arcade viewer: shows each game being played by a random agent so the renderers can be checked.
+﻿// Arcade viewer: shows each game being played so the renderers and agents can be checked.
+// In the two-player games player 0 is an alpha-beta agent and player 1 plays randomly.
 // Keys: 1-4 or Tab pick a game, Space pauses, N steps once while paused, R resets, Up/Down change speed.
 
 using System.Numerics;
 using Raylib_cs;
 using arcade;
 
-var games = new (string Name, Func<ArcadeGame> Make)[]
+// Agent picks player 0's move; null means every player moves randomly.
+var games = new (string Name, Func<ArcadeGame> Make, Func<ArcadeGame, int>? Agent)[]
 {
-    ("Tic-Tac-Toe",     () => new TicTacToe()),
-    ("Connect Four",    () => new ConnectFour()),
-    ("Frozen Lake 4x4", () => new FrozenLake()),
-    ("Frozen Lake 8x8", () => new FrozenLake(FrozenLake.Map8x8, maxSteps: 200)),
+    // Small enough to search to the end, so the heuristic is never used.
+    ("Tic-Tac-Toe",     () => new TicTacToe(),   g => AlphaBeta.Search(g, 9, _ => 0)),
+    ("Connect Four",    () => new ConnectFour(), g => AlphaBeta.Search(g, 6, s => ((ConnectFour)s).Evaluate())),
+    ("Frozen Lake 4x4", () => new FrozenLake(),  null),
+    ("Frozen Lake 8x8", () => new FrozenLake(FrozenLake.Map8x8, maxSteps: 200), null),
 };
 
 const int HeaderHeight = 64;
@@ -45,8 +48,16 @@ while (!Raylib.WindowShouldClose())
         timer = 0;
         if (!game.IsTerminal())
         {
-            int[] legal = game.LegalActions();
-            game.Apply(legal[rng.Next(legal.Length)]);
+            var agent = games[selected].Agent;
+            if (agent != null && game.CurrentPlayer() == 0)
+            {
+                game.Apply(agent(game));
+            }
+            else
+            {
+                int[] legal = game.LegalActions();
+                game.Apply(legal[rng.Next(legal.Length)]);
+            }
             // Linger on the final position for a few steps before starting over.
             if (game.IsTerminal()) timer = -stepDelay * 4;
         }

@@ -77,6 +77,39 @@ namespace arcade {
             return n;
         }
 
+        // Heuristic score from player 0's perspective, for depth-limited search. Every 4-cell window
+        // that only one player occupies counts toward that player, more for 3 than for 2, and pieces
+        // in the center column get a small bonus since they take part in the most lines.
+        public int Evaluate()
+        {
+            int score = 0;
+            int[,] dirs = { { 0, 1 }, { 1, 0 }, { 1, 1 }, { 1, -1 } };
+            for (int r = 0; r < Rows; r++)
+            {
+                for (int c = 0; c < Cols; c++)
+                {
+                    if (c == Cols / 2 && board[r, c] != -1) score += board[r, c] == 0 ? 3 : -3;
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int er = r + 3 * dirs[d, 0], ec = c + 3 * dirs[d, 1];
+                        if (er < 0 || er >= Rows || ec < 0 || ec >= Cols) continue;
+                        int mine = 0, theirs = 0;
+                        for (int k = 0; k < 4; k++)
+                        {
+                            int v = board[r + k * dirs[d, 0], c + k * dirs[d, 1]];
+                            if (v == 0) mine++;
+                            else if (v == 1) theirs++;
+                        }
+                        if (theirs == 0) score += WindowScore(mine);
+                        else if (mine == 0) score -= WindowScore(theirs);
+                    }
+                }
+            }
+            return score;
+        }
+
+        private static int WindowScore(int count) => count switch { 3 => 50, 2 => 5, _ => 0 };
+
         public bool IsTerminal() => winner != -1 || moves == Rows * Cols;
 
         public float[] Returns()
