@@ -1,11 +1,4 @@
-﻿// Walk to a goal, avoid holes, optionally with slippery moves.
-// Single-player gridworld (same layout and rules as Gym's FrozenLake): start at S, reach G for a
-// return of 1, fall into an H and get 0. F tiles are safe ice. When slippery, the intended move only
-// happens 1/3 of the time; otherwise you slide to one of the two perpendicular directions.
-// That randomness is what makes it a planning-under-uncertainty problem rather than a maze.
-// Actions: 0 = left, 1 = down, 2 = right, 3 = up. Episodes are capped at MaxSteps.
-
-using System.Numerics;
+﻿using System.Numerics;
 using Raylib_cs;
 
 namespace arcade {
@@ -31,21 +24,21 @@ namespace arcade {
             "FFFHFFFG",
         };
 
-        private static readonly int[] DRow = { 0, 1, 0, -1 };
-        private static readonly int[] DCol = { -1, 0, 1, 0 };
+        protected static readonly int[] DRow = { 0, 1, 0, -1 };
+        protected static readonly int[] DCol = { -1, 0, 1, 0 };
 
-        private readonly string[]   map;
-        private readonly bool       slippery;
-        private readonly int        maxSteps;
-        private Random              rng;
+        protected readonly string[]   map;
+        protected readonly bool       slippery;
+        protected readonly int        maxSteps;
+        protected Random              rng;
 
-        private int     row = 0;
-        private int     col = 0;
-        private int     steps = 0;
+        protected int     row = 0;
+        protected int     col = 0;
+        protected int     steps = 0;
 
         // Last intended action and the direction actually taken, so Render can show slips.
-        private int     lastAction = -1;
-        private int     lastDir = -1;
+        protected int     lastAction = -1;
+        protected int     lastDir = -1;
 
         public FrozenLake(string[]? map = null, bool slippery = true, int maxSteps = 100, int? seed = null)
         {
@@ -90,9 +83,7 @@ namespace arcade {
                 else if (roll == 2) dir = (action + 3) % 4;
             }
 
-            // Walking into a wall leaves you in place.
-            row = Math.Clamp(row + DRow[dir], 0, Rows - 1);
-            col = Math.Clamp(col + DCol[dir], 0, Cols - 1);
+            (row, col) = Move(row, col, dir);
             steps++;
             lastAction = action;
             lastDir = dir;
@@ -101,6 +92,8 @@ namespace arcade {
         public bool IsTerminal() => Tile == 'H' || Tile == 'G' || steps >= maxSteps;
 
         public float[] Returns() => new float[] { Tile == 'G' ? 1 : 0 };
+
+        protected (int Row, int Col) Move(int r, int c, int dir) => (Math.Clamp(r + DRow[dir], 0, Rows - 1), Math.Clamp(c + DCol[dir], 0, Cols - 1));
 
         public ArcadeGame Clone()
         {
