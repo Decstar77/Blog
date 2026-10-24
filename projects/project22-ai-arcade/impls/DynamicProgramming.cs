@@ -1,11 +1,9 @@
 ﻿
 namespace arcade {
     public class DynamicProgramming {
-        private ArcadeGame game;
         private TabularMDP mdp;
 
-        public DynamicProgramming( ArcadeGame game, TabularMDP mdp ) {
-            this.game = game;
+        public DynamicProgramming( TabularMDP mdp ) {
             this.mdp = mdp;
         }
 
@@ -98,8 +96,6 @@ namespace arcade {
             }
             return maxAction;
         }
-
-
     };
 }
 
