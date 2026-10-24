@@ -11,8 +11,8 @@ namespace arcade {
 
         public double[] PolicyEvaluation( int[] policy ) {
             double [] V = new double[mdp.NumStates];
-            double delta = 0;
             while ( true ) {
+                double delta = 0;
                 for ( int s = 0; s < mdp.NumStates; s++ ) {
                     double v = V[s];
                     int[] actions = mdp.LegalActions( s );
@@ -43,6 +43,14 @@ namespace arcade {
 
         public int[] PolicyIteration() {
             int [] Policy = new int[mdp.NumStates];
+            for ( int s = 0; s < mdp.NumStates; s++ ) {
+                if ( mdp.IsTerminal( s ) ) {
+                    Policy[s] = 0;
+                    continue;
+                }
+                Policy[s] = mdp.LegalActions( s )[0];
+            }
+
             while ( true ) {
                 double[] V = PolicyEvaluation( Policy );
 
@@ -71,7 +79,7 @@ namespace arcade {
                 double sum = 0;
                 MdpTransition[] transitions = mdp.Transitions( s, action );
                 foreach ( MdpTransition transition in transitions ) {
-                    sum += transition.Reward + V[transition.NextState];
+                    sum += transition.Prob * ( transition.Reward + V[transition.NextState] );
                 }
                 if ( sum > maxValue ) {
                     maxValue = sum;
