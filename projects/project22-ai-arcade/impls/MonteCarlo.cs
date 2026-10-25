@@ -60,7 +60,9 @@
 
                     N[ep.state]++;
                     Q[ep.state, ep.action] = Q[ep.state, ep.action] + ( G - Q[ep.state, ep.action] ) / N[ep.state];
-                    Policy[ep.state] = ArgMaxActions( Q, ep.state );
+
+                    int [] actions = mc.LegalActions(ep.state);
+                    Policy[ep.state] = Helpers.ArgMax( actions.Length, ( int a ) => Q[ep.state, a] );
                 }
             }
 
@@ -89,7 +91,9 @@
 
                     N[ep.state]++;
                     Q[ep.state, ep.action] = Q[ep.state, ep.action] + ( G - Q[ep.state, ep.action] ) / N[ep.state];
-                    int maxAction = ArgMaxActions( Q, ep.state );
+
+                    int [] actions = mc.LegalActions(ep.state);
+                    int maxAction  = Helpers.ArgMax( actions.Length, ( int a ) => Q[ep.state, a] );
                     
                     for ( int a = 0; a < mc.NumActions; a++ ) {
                         if ( a == maxAction ) {
@@ -104,23 +108,13 @@
             // Turn it into a deterministic policy
             int[] DPolicy = new int[mc.NumStates];
             for ( int s = 0; s < mc.NumStates; s++ )
-                for ( int a = 0; a < mc.NumActions; a++ )
-                    DPolicy[s] = ArgMaxActions( Q, s );
+                for ( int a = 0; a < mc.NumActions; a++ ) {
+                    int [] actions = mc.LegalActions(s);
+                    DPolicy[s] = Helpers.ArgMax( actions.Length, ( int a ) => Q[s, a] );
+                }
+            
 
             return DPolicy;
-        }
-
-        private int ArgMaxActions( double[,] Q, int s ) {
-            int maxAction = 0;
-            double maxValue = double.MinValue;
-            int[] actions = mc.LegalActions(s);
-            foreach ( int action in actions ) {
-                if ( Q[s, action] > maxValue ) {
-                    maxValue = Q[s, action];
-                    maxAction = action;
-                }
-            }
-            return maxAction;
         }
 
         private bool HasBeenVisited( TimeStep ep, int t, List<TimeStep> episode ) {
@@ -166,7 +160,102 @@
         }
     }
 
-    public class MonteCarloEveryVistOffPolicy { 
-    
+    public class MonteCarloEveryVistOffPolicy {
+        record TimeStep {
+            public int t;
+            public int state;
+            public int action;
+            public float reward;
+        }
+
+        private MonteCarloInterface mc;
+        public MonteCarloEveryVistOffPolicy( MonteCarloInterface mc ) {
+            this.mc = mc;
+        }
+
+        public double[,] PolicyEvaluation( int[,] Policy, int EpisodeCount, double Gamma = 1.0 ) {
+            double[,]   C = new double[mc.NumStates, mc.NumActions];
+            double[,]   Q = new double[mc.NumStates, mc.NumActions];
+            double[,]   B = new double[mc.NumStates, mc.NumActions];
+
+            for ( int s = 0; s < B.Length; s++ ) {
+                for ( int a = 0; a < mc.NumActions; a++ ) {
+                    B[s, a] = 1.0 / mc.NumActions;
+                }
+            }
+
+            for ( int episodeIndex = 0; episodeIndex < EpisodeCount; episodeIndex++ ) {
+                List<TimeStep> episode = GenerateEpisode(B);
+
+                double G = 0;
+                double W = 1;
+                for ( int t = episode.Count; t>=0; t-- ) {
+                    int s = episode[t].state;
+                    int a = episode[t].action;
+
+                    G = Gamma * G + episode[t].reward;
+                    C[s, a] = C[s, a] + W;
+                    Q[s, a] = Q[s, a] + W / C[s, a] * ( G - Q[s, a] );
+                    W = W * ((double)Policy[s, a] / (double)B[s, a]);
+
+                    if ( W == 0 ) {
+                        break;
+                    }
+                }
+            }
+
+            return Q;
+        }
+
+        public double[,] PolicyControl( int[] Policy, int EpisodeCount, double Gamma = 1.0 ) {
+            double[,]   C = new double[mc.NumStates, mc.NumActions];
+            double[,]   Q = new double[mc.NumStates, mc.NumActions];
+            double[,]   B = new double[mc.NumStates, mc.NumActions];
+
+            for ( int s = 0; s < B.Length; s++ ) {
+                for ( int a = 0; a < mc.NumActions; a++ ) {
+                    B[s, a] = 1.0 / mc.NumActions;
+                }
+            }
+
+            for ( int episodeIndex = 0; episodeIndex < EpisodeCount; episodeIndex++ ) {
+                List<TimeStep> episode = GenerateEpisode(B);
+
+                double G = 0;
+                double W = 1;
+                for ( int t = episode.Count; t >= 0; t-- ) {
+                    int s = episode[t].state;
+                    int a = episode[t].action;
+
+                    G = Gamma * G + episode[t].reward;
+                    C[s, a] = C[s, a] + W;
+                    Q[s, a] = Q[s, a] + W / C[s, a] * ( G - Q[s, a] );
+
+                    Policy[s] = Helpers.ArgMax( mc.NumActions, ( int i ) => Q[s, i] );
+                    if ( a != Policy[s] ) {
+                        break;
+                    }
+
+                    W = W / B[s, a];
+                }
+            }
+
+            return Q;
+        }
+
+        private List<TimeStep> GenerateEpisode( double[,] Policy ) {
+            mc.NewGame();
+            int[] startingActions = mc.LegalActions(mc.State());
+            List<TimeStep> episode = new List<TimeStep>();
+            while ( mc.IsTerminal() == false ) {
+                int t = episode.Count;
+                int s = mc.State();
+                int a = Helpers.Choose(mc.NumActions, (int i) => Policy[s, i]);
+                float r = mc.Step( a );
+                episode.Add( new TimeStep() { t = t, state = s, action = a, reward = r } );
+            }
+            return episode;
+        }
+
     }
 }
