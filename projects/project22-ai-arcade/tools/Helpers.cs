@@ -15,14 +15,22 @@ namespace arcade {
             return Count - 1;
         }
 
+        // Ties are broken uniformly at random so greedy policies don't always favour index 0
         public static int ArgMax( int Count, Func<int, double> selector ) {
             int maxAction = 0;
             double maxValue = double.MinValue;
+            int ties = 0;
             for ( int i = 0; i < Count; i++ ) {
                 double v = selector( i );
                 if ( v > maxValue ) {
                     maxValue = v;
                     maxAction = i;
+                    ties = 1;
+                } else if ( v == maxValue ) {
+                    ties++;
+                    if ( Random.Shared.Next( ties ) == 0 ) {
+                        maxAction = i;
+                    }
                 }
             }
             

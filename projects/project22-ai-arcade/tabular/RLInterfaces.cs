@@ -14,8 +14,8 @@ namespace arcade {
     }
 
     public interface MonteCarloInterface {
-        public int      NumStates => 0;
-        public int      NumActions => 0;
+        public int      NumStates { get; }
+        public int      NumActions { get; }
         public void     NewGame();
         public void     RandomGame();
         public int      State();
