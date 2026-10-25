@@ -1,9 +1,9 @@
 ﻿
 namespace arcade {
     public class DynamicProgramming {
-        private TabularMDP mdp;
+        private DPInterface mdp;
 
-        public DynamicProgramming( TabularMDP mdp ) {
+        public DynamicProgramming( DPInterface mdp ) {
             this.mdp = mdp;
         }
 

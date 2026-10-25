@@ -2,7 +2,7 @@
 using Raylib_cs;
 
 namespace arcade {
-    public class FrozenLake : ArcadeGame
+    public class FrozenLake 
     {
         public static readonly string[] Map4x4 =
         {
@@ -94,14 +94,6 @@ namespace arcade {
         public float[] Returns() => new float[] { Tile == 'G' ? 1 : 0 };
 
         protected (int Row, int Col) Move(int r, int c, int dir) => (Math.Clamp(r + DRow[dir], 0, Rows - 1), Math.Clamp(c + DCol[dir], 0, Cols - 1));
-
-        public ArcadeGame Clone()
-        {
-            var copy = (FrozenLake)MemberwiseClone();
-            // System.Random can't be copied, so give the clone its own stream seeded from ours.
-            copy.rng = new Random(rng.Next());
-            return copy;
-        }
 
         private static readonly Color Ice       = new Color(178, 216, 238, 255);
         private static readonly Color IceShine  = new Color(214, 236, 249, 255);

@@ -5,17 +5,26 @@ namespace arcade {
         public float    Reward;
     }
 
-    public interface TabularMDP {
-        public int      NumStates { get; }
-        public int      NumActions { get; }
-
-        public bool     IsTerminal(int state);
-        public int[]    LegalActions(int state);
-
-        public MdpTransition[] Transitions(int state, int action);
+    public interface DPInterface {
+        public int              NumStates { get; }
+        public int              NumActions { get; }
+        public bool             IsTerminal(int state);
+        public int[]            LegalActions(int state);
+        public MdpTransition[]  Transitions(int state, int action);
     }
 
-    public class FrozenLakeTabular : FrozenLake, TabularMDP {
+    public interface MonteCarloInterface {
+        public int      NumStates => 0;
+        public int      NumActions => 0;
+        public void     NewGame();
+        public void     RandomGame();
+        public int      State();
+        public float    Step( int a );
+        public bool     IsTerminal();
+        public int[]    LegalActions( int state );
+    }
+
+    public class FrozenLakeTabular : FrozenLake, DPInterface {
         public int      NumStates => Rows * Cols;
 
         private char    TileAt( int state ) => map[state / Cols][state % Cols];
