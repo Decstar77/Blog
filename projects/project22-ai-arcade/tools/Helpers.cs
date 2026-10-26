@@ -15,7 +15,6 @@ namespace arcade {
             return Count - 1;
         }
 
-        // Ties are broken uniformly at random so greedy policies don't always favour index 0
         public static int ArgMax( int Count, Func<int, double> selector ) {
             int maxAction = 0;
             double maxValue = double.MinValue;
