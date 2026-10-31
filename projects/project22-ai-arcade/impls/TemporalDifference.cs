@@ -54,7 +54,6 @@
                         }
                         StateReward st = store[tau];
                         V[st.s] += Alpha * ( G - V[st.s] );
-
                     }
                 }
             }
