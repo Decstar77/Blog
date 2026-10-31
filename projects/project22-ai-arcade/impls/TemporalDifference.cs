@@ -5,9 +5,9 @@
             public float r;
         }
 
-        private MonteCarloInterface rl;
+        private ReinforcementLearning rl;
         
-        public TemporalDifference(MonteCarloInterface rl) {
+        public TemporalDifference(ReinforcementLearning rl) {
             this.rl = rl;
         }
 

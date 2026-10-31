@@ -13,7 +13,7 @@ namespace arcade {
         public MdpTransition[]  Transitions(int state, int action);
     }
 
-    public interface MonteCarloInterface {
+    public interface ReinforcementLearning {
         public int      NumStates { get; }
         public int      NumActions { get; }
         public void     NewGame();

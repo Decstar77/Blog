@@ -7,10 +7,10 @@
             public float reward;
         }
 
-        private MonteCarloInterface mc;
+        private ReinforcementLearning mc;
         public int MaxEpisodeSteps = 1000;
 
-        public MonteCarloFirstVisitOnPolicy( MonteCarloInterface mc ) {
+        public MonteCarloFirstVisitOnPolicy( ReinforcementLearning mc ) {
             this.mc = mc;
         }
 
@@ -174,10 +174,10 @@
             public float reward;
         }
 
-        private MonteCarloInterface mc;
+        private ReinforcementLearning mc;
         public int MaxEpisodeSteps = 1000;
 
-        public MonteCarloEveryVisitOffPolicy( MonteCarloInterface mc ) {
+        public MonteCarloEveryVisitOffPolicy( ReinforcementLearning mc ) {
             this.mc = mc;
         }
 
