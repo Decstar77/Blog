@@ -7,16 +7,16 @@
             public float reward;
         }
 
-        private ReinforcementLearning mc;
+        private TabularModelFreeInterface rl;
         public int MaxEpisodeSteps = 1000;
 
-        public MonteCarloFirstVisitOnPolicy( ReinforcementLearning mc ) {
-            this.mc = mc;
+        public MonteCarloFirstVisitOnPolicy( TabularModelFreeInterface mc ) {
+            this.rl = mc;
         }
 
         public double[] PolicyEvaluation( int[] Policy, int EpisodeCount, double Gamma = 1.0 ) {
-            double[] V = new double[mc.NumStates];
-            int[]    N = new int[mc.NumStates];
+            double[] V = new double[rl.NumStates];
+            int[]    N = new int[rl.NumStates];
 
             for ( int episodeIndex = 0; episodeIndex < EpisodeCount; episodeIndex++ ) {
                 List<TimeStep> episode = GenerateEpisode(Policy, false);
@@ -44,9 +44,9 @@
         }
 
         public int[] PolicyControl_ExploringStarts( int EpisodeCount, double Gamma = 1.0 ) { // Policy Interation
-            int[]       Policy = new int[mc.NumStates];
-            int[,]      N = new int[mc.NumStates, mc.NumActions];
-            double[,]   Q = new double[mc.NumStates, mc.NumActions];
+            int[]       Policy = new int[rl.NumStates];
+            int[,]      N = new int[rl.NumStates, rl.NumActions];
+            double[,]   Q = new double[rl.NumStates, rl.NumActions];
 
             for ( int episodeIndex = 0; episodeIndex < EpisodeCount; episodeIndex++ ) {
                 List<TimeStep> episode = GenerateEpisode(Policy, true);
@@ -70,12 +70,12 @@
         }
 
         public int[] PolicyControl_EpsilonSoft( int EpisodeCount, double Epsilon, double Gamma = 1.0 ) {
-            double[,]   Policy = new double[mc.NumStates, mc.NumActions];
-            int[,]      N = new int[mc.NumStates, mc.NumActions];
-            double[,]   Q = new double[mc.NumStates, mc.NumActions];
+            double[,]   Policy = new double[rl.NumStates, rl.NumActions];
+            int[,]      N = new int[rl.NumStates, rl.NumActions];
+            double[,]   Q = new double[rl.NumStates, rl.NumActions];
 
-            for ( int s = 0; s < mc.NumStates; s++ ) {
-                int[] actions = mc.LegalActions(s);
+            for ( int s = 0; s < rl.NumStates; s++ ) {
+                int[] actions = rl.LegalActions(s);
                 foreach ( int a in actions )
                     Policy[s, a] = 1.0 / actions.Length;
             }
@@ -95,7 +95,7 @@
                     Q[ep.state, ep.action] = Q[ep.state, ep.action] + ( G - Q[ep.state, ep.action] ) / N[ep.state, ep.action];
 
                     // Epsilon is spread over legal actions only, illegal actions keep zero probability
-                    int[] actions   = mc.LegalActions(ep.state);
+                    int[] actions   = rl.LegalActions(ep.state);
                     int maxAction   = GreedyAction( Q, ep.state );
                     foreach ( int a in actions ) {
                         if ( a == maxAction ) {
@@ -108,8 +108,8 @@
             }
 
             // Turn it into a deterministic policy
-            int[] DPolicy = new int[mc.NumStates];
-            for ( int s = 0; s < mc.NumStates; s++ )
+            int[] DPolicy = new int[rl.NumStates];
+            for ( int s = 0; s < rl.NumStates; s++ )
                 DPolicy[s] = GreedyAction( Q, s );
 
             return DPolicy;
@@ -117,7 +117,7 @@
 
         // Returns the legal action with the highest Q value, ties broken randomly. Terminal states return 0.
         private int GreedyAction( double[,] Q, int s ) {
-            int[] actions = mc.LegalActions(s);
+            int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
                 return 0;
             }
@@ -135,31 +135,31 @@
 
         private List<TimeStep> GenerateEpisode(int[] Policy, bool randomStart) {
             if ( randomStart ) {
-                mc.RandomGame();
+                rl.RandomGame();
             }else {
-                mc.NewGame();
+                rl.NewGame();
             }
 
-            int[] startingActions = mc.LegalActions(mc.State());
+            int[] startingActions = rl.LegalActions(rl.State());
             List<TimeStep> episode = new List<TimeStep>();
-            while ( mc.IsTerminal() == false && episode.Count < MaxEpisodeSteps ) {
+            while ( rl.IsTerminal() == false && episode.Count < MaxEpisodeSteps ) {
                 int t = episode.Count;
-                int s = mc.State();
+                int s = rl.State();
                 int a = (t == 0 && randomStart) ? startingActions[Random.Shared.Next(startingActions.Length)] : Policy[s];
-                float r = mc.Step( a );
+                float r = rl.Step( a );
                 episode.Add( new TimeStep() { t = t, state = s, action = a, reward = r } );
             }
             return episode;
         }
 
         private List<TimeStep> GenerateEpisode( double[,] Policy ) {
-            mc.NewGame();
+            rl.NewGame();
             List<TimeStep> episode = new List<TimeStep>();
-            while ( mc.IsTerminal() == false && episode.Count < MaxEpisodeSteps ) {
+            while ( rl.IsTerminal() == false && episode.Count < MaxEpisodeSteps ) {
                 int t = episode.Count;
-                int s = mc.State();
-                int a = Helpers.Choose(mc.NumActions, (int i) => Policy[s, i]);
-                float r = mc.Step( a );
+                int s = rl.State();
+                int a = Helpers.Choose(rl.NumActions, (int i) => Policy[s, i]);
+                float r = rl.Step( a );
                 episode.Add( new TimeStep() { t = t, state = s, action = a, reward = r } );
             }
             return episode;
@@ -174,10 +174,10 @@
             public float reward;
         }
 
-        private ReinforcementLearning mc;
+        private TabularModelFreeInterface mc;
         public int MaxEpisodeSteps = 1000;
 
-        public MonteCarloEveryVisitOffPolicy( ReinforcementLearning mc ) {
+        public MonteCarloEveryVisitOffPolicy( TabularModelFreeInterface mc ) {
             this.mc = mc;
         }
 

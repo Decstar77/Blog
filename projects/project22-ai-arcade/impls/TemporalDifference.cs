@@ -5,9 +5,9 @@
             public float r;
         }
 
-        private ReinforcementLearning rl;
+        private TabularModelFreeInterface rl;
         
-        public TemporalDifference(ReinforcementLearning rl) {
+        public TemporalDifference(TabularModelFreeInterface rl) {
             this.rl = rl;
         }
 

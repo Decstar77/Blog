@@ -5,7 +5,7 @@ namespace arcade {
         public float    Reward;
     }
 
-    public interface DPInterface {
+    public interface TabularModelBasedInterface {
         public int              NumStates { get; }
         public int              NumActions { get; }
         public bool             IsTerminal(int state);
@@ -13,18 +13,18 @@ namespace arcade {
         public MdpTransition[]  Transitions(int state, int action);
     }
 
-    public interface ReinforcementLearning {
-        public int      NumStates { get; }
-        public int      NumActions { get; }
-        public void     NewGame();
-        public void     RandomGame();
-        public int      State();
-        public float    Step( int a );
-        public bool     IsTerminal();
-        public int[]    LegalActions( int state );
+    public interface TabularModelFreeInterface {
+        public int              NumStates { get; }
+        public int              NumActions { get; }
+        public void             NewGame();
+        public void             RandomGame();
+        public int              State();
+        public float            Step( int a );
+        public bool             IsTerminal();
+        public int[]            LegalActions( int state );
     }
 
-    public class FrozenLakeTabular : FrozenLake, DPInterface {
+    public class FrozenLakeTabular : FrozenLake, TabularModelBasedInterface {
         public int      NumStates => Rows * Cols;
 
         private char    TileAt( int state ) => map[state / Cols][state % Cols];

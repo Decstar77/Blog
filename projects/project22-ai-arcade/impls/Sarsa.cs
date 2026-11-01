@@ -1,13 +1,13 @@
 ﻿namespace arcade {
     public class Sarsa {
-        private ReinforcementLearning rl;
+        private TabularModelFreeInterface rl;
         private record StateActionReward {
             public int s;
             public int a;
             public float r;
         }
 
-        public Sarsa( ReinforcementLearning rl ) {
+        public Sarsa( TabularModelFreeInterface rl ) {
             this.rl = rl;
         }
 

@@ -1,13 +1,13 @@
 ﻿namespace arcade {
     public class QLearning {
-        private ReinforcementLearning rl;
+        private TabularModelFreeInterface rl;
         private record StateActionReward {
             public int s;
             public int a;
             public float r;
         }
 
-        public QLearning( ReinforcementLearning rl ) {
+        public QLearning( TabularModelFreeInterface rl ) {
             this.rl = rl;
         }
 
