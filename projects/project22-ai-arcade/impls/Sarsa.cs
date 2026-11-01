@@ -1,6 +1,11 @@
 ﻿namespace arcade {
     public class Sarsa {
         private ReinforcementLearning rl;
+        private record StateActionReward {
+            public int s;
+            public int a;
+            public float r;
+        }
 
         public Sarsa( ReinforcementLearning rl ) {
             this.rl = rl;
@@ -28,8 +33,15 @@
             }
         }
 
-        public void PolicyControl_NStep( int N ) {
+        public void PolicyControl_ExpectedSarsa( int EpisodeCount, double Alpha, double Epsilon ) {
 
+        }
+
+        public void PolicyControl_NStep( int EpisodeCount, int N, double Alpha ) {
+            double[] V = new double[rl.NumStates];
+            double[] Policy = new double[rl.NumStates];
+
+            List<StateActionReward> store = new List<StateActionReward>();
         }
     }
 }
