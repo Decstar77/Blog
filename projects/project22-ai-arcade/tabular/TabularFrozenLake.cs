@@ -32,7 +32,14 @@ namespace arcade {
     }
 
     public class FrozenLakeTabularModelFree : FrozenLake, TabularModelFreeInterface {
-        public int NumStates => throw new NotImplementedException();
+        private readonly int startState;
+
+        public int NumStates => Rows * Cols;
+
+        public FrozenLakeTabularModelFree( string[]? map = null, bool slippery = true, int maxSteps = 100, int? seed = null )
+            : base( map, slippery, maxSteps, seed ) {
+            startState = State;
+        }
 
         private char TileAt( int state ) => map[state / Cols][state % Cols];
         private bool IsTerminal( int state ) => TileAt( state ) == 'H' || TileAt( state ) == 'G';
@@ -42,19 +49,32 @@ namespace arcade {
         }
 
         public void NewGame() {
-            throw new NotImplementedException();
+            Reset( startState );
         }
 
         public void RandomGame() {
-            throw new NotImplementedException();
+            int state;
+            do {
+                state = rng.Next( NumStates );
+            } while ( IsTerminal( state ) );
+            Reset( state );
         }
 
         public float Step( int a ) {
-            throw new NotImplementedException();
+            Apply( a );
+            return TileAt( State ) == 'G' ? 1f : 0f;
         }
 
         int TabularModelFreeInterface.State() {
             return this.State;
+        }
+
+        private void Reset( int state ) {
+            row = state / Cols;
+            col = state % Cols;
+            steps = 0;
+            lastAction = -1;
+            lastDir = -1;
         }
     }
 
