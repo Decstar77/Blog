@@ -86,7 +86,6 @@
             return GreedyPolicy( Q );
         }
 
-        // Legal actions start uniform, terminal states have no legal actions so their Q stays zero
         private double[,] InitialQ() {
             double[,] Q = new double[rl.NumStates, rl.NumActions];
             for ( int s = 0; s < rl.NumStates; s++ ) {
@@ -97,7 +96,6 @@
             return Q;
         }
 
-        // Terminal states return 0, the action is never played and its Q is zero
         private int EpsilonGreedyAction( double[,] Q, int s, double Epsilon ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -106,7 +104,6 @@
             return actions[Helpers.EpsilonGreedy( Epsilon, actions.Length, ( int i ) => Q[s, actions[i]] )];
         }
 
-        // Value of s under the epsilon greedy policy. Tied greedy actions share a value, so tie breaking has no effect.
         private double ExpectedQ( double[,] Q, int s, double Epsilon ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -121,7 +118,6 @@
             return ( 1 - Epsilon ) * max + Epsilon * sum / actions.Length;
         }
 
-        // Turn it into a deterministic policy
         private int[] GreedyPolicy( double[,] Q ) {
             int[] Policy = new int[rl.NumStates];
             for ( int s = 0; s < rl.NumStates; s++ ) {
