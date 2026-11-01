@@ -31,9 +31,10 @@
             List<StateReward> store = new List<StateReward>();
             for ( int episodeIndex = 0; episodeIndex < EpisodeCount; episodeIndex++ ) {
                 rl.NewGame();
+                store.Clear();
                 store.Add( new StateReward() { s = rl.State(), r = 0 } );
                 int T = int.MaxValue;
-                for ( int t = 0, tau = t - N + 1; t <= T - 1; t++ ) {
+                for ( int t = 0, tau = t - N + 1; tau < T - 1; t++ ) {
                     if ( t < T ) {
                         StateReward s = store[t];
                         int a = Policy[s.s];
