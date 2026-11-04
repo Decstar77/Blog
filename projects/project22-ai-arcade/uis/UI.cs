@@ -9,9 +9,9 @@ namespace arcade {
         public const int   TextSize = 20;
         public const float RowHeight = 36;
         public const float SliderHeight = 48;
+        public const float Padding = 12;
 
         private const float Radius = 6;
-        private const float Padding = 12;
         private const float TrackHeight = 6;
 
         // Greys out and locks interactive widgets drawn after it is set, Begin turns it back on.
@@ -94,9 +94,13 @@ namespace arcade {
             return changed;
         }
 
-        public static bool Slider(Rectangle r, string text, ref int value, int min, int max, string format = "N0")
+        public static bool Slider(Rectangle r, string text, ref int value, int min, int max, string format = "N0") =>
+            Slider(r, text, ref value, min, max, v => v.ToString(format));
+
+        // For sliders over an index, where the shown text is whatever the index points at.
+        public static bool Slider(Rectangle r, string text, ref int value, int min, int max, Func<int, string> format)
         {
-            int next = (int)Math.Round(DrawSlider(r, text, value, min, max, value.ToString(format)));
+            int next = (int)Math.Round(DrawSlider(r, text, value, min, max, format(value)));
             bool changed = next != value;
             value = next;
             return changed;

@@ -7,6 +7,10 @@ namespace arcade {
     public class FrozenLakeTabularModelBased : FrozenLake, TabularModelBasedInterface {
         public int NumStates => Rows * Cols;
 
+        public FrozenLakeTabularModelBased( string[]? map = null, bool slippery = true )
+            : base( map, slippery ) {
+        }
+
         private char TileAt( int state ) => map[state / Cols][state % Cols];
         public bool IsTerminal( int state ) => TileAt( state ) == 'H' || TileAt( state ) == 'G';
         public int[] LegalActions( int state ) => IsTerminal( state ) ? Array.Empty<int>() : new[] { 0, 1, 2, 3 };
