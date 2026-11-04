@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Arcade: Frozen Lake — Decstar's Blog</title>
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* The canvases use the raylib build's dark palette (games/Style.cs), the
+           controls around them use the site's own styles. */
+        .lake-canvas, .chart-canvas {
+            width: 100%;
+            display: block;
+            border-radius: 8px;
+            background: #181a21;
+        }
+        .lake-canvas  { aspect-ratio: 4 / 3; }
+        .chart-canvas { aspect-ratio: 4 / 1; }
+
+        .arcade-panels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+            gap: 16px;
+        }
+        .arcade-panel {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .arcade-panel h3 {
+            margin: 0;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-muted);
+        }
+        .btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .arcade-btn {
+            font: 600 0.82rem var(--font);
+            color: var(--text);
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 7px 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex: 1;
+        }
+        .arcade-btn:hover:not(:disabled) {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        .arcade-btn.active {
+            color: #fff;
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .arcade-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        .arcade-btn.primary {
+            color: #fff;
+            background: var(--accent);
+            border-color: var(--accent);
+            padding: 10px;
+            font-size: 0.92rem;
+            flex: none;
+            margin-top: auto;
+        }
+        .arcade-btn.primary:hover:not(:disabled) {
+            color: #fff;
+            background: var(--accent-dark);
+        }
+        .arcade-btn.cancel {
+            background: #c0392b;
+            border-color: #c0392b;
+        }
+        .arcade-slider {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .arcade-slider label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            color: var(--text);
+        }
+        .arcade-slider label span:last-child {
+            font-family: var(--font-mono);
+            color: var(--accent);
+        }
+        .arcade-slider.off { opacity: 0.4; }
+        .arcade-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--text);
+            cursor: pointer;
+        }
+        .arcade-check input { accent-color: var(--accent); }
+        .arcade-result {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+        .arcade-result b { color: var(--text); }
+    </style>
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Reinforcement Learning</span>
+            <h1 style="text-align: center;">AI Arcade: Frozen Lake</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-tag"></i> C# · raylib · Tabular RL</span>
+                <span><i class="fas fa-hashtag"></i> Project 22</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                As I've been learning Reinforcement Learning I've been implementing basic games to explore the algorithms.
+                The first is the Frozen Lake, in which you start at the top left corner and reach the goal without falling into the holes.
+                The goal has a reward of 1 and 0 elsewhere. The ice is slippery so there is a 2/3 chance to slide in a random direction.
+            </p> 
+            <p>
+                Live demo below. Will write an article show casing different graphs and data of the different methods soon :) 
+            </p>
+        </div>
+
+        <!-- ── Interactive demo ─────────────────────────────────── -->
+        <div class="project-demo">
+            <h2 style="text-align: center; margin: 0;">Live demo</h2>
+<div class="arcade-panels">
+                <div class="arcade-panel">
+                    <h3>Environment</h3>
+                    <div class="btn-row" id="mapButtons">
+                        <button class="arcade-btn active" data-map="0">4 × 4</button>
+                        <button class="arcade-btn" data-map="1">8 × 8</button>
+                    </div>
+                    <label class="arcade-check"><input type="checkbox" id="slippery" checked> Slippery ice</label>
+
+                    <h3>Method</h3>
+                    <div class="btn-grid" id="methodButtons"></div>
+                </div>
+
+                <div class="arcade-panel">
+                    <h3>Inputs</h3>
+                    <div class="arcade-slider" id="row-episodes">
+                        <label for="episodes"><span>Episodes</span><span id="episodesOut"></span></label>
+                        <input id="episodes" class="demo-slider" type="range" min="0" max="9" step="1" value="6">
+                    </div>
+                    <div class="arcade-slider" id="row-alpha">
+                        <label for="alpha"><span>Step size (alpha)</span><span id="alphaOut"></span></label>
+                        <input id="alpha" class="demo-slider" type="range" min="0.01" max="1" step="0.01" value="0.1">
+                    </div>
+                    <div class="arcade-slider" id="row-epsilon">
+                        <label for="epsilon"><span>Exploration (epsilon)</span><span id="epsilonOut"></span></label>
+                        <input id="epsilon" class="demo-slider" type="range" min="0" max="1" step="0.01" value="0.1">
+                    </div>
+                    <div class="arcade-slider" id="row-gamma">
+                        <label for="gamma"><span>Discount (gamma)</span><span id="gammaOut"></span></label>
+                        <input id="gamma" class="demo-slider" type="range" min="0.5" max="1" step="0.001" value="0.99">
+                    </div>
+                    <div class="arcade-slider" id="row-n">
+                        <label for="nSteps"><span>Steps (n)</span><span id="nOut"></span></label>
+                        <input id="nSteps" class="demo-slider" type="range" min="1" max="16" step="1" value="4">
+                    </div>
+                    <button class="arcade-btn primary" id="trainBtn">Train</button>
+                </div>
+
+                <div class="arcade-panel">
+                    <h3>Playback</h3>
+                    <div class="btn-row">
+                        <button class="arcade-btn" id="playBtn">Pause</button>
+                        <button class="arcade-btn" id="stepBtn">Step</button>
+                        <button class="arcade-btn" id="resetBtn">Reset</button>
+                    </div>
+                    <div class="arcade-slider">
+                        <label for="speed"><span>Steps per second</span><span id="speedOut"></span></label>
+                        <input id="speed" class="demo-slider" type="range" min="1" max="240" step="1" value="4">
+                    </div>
+                    <label class="arcade-check"><input type="checkbox" id="showValues" checked> Show goal chance</label>
+                    <label class="arcade-check"><input type="checkbox" id="showPolicy" checked> Show policy</label>
+                </div>
+
+                <div class="arcade-panel">
+                    <h3>Result</h3>
+                    <p class="arcade-result" id="resTrained"></p>
+                    <p class="arcade-result" id="resTime"></p>
+                    <p class="arcade-result" id="resChance"></p>
+                    <p class="arcade-result" id="resWins"></p>
+                </div>
+            </div>
+            <canvas id="chartCanvas" class="chart-canvas"></canvas>
+            <canvas id="lakeCanvas" class="lake-canvas"></canvas>
+        </div>
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="index.html">&larr; Home</a>
+    </div>
+</footer>
+
+<script>
+// ===================================================================
+// Environment + algorithms. Ported from projects/project22-ai-arcade.
+// Everything in this block is also serialised into the training worker
+// (via Function.toString), so keep these as plain top-level declarations.
+// Actions: 0 left, 1 down, 2 right, 3 up.
+// ===================================================================
+const DROW = [0, 1, 0, -1];
+const DCOL = [-1, 0, 1, 0];
+const ALL_ACTIONS = [0, 1, 2, 3];
+const NO_ACTIONS = [];
+const MAX_EPISODE_STEPS = 1000;
+
+class Lake {
+    constructor(map, slippery, maxSteps) {
+        this.map = map;
+        this.slippery = slippery;
+        this.maxSteps = maxSteps;
+        this.rows = map.length;
+        this.cols = map[0].length;
+        this.numStates = this.rows * this.cols;
+        this.numActions = 4;
+        this.start = 0;
+        for (let r = 0; r < this.rows; r++) {
+            const c = map[r].indexOf('S');
+            if (c >= 0) this.start = r * this.cols + c;
+        }
+        this.reset(this.start);
+    }
+    tileAt(s) { return this.map[(s / this.cols) | 0][s % this.cols]; }
+    isTerminalState(s) { const t = this.tileAt(s); return t === 'H' || t === 'G'; }
+    legal(s) { return this.isTerminalState(s) ? NO_ACTIONS : ALL_ACTIONS; }
+    move(s, dir) {
+        const r = Math.min(Math.max(((s / this.cols) | 0) + DROW[dir], 0), this.rows - 1);
+        const c = Math.min(Math.max((s % this.cols) + DCOL[dir], 0), this.cols - 1);
+        return r * this.cols + c;
+    }
+    reset(s) { this.s = s; this.steps = 0; this.lastAction = -1; this.lastDir = -1; }
+    newGame() { this.reset(this.start); }
+    randomGame() {
+        let s;
+        do { s = randInt(this.numStates); } while (this.isTerminalState(s));
+        this.reset(s);
+    }
+    isTerminal() { return this.isTerminalState(this.s) || this.steps >= this.maxSteps; }
+    apply(action) {
+        let dir = action;
+        if (this.slippery) {
+            // 0: as intended, 1: rotate one way, 2: rotate the other.
+            const roll = randInt(3);
+            if (roll === 1) dir = (action + 1) % 4;
+            else if (roll === 2) dir = (action + 3) % 4;
+        }
+        this.s = this.move(this.s, dir);
+        this.steps++;
+        this.lastAction = action;
+        this.lastDir = dir;
+    }
+    step(a) { this.apply(a); return this.tileAt(this.s) === 'G' ? 1 : 0; }
+    won() { return this.tileAt(this.s) === 'G'; }
+    transitions(s, a) {
+        const dirs = this.slippery ? [a, (a + 1) % 4, (a + 3) % 4] : [a];
+        const p = 1 / dirs.length;
+        return dirs.map(d => {
+            const next = this.move(s, d);
+            return { p, next, r: this.tileAt(next) === 'G' ? 1 : 0 };
+        });
+    }
+}
+
+function randInt(n) { return Math.floor(Math.random() * n); }
+
+// Helpers.EpsilonGreedy: greedy branch takes the first max, no tie-breaking.
+function epsilonGreedy(eps, count, sel) {
+    if (Math.random() < eps) return randInt(count);
+    let maxI = -1, max = -Infinity;
+    for (let i = 0; i < count; i++) {
+        const v = sel(i);
+        if (v > max) { max = v; maxI = i; }
+    }
+    return maxI;
+}
+
+function choose(count, sel) {
+    const roll = Math.random();
+    let cum = 0;
+    for (let i = 0; i < count; i++) {
+        cum += sel(i);
+        if (roll < cum) return i;
+    }
+    return count - 1;
+}
+
+// Helpers.ArgMax: ties broken uniformly at random.
+function argMax(count, sel) {
+    let maxA = 0, maxV = -Infinity, ties = 0;
+    for (let i = 0; i < count; i++) {
+        const v = sel(i);
+        if (v > maxV) { maxV = v; maxA = i; ties = 1; }
+        else if (v === maxV) { ties++; if (randInt(ties) === 0) maxA = i; }
+    }
+    return maxA;
+}
+
+function initialQ(env) {
+    const Q = new Float64Array(env.numStates * 4);
+    for (let s = 0; s < env.numStates; s++)
+        for (const a of env.legal(s)) Q[s * 4 + a] = 1 / env.numActions;
+    return Q;
+}
+
+function greedyAction(env, Q, s) {
+    const acts = env.legal(s);
+    if (acts.length === 0) return 0;
+    return acts[argMax(acts.length, i => Q[s * 4 + acts[i]])];
+}
+
+function greedyPolicy(env, Q) {
+    const policy = new Int32Array(env.numStates);
+    for (let s = 0; s < env.numStates; s++) policy[s] = greedyAction(env, Q, s);
+    return policy;
+}
+
+function epsGreedyAction(env, Q, s, eps) {
+    const acts = env.legal(s);
+    if (acts.length === 0) return 0;
+    return acts[epsilonGreedy(eps, acts.length, i => Q[s * 4 + acts[i]])];
+}
+
+function maxQ(env, Q, s) {
+    const acts = env.legal(s);
+    if (acts.length === 0) return 0;
+    let m = -Infinity;
+    for (const a of acts) m = Math.max(m, Q[s * 4 + a]);
+    return m;
+}
+
+// ---- Dynamic programming --------------------------------------------
+
+function qValue(env, V, s, a, gamma) {
+    let q = 0;
+    for (const t of env.transitions(s, a)) q += t.p * (t.r + gamma * V[t.next]);
+    return q;
+}
+
+function policyEvaluation(env, policy, gamma, theta) {
+    const V = new Float64Array(env.numStates);
+    for (let sweep = 0; sweep < 100000; sweep++) {
+        let delta = 0;
+        for (let s = 0; s < env.numStates; s++) {
+            const v = V[s];
+            V[s] = env.isTerminalState(s) ? 0 : qValue(env, V, s, policy[s], gamma);
+            delta = Math.max(delta, Math.abs(v - V[s]));
+        }
+        if (delta < theta) break;
+    }
+    return V;
+}
+
+function policyIteration(env, gamma) {
+    const policy = new Int32Array(env.numStates);
+    for (let iter = 0; iter < 1000; iter++) {
+        const V = policyEvaluation(env, policy, gamma, 0.001);
+        let stable = true;
+        for (let s = 0; s < env.numStates; s++) {
+            if (env.isTerminalState(s)) continue;
+            let best = 0, bestQ = -Infinity;
+            for (const a of env.legal(s)) {
+                const q = qValue(env, V, s, a, gamma);
+                if (q > bestQ) { bestQ = q; best = a; }
+            }
+            if (bestQ > qValue(env, V, s, policy[s], gamma) + 1e-9) {
+                policy[s] = best;
+                stable = false;
+            }
+        }
+        if (stable) break;
+    }
+    return policy;
+}
+
+// ---- Monte Carlo ----------------------------------------------------
+
+function mcEpisode(env, pickAction, randomStart) {
+    if (randomStart) env.randomGame(); else env.newGame();
+    const start = env.legal(env.s);
+    const ep = [];
+    while (!env.isTerminal() && ep.length < MAX_EPISODE_STEPS) {
+        const t = ep.length, s = env.s;
+        const a = (t === 0 && randomStart) ? start[randInt(start.length)] : pickAction(s);
+        const r = env.step(a);
+        ep.push({ s, a, r });
+    }
+    return ep;
+}
+
+// First index each (state, action) pair appears at, so first-visit checks are O(1).
+function firstVisits(env, ep) {
+    const first = new Int32Array(env.numStates * 4).fill(-1);
+    for (let t = 0; t < ep.length; t++) {
+        const k = ep[t].s * 4 + ep[t].a;
+        if (first[k] < 0) first[k] = t;
+    }
+    return first;
+}
+
+function mcExploringStarts(env, i, tick) {
+    const policy = new Int32Array(env.numStates);
+    const N = new Int32Array(env.numStates * 4);
+    const Q = new Float64Array(env.numStates * 4);
+    for (let e = 0; e < i.episodes; e++) {
+        const ep = mcEpisode(env, s => policy[s], true);
+        const first = firstVisits(env, ep);
+        let G = 0;
+        for (let t = ep.length - 1; t >= 0; t--) {
+            const { s, a, r } = ep[t];
+            G = i.gamma * G + r;
+            const k = s * 4 + a;
+            if (first[k] < t) continue;
+            N[k]++;
+            Q[k] += (G - Q[k]) / N[k];
+            policy[s] = greedyAction(env, Q, s);
+        }
+        tick(e);
+    }
+    return policy;
+}
+
+function mcEpsilonSoft(env, i, tick) {
+    const P = new Float64Array(env.numStates * 4);
+    const N = new Int32Array(env.numStates * 4);
+    const Q = new Float64Array(env.numStates * 4);
+    for (let s = 0; s < env.numStates; s++) {
+        const acts = env.legal(s);
+        for (const a of acts) P[s * 4 + a] = 1 / acts.length;
+    }
+    for (let e = 0; e < i.episodes; e++) {
+        const ep = mcEpisode(env, s => choose(env.numActions, j => P[s * 4 + j]), false);
+        const first = firstVisits(env, ep);
+        let G = 0;
+        for (let t = ep.length - 1; t >= 0; t--) {
+            const { s, a, r } = ep[t];
+            G = i.gamma * G + r;
+            const k = s * 4 + a;
+            if (first[k] < t) continue;
+            N[k]++;
+            Q[k] += (G - Q[k]) / N[k];
+            // Epsilon is spread over legal actions only.
+            const acts = env.legal(s);
+            const best = greedyAction(env, Q, s);
+            for (const b of acts)
+                P[s * 4 + b] = b === best ? 1 - i.epsilon + i.epsilon / acts.length : i.epsilon / acts.length;
+        }
+        tick(e);
+    }
+    return greedyPolicy(env, Q);
+}
+
+function mcOffPolicy(env, i, tick) {
+    const policy = new Int32Array(env.numStates);
+    const C = new Float64Array(env.numStates * 4);
+    const Q = new Float64Array(env.numStates * 4);
+    const B = new Float64Array(env.numStates * 4);
+    for (let s = 0; s < env.numStates; s++) {
+        const acts = env.legal(s);
+        for (const a of acts) B[s * 4 + a] = 1 / acts.length;
+    }
+    for (let e = 0; e < i.episodes; e++) {
+        const ep = mcEpisode(env, s => choose(env.numActions, j => B[s * 4 + j]), false);
+        let G = 0, W = 1;
+        for (let t = ep.length - 1; t >= 0; t--) {
+            const { s, a, r } = ep[t];
+            const k = s * 4 + a;
+            G = i.gamma * G + r;
+            C[k] += W;
+            Q[k] += W / C[k] * (G - Q[k]);
+            const acts = env.legal(s);
+            policy[s] = acts[argMax(acts.length, j => Q[s * 4 + acts[j]])];
+            if (a !== policy[s]) break;
+            W = W / B[k];
+        }
+        tick(e);
+    }
+    return policy;
+}
+
+// ---- Sarsa ----------------------------------------------------------
+
+function sarsaOneStep(env, i, tick) {
+    const Q = initialQ(env);
+    for (let e = 0; e < i.episodes; e++) {
+        env.newGame();
+        let s = env.s, a = epsGreedyAction(env, Q, s, i.epsilon);
+        while (!env.isTerminal()) {
+            const r = env.step(a);
+            const s2 = env.s, a2 = epsGreedyAction(env, Q, s2, i.epsilon);
+            Q[s * 4 + a] += i.alpha * (r + i.gamma * Q[s2 * 4 + a2] - Q[s * 4 + a]);
+            s = s2; a = a2;
+        }
+        tick(e);
+    }
+    return greedyPolicy(env, Q);
+}
+
+function expectedQ(env, Q, s, eps) {
+    const acts = env.legal(s);
+    if (acts.length === 0) return 0;
+    let sum = 0, max = -Infinity;
+    for (const a of acts) { sum += Q[s * 4 + a]; max = Math.max(max, Q[s * 4 + a]); }
+    return (1 - eps) * max + eps * sum / acts.length;
+}
+
+function expectedSarsa(env, i, tick) {
+    const Q = initialQ(env);
+    for (let e = 0; e < i.episodes; e++) {
+        env.newGame();
+        while (!env.isTerminal()) {
+            const s = env.s, a = epsGreedyAction(env, Q, s, i.epsilon);
+            const r = env.step(a);
+            Q[s * 4 + a] += i.alpha * (r + i.gamma * expectedQ(env, Q, env.s, i.epsilon) - Q[s * 4 + a]);
+        }
+        tick(e);
+    }
+    return greedyPolicy(env, Q);
+}
+
+function sarsaNStep(env, i, tick) {
+    const Q = initialQ(env), N = i.n;
+    const store = [];
+    for (let e = 0; e < i.episodes; e++) {
+        env.newGame();
+        store.length = 0;
+        store.push({ s: env.s, a: epsGreedyAction(env, Q, env.s, i.epsilon), r: 0 });
+        let T = Infinity;
+        for (let t = 0, tau = t - N + 1; tau < T - 1; t++) {
+            if (t < T) {
+                const r = env.step(store[t].a);
+                const s2 = env.s;
+                store.push({ s: s2, a: epsGreedyAction(env, Q, s2, i.epsilon), r });
+                if (env.isTerminal()) T = t + 1;
+            }
+            tau = t - N + 1;
+            if (tau >= 0) {
+                let G = 0;
+                for (let j = tau + 1; j <= Math.min(tau + N, T); j++)
+                    G += Math.pow(i.gamma, j - tau - 1) * store[j].r;
+                if (tau + N < T) {
+                    const last = store[tau + N];
+                    G += Math.pow(i.gamma, N) * Q[last.s * 4 + last.a];
+                }
+                const st = store[tau];
+                Q[st.s * 4 + st.a] += i.alpha * (G - Q[st.s * 4 + st.a]);
+            }
+        }
+        tick(e);
+    }
+    return greedyPolicy(env, Q);
+}
+
+// ---- Q-learning -----------------------------------------------------
+
+function qLearningOneStep(env, i, tick) {
+    const Q = initialQ(env);
+    for (let e = 0; e < i.episodes; e++) {
+        env.newGame();
+        while (!env.isTerminal()) {
+            const s = env.s, a = epsGreedyAction(env, Q, s, i.epsilon);
+            const r = env.step(a);
+            Q[s * 4 + a] += i.alpha * (r + i.gamma * maxQ(env, Q, env.s) - Q[s * 4 + a]);
+        }
+        tick(e);
+    }
+    return greedyPolicy(env, Q);
+}
+
+function doubleQ(env, i, tick) {
+    const Q1 = initialQ(env), Q2 = initialQ(env), QMean = initialQ(env);
+    for (let e = 0; e < i.episodes; e++) {
+        env.newGame();
+        while (!env.isTerminal()) {
+            const s = env.s, a = epsGreedyAction(env, QMean, s, i.epsilon);
+            const r = env.step(a);
+            const s2 = env.s;
+            const first = randInt(2) === 0;
+            const QS = first ? Q1 : Q2, QV = first ? Q2 : Q1;
+            const acts = env.legal(s2);
+            const cross = acts.length === 0 ? 0 : QV[s2 * 4 + acts[argMax(acts.length, j => QS[s2 * 4 + acts[j]])]];
+            QS[s * 4 + a] += i.alpha * (r + i.gamma * cross - QS[s * 4 + a]);
+            QMean[s * 4 + a] = (Q1[s * 4 + a] + Q2[s * 4 + a]) / 2;
+        }
+        tick(e);
+    }
+    return greedyPolicy(env, QMean);
+}
+
+// Rewards are only summed along greedy actions, the return is cut at the first exploratory one.
+function qLearningNStep(env, i, tick) {
+    const Q = initialQ(env), N = i.n;
+    const store = [];
+    for (let e = 0; e < i.episodes; e++) {
+        env.newGame();
+        store.length = 0;
+        store.push({ s: env.s, a: epsGreedyAction(env, Q, env.s, i.epsilon), r: 0 });
+        let T = Infinity;
+        for (let t = 0, tau = t - N + 1; tau < T - 1; t++) {
+            if (t < T) {
+                const r = env.step(store[t].a);
+                const s2 = env.s;
+                store.push({ s: s2, a: epsGreedyAction(env, Q, s2, i.epsilon), r });
+                if (env.isTerminal()) T = t + 1;
+            }
+            tau = t - N + 1;
+            if (tau >= 0) {
+                let G = 0, discount = 1;
+                for (let j = tau + 1; ; j++) {
+                    const st = store[j];
+                    G += discount * st.r;
+                    discount *= i.gamma;
+                    const m = maxQ(env, Q, st.s);
+                    if (j === tau + N || j === T || Q[st.s * 4 + st.a] !== m) {
+                        G += discount * m;
+                        break;
+                    }
+                }
+                const st = store[tau];
+                Q[st.s * 4 + st.a] += i.alpha * (G - Q[st.s * 4 + st.a]);
+            }
+        }
+        tick(e);
+    }
+    return greedyPolicy(env, Q);
+}
+
+function trainMethod(key, env, i, tick) {
+    switch (key) {
+        case 'pi':     return policyIteration(env, i.gamma);
+        case 'mc-es':  return mcExploringStarts(env, i, tick);
+        case 'mc-eps': return mcEpsilonSoft(env, i, tick);
+        case 'mc-off': return mcOffPolicy(env, i, tick);
+        case 'sarsa':  return sarsaOneStep(env, i, tick);
+        case 'esarsa': return expectedSarsa(env, i, tick);
+        case 'nsarsa': return sarsaNStep(env, i, tick);
+        case 'q':      return qLearningOneStep(env, i, tick);
+        case 'dq':     return doubleQ(env, i, tick);
+        case 'nq':     return qLearningNStep(env, i, tick);
+    }
+    throw new Error('Unknown method ' + key);
+}
+
+// ===================================================================
+// Training worker, built from the functions above.
+// ===================================================================
+function makeWorker() {
+    const fns = [Lake, randInt, epsilonGreedy, choose, argMax, initialQ, greedyAction, greedyPolicy,
+        epsGreedyAction, maxQ, qValue, policyEvaluation, policyIteration, mcEpisode, firstVisits,
+        mcExploringStarts, mcEpsilonSoft, mcOffPolicy, sarsaOneStep, expectedQ, expectedSarsa,
+        sarsaNStep, qLearningOneStep, doubleQ, qLearningNStep, trainMethod];
+    const src = `
+const DROW = [0, 1, 0, -1];
+const DCOL = [-1, 0, 1, 0];
+const ALL_ACTIONS = [0, 1, 2, 3];
+const NO_ACTIONS = [];
+const MAX_EPISODE_STEPS = ${MAX_EPISODE_STEPS};
+${fns.map(f => f.toString()).join('\n\n')}
+onmessage = (msg) => {
+    const i = msg.data;
+    const t0 = performance.now();
+    let lastPost = 0;
+    const tick = (e) => {
+        const now = performance.now();
+        if (now - lastPost > 100) {
+            lastPost = now;
+            postMessage({ progress: (e + 1) / i.episodes });
+        }
+    };
+    try {
+        const policy = trainMethod(i.method, new Lake(i.map, i.slippery, i.maxSteps), i, tick);
+        const ms = performance.now() - t0;
+        // Undiscounted, so each value is the chance of reaching the goal from that cell, ignoring the step limit.
+        const values = policyEvaluation(new Lake(i.map, i.slippery, i.maxSteps), policy, 1.0, 1e-7);
+        postMessage({ done: true, policy: Array.from(policy), values: Array.from(values), ms });
+    } catch (err) {
+        postMessage({ error: String(err && err.message || err) });
+    }
+};`;
+    return new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+}
+
+// ===================================================================
+// UI state (mirrors uis/FrozenLakeUI.cs)
+// ===================================================================
+const MAPS = [
+    ['SFFF', 'FHFH', 'FFFH', 'HFFG'],
+    ['SFFFFFFF', 'FFFFFFFF', 'FFFHFFFF', 'FFFFFHFF', 'FFFHFFFF', 'FHHFFFHF', 'FHFFHFHF', 'FFFHFFFG'],
+];
+const EPISODE_COUNTS = [100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+
+const METHODS = [
+    { key: 'pi',     name: 'Policy Iteration',    episodes: false, alpha: false, epsilon: false, n: false },
+    { key: 'mc-es',  name: 'MC Exploring Starts', episodes: true,  alpha: false, epsilon: false, n: false },
+    { key: 'mc-eps', name: 'MC Epsilon-Soft',     episodes: true,  alpha: false, epsilon: true,  n: false },
+    { key: 'mc-off', name: 'MC Off-Policy',       episodes: true,  alpha: false, epsilon: false, n: false },
+    { key: 'sarsa',  name: 'Sarsa',               episodes: true,  alpha: true,  epsilon: true,  n: false },
+    { key: 'esarsa', name: 'Expected Sarsa',      episodes: true,  alpha: true,  epsilon: true,  n: false },
+    { key: 'nsarsa', name: 'n-step Sarsa',        episodes: true,  alpha: true,  epsilon: true,  n: true  },
+    { key: 'q',      name: 'Q-Learning',          episodes: true,  alpha: true,  epsilon: true,  n: false },
+    { key: 'dq',     name: 'Double Q-Learning',   episodes: true,  alpha: true,  epsilon: true,  n: false },
+    { key: 'nq',     name: 'n-step Q-Learning',   episodes: true,  alpha: true,  epsilon: true,  n: true  },
+];
+
+const state = {
+    mapIndex: 0,
+    slippery: true,
+    methodIndex: 7,
+    worker: null,
+    progress: 0,
+    trainStart: 0,
+    policy: null,
+    values: null,
+    trainedWith: 'Untrained, moving at random',
+    trainMs: null,
+    error: null,
+    lake: null,
+    playing: true,
+    stepsPerSecond: 4,
+    timer: 0,
+    wins: 0,
+    episodes: 0,
+    winRate: [],
+    showValues: true,
+    showPolicy: true,
+};
+
+const $ = id => document.getElementById(id);
+const map = () => MAPS[state.mapIndex];
+const maxSteps = () => state.mapIndex === 0 ? 100 : 200;
+const newLake = () => new Lake(map(), state.slippery, maxSteps());
+
+function inputs() {
+    return {
+        episodes: EPISODE_COUNTS[+$('episodes').value],
+        alpha: +$('alpha').value,
+        epsilon: +$('epsilon').value,
+        gamma: +$('gamma').value,
+        n: +$('nSteps').value,
+    };
+}
+
+// ---- Playback --------------------------------------------------------
+
+function resetPlayback() {
+    state.lake = newLake();
+    state.timer = 0;
+    state.wins = 0;
+    state.episodes = 0;
+    state.winRate = [];
+    updateResults();
+}
+
+function step() {
+    const lake = state.lake;
+    if (lake.isTerminal()) {
+        state.lake = newLake();
+        return;
+    }
+    const legal = lake.legal(lake.s);
+    lake.apply(state.policy ? state.policy[lake.s] : legal[randInt(legal.length)]);
+    if (lake.isTerminal()) {
+        state.episodes++;
+        if (lake.won()) state.wins++;
+        state.winRate.push(state.wins / state.episodes);
+        // Linger on the final position when it's slow enough to watch.
+        if (state.stepsPerSecond <= 20) state.timer -= 3 / state.stepsPerSecond;
+        updateResults();
+    }
+}
+
+// ---- Training --------------------------------------------------------
+
+function startTraining() {
+    const method = METHODS[state.methodIndex];
+    const i = inputs();
+    state.error = null;
+    state.progress = 0;
+    state.trainStart = performance.now();
+    state.worker = makeWorker();
+    state.worker.onmessage = (msg) => {
+        const d = msg.data;
+        if (d.progress !== undefined) { state.progress = d.progress; return; }
+        if (d.error) {
+            state.error = 'Failed: ' + d.error;
+        } else {
+            state.policy = d.policy;
+            state.values = d.values;
+            state.trainMs = d.ms;
+        }
+        stopWorker();
+        resetPlayback();
+    };
+    state.worker.onerror = (err) => {
+        state.error = 'Failed: ' + err.message;
+        stopWorker();
+        updateResults();
+    };
+    state.worker.postMessage({
+        method: method.key, map: map(), slippery: state.slippery, maxSteps: maxSteps(), ...i,
+    });
+    state.trainedWith = method.episodes ? `${method.name}, ${i.episodes.toLocaleString()} episodes` : method.name;
+    syncControls();
+}
+
+function stopWorker() {
+    if (state.worker) state.worker.terminate();
+    state.worker = null;
+    syncControls();
+}
+
+function cancelTraining() {
+    stopWorker();
+    state.trainedWith = state.policy ? state.trainedWith + ' (previous)' : 'Untrained, moving at random';
+    state.error = 'Training cancelled';
+    updateResults();
+}
+
+function clearPolicy() {
+    // A policy learned on another lake means nothing here.
+    state.policy = null;
+    state.values = null;
+    state.trainMs = null;
+    state.error = null;
+    state.trainedWith = 'Untrained, moving at random';
+    resetPlayback();
+}
+
+// ---- Controls --------------------------------------------------------
+
+function syncControls() {
+    const idle = !state.worker;
+    const method = METHODS[state.methodIndex];
+
+    document.querySelectorAll('#mapButtons .arcade-btn').forEach(b => {
+        b.classList.toggle('active', +b.dataset.map === state.mapIndex);
+        b.disabled = !idle;
+    });
+    $('slippery').disabled = !idle;
+    document.querySelectorAll('#methodButtons .arcade-btn').forEach((b, k) => {
+        b.classList.toggle('active', k === state.methodIndex);
+        b.disabled = !idle;
+    });
+
+    const rows = { episodes: method.episodes, alpha: method.alpha, epsilon: method.epsilon, gamma: true, n: method.n };
+    const ids = { episodes: 'episodes', alpha: 'alpha', epsilon: 'epsilon', gamma: 'gamma', n: 'nSteps' };
+    for (const k in rows) {
+        $('row-' + k).classList.toggle('off', !rows[k]);
+        $(ids[k]).disabled = !idle || !rows[k];
+    }
+
+    const btn = $('trainBtn');
+    btn.classList.toggle('cancel', !idle);
+    btn.textContent = idle ? `Train ${method.name}` : 'Cancel';
+    $('playBtn').textContent = state.playing ? 'Pause' : 'Play';
+}
+
+function updateOutputs() {
+    const i = inputs();
+    $('episodesOut').textContent = i.episodes.toLocaleString();
+    $('alphaOut').textContent = i.alpha.toFixed(2);
+    $('epsilonOut').textContent = i.epsilon.toFixed(2);
+    $('gammaOut').textContent = i.gamma.toFixed(3);
+    $('nOut').textContent = i.n;
+    $('speedOut').textContent = state.stepsPerSecond;
+}
+
+function updateResults() {
+    $('resTrained').innerHTML = `<b>${state.trainedWith}</b>`;
+    if (state.worker) {
+        const secs = ((performance.now() - state.trainStart) / 1000).toFixed(1);
+        $('resTime').textContent = `Training... ${Math.round(state.progress * 100)}% (${secs} s)`;
+    } else if (state.error) {
+        $('resTime').innerHTML = `<span style="color:#c0392b">${state.error}</span>`;
+    } else {
+        $('resTime').textContent = state.trainMs != null ? `Trained in ${(state.trainMs / 1000).toFixed(2)} s` : '';
+    }
+    $('resChance').innerHTML = state.values
+        ? `Goal chance from the start: <b>${(state.values[state.lake.start] * 100).toFixed(1)}%</b>` : '';
+    $('resWins').textContent = `Playback won ${state.wins.toLocaleString()} of ${state.episodes.toLocaleString()}`;
+}
+
+function buildControls() {
+    const grid = $('methodButtons');
+    METHODS.forEach((m, k) => {
+        const b = document.createElement('button');
+        b.className = 'arcade-btn';
+        b.textContent = m.name;
+        b.addEventListener('click', () => { state.methodIndex = k; syncControls(); });
+        grid.appendChild(b);
+    });
+
+    document.querySelectorAll('#mapButtons .arcade-btn').forEach(b => b.addEventListener('click', () => {
+        if (state.mapIndex === +b.dataset.map) return;
+        state.mapIndex = +b.dataset.map;
+        clearPolicy();
+        syncControls();
+    }));
+    $('slippery').addEventListener('change', e => { state.slippery = e.target.checked; clearPolicy(); });
+
+    ['episodes', 'alpha', 'epsilon', 'gamma', 'nSteps'].forEach(id => $(id).addEventListener('input', updateOutputs));
+    $('trainBtn').addEventListener('click', () => state.worker ? cancelTraining() : startTraining());
+
+    $('playBtn').addEventListener('click', () => { state.playing = !state.playing; syncControls(); });
+    $('stepBtn').addEventListener('click', () => { state.playing = false; step(); syncControls(); });
+    $('resetBtn').addEventListener('click', resetPlayback);
+    $('speed').addEventListener('input', e => { state.stepsPerSecond = +e.target.value; updateOutputs(); });
+    $('showValues').addEventListener('change', e => state.showValues = e.target.checked);
+    $('showPolicy').addEventListener('change', e => state.showPolicy = e.target.checked);
+}
+
+// ===================================================================
+// Drawing (ports of FrozenLake.Render and FrozenLakeUI.DrawOverlay)
+// ===================================================================
+const STYLE = {
+    background: [24, 26, 33], panel: [36, 39, 49], panelEdge: [58, 62, 76],
+    text: [226, 228, 235], textDim: [140, 145, 160],
+    p0: [236, 94, 94], p1: [250, 200, 70], highlight: [120, 220, 140],
+    ice: [178, 216, 238], iceShine: [214, 236, 249], water: [18, 40, 72],
+    waterEdge: [70, 120, 170], slip: [255, 140, 60],
+};
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+// raylib ColorBrightness: positive moves towards white, negative towards black.
+const bright = (c, f) => c.map(v => f < 0 ? v * (1 + f) : v + (255 - v) * f);
+
+function fitCanvas(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+}
+
+// Style.FitGrid: largest cols:rows rect that fits in the area minus padding, centred.
+function fitGrid(w, h, cols, rows, pad) {
+    const cell = Math.min((w - 2 * pad) / cols, (h - 2 * pad) / rows);
+    return { x: (w - cell * cols) / 2, y: (h - cell * rows) / 2, cell };
+}
+
+function tri(ctx, a, b, c, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawLake() {
+    const { ctx, w, h } = fitCanvas($('lakeCanvas'));
+    const lake = state.lake, m = lake.map;
+    ctx.fillStyle = rgb(STYLE.background);
+    ctx.fillRect(0, 0, w, h);
+
+    const g = fitGrid(w, h, lake.cols, lake.rows, 24);
+    const cell = g.cell, gap = Math.max(2, cell * 0.04);
+    const tileRect = (r, c) => ({ x: g.x + c * cell + gap, y: g.y + r * cell + gap, s: cell - 2 * gap });
+
+    for (let r = 0; r < lake.rows; r++) {
+        for (let c = 0; c < lake.cols; c++) {
+            const t = tileRect(r, c), ch = m[r][c];
+            const mx = t.x + t.s / 2, my = t.y + t.s / 2;
+
+            ctx.fillStyle = rgb(STYLE.ice);
+            ctx.beginPath(); ctx.roundRect(t.x, t.y, t.s, t.s, t.s * 0.075); ctx.fill();
+
+            // A diagonal glint so the ice doesn't look flat.
+            if (ch !== 'G') {
+                ctx.strokeStyle = rgb(STYLE.iceShine);
+                ctx.lineWidth = Math.max(2, cell * 0.04);
+                ctx.beginPath();
+                ctx.moveTo(t.x + t.s * 0.2, t.y + t.s * 0.45);
+                ctx.lineTo(t.x + t.s * 0.45, t.y + t.s * 0.2);
+                ctx.stroke();
+            }
+
+            if (ch === 'H') {
+                ctx.fillStyle = rgb(STYLE.waterEdge);
+                ctx.beginPath(); ctx.ellipse(mx, my, t.s * 0.4, t.s * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = rgb(STYLE.water);
+                ctx.beginPath(); ctx.ellipse(mx, my, t.s * 0.34, t.s * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+            } else if (ch === 'G') {
+                drawFlag(ctx, t);
+            } else if (ch === 'S') {
+                const inset = cell * 0.08;
+                ctx.strokeStyle = rgb(STYLE.waterEdge);
+                ctx.lineWidth = Math.max(2, cell * 0.03);
+                ctx.beginPath(); ctx.roundRect(t.x + inset, t.y + inset, t.s - 2 * inset, t.s - 2 * inset, t.s * 0.06); ctx.stroke();
+            }
+        }
+    }
+
+    drawOverlay(ctx, lake, g, tileRect);
+    drawAgent(ctx, lake, g);
+}
+
+function drawFlag(ctx, t) {
+    const w = t.s, h = t.s;
+    const bx = t.x + w * 0.35, by = t.y + h * 0.82, ty = t.y + h * 0.18;
+    ctx.fillStyle = rgb(bright(STYLE.ice, -0.2));
+    ctx.beginPath(); ctx.ellipse(bx, by, w * 0.16, h * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(STYLE.panelEdge);
+    ctx.lineWidth = Math.max(2, w * 0.04);
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, ty); ctx.stroke();
+    tri(ctx, [bx, ty], [bx, ty + h * 0.28], [bx + w * 0.38, ty + h * 0.14], rgb(STYLE.p1));
+}
+
+// Goal chance in the corner of each tile and a chevron pointing the way the policy moves.
+// Kept to the tile edges so the agent in the middle stays visible.
+function drawOverlay(ctx, lake, g, tileRect) {
+    if (!state.policy) return;
+    const cell = g.cell, gap = Math.max(2, cell * 0.04);
+    const textSize = Math.min(Math.max(cell * 0.18, 10), 20);
+    const ink = rgb(STYLE.background, 0.75);
+    ctx.font = `700 ${textSize}px ${getComputedStyle(document.body).getPropertyValue('--font-mono') || 'monospace'}`;
+    ctx.textBaseline = 'top';
+
+    for (let r = 0; r < lake.rows; r++) {
+        for (let c = 0; c < lake.cols; c++) {
+            const ch = lake.map[r][c];
+            if (ch === 'H' || ch === 'G') continue;
+            const t = tileRect(r, c), s = r * lake.cols + c;
+
+            if (state.showValues && state.values) {
+                ctx.fillStyle = ink;
+                // Whole percentages stay clear of the up chevron, small tiles drop the % sign too.
+                const pct = Math.round(state.values[s] * 100);
+                ctx.fillText(cell >= 60 ? pct + '%' : String(pct), t.x + gap * 2, t.y + gap * 2);
+            }
+            if (state.showPolicy) {
+                const a = state.policy[s];
+                const dx = DCOL[a], dy = DROW[a], sx = -dy, sy = dx;
+                const size = cell * 0.08;
+                const tipX = t.x + t.s / 2 + dx * t.s * 0.44, tipY = t.y + t.s / 2 + dy * t.s * 0.44;
+                const bx = tipX - dx * size * 1.4, by = tipY - dy * size * 1.4;
+                tri(ctx, [tipX, tipY], [bx + sx * size, by + sy * size], [bx - sx * size, by - sy * size], ink);
+            }
+        }
+    }
+}
+
+function drawAgent(ctx, lake, g) {
+    const row = (lake.s / lake.cols) | 0, col = lake.s % lake.cols;
+    const px = g.x + (col + 0.5) * g.cell, py = g.y + (row + 0.5) * g.cell;
+    const r = g.cell * 0.24, ch = lake.tileAt(lake.s);
+
+    if (ch === 'H') {
+        // Fallen in: just the top of the head poking out of the water.
+        ctx.fillStyle = rgb(STYLE.text);
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.arc(px, py, r, Math.PI, Math.PI * 2); ctx.closePath(); ctx.fill();
+        return;
+    }
+
+    const body = ch === 'G' ? STYLE.highlight : STYLE.p0;
+    ctx.fillStyle = rgb(STYLE.background, 0.25);
+    ctx.beginPath(); ctx.arc(px, py + r * 0.15, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgb(body);
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgb(bright(body, 0.25));
+    ctx.beginPath(); ctx.arc(px, py, r * 0.75, 0, Math.PI * 2); ctx.fill();
+
+    if (lake.lastDir === -1) return;
+
+    // Arrow for the direction actually moved; orange when the ice sent us somewhere unintended.
+    const dx = DCOL[lake.lastDir], dy = DROW[lake.lastDir], sx = -dy, sy = dx;
+    const tip = [px + dx * r * 0.6, py + dy * r * 0.6];
+    const bx = px - dx * r * 0.25, by = py - dy * r * 0.25;
+    const color = lake.lastDir === lake.lastAction ? rgb(STYLE.background) : rgb(STYLE.slip);
+    tri(ctx, tip, [bx + sx * r * 0.4, by + sy * r * 0.4], [bx - sx * r * 0.4, by - sy * r * 0.4], color);
+}
+
+function drawChart() {
+    const { ctx, w, h } = fitCanvas($('chartCanvas'));
+    ctx.fillStyle = rgb(STYLE.background);
+    ctx.fillRect(0, 0, w, h);
+
+    const pad = { l: 40, r: 14, t: 28, b: 14 };
+    const x0 = pad.l, x1 = w - pad.r, y0 = pad.t, y1 = h - pad.b;
+    const yOf = v => y1 - v * (y1 - y0);
+    const mono = getComputedStyle(document.body).getPropertyValue('--font-mono') || 'monospace';
+
+    ctx.font = `600 13px ${mono}`;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = rgb(STYLE.text);
+    ctx.fillText('Playback win rate', pad.l, 14);
+
+    ctx.font = `11px ${mono}`;
+    ctx.lineWidth = 1;
+    for (const v of [0, 0.5, 1]) {
+        ctx.strokeStyle = rgb(STYLE.panelEdge);
+        ctx.beginPath(); ctx.moveTo(x0, yOf(v)); ctx.lineTo(x1, yOf(v)); ctx.stroke();
+        ctx.fillStyle = rgb(STYLE.textDim);
+        ctx.fillText(`${v * 100}%`, 4, yOf(v));
+    }
+
+    if (state.values) {
+        const target = state.values[state.lake.start];
+        ctx.strokeStyle = rgb(STYLE.p1);
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath(); ctx.moveTo(x0, yOf(target)); ctx.lineTo(x1, yOf(target)); ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    const data = state.winRate, n = data.length;
+    ctx.fillStyle = rgb(STYLE.textDim);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${n.toLocaleString()} episodes`, x1, 14);
+    ctx.textAlign = 'left';
+    if (n < 2) return;
+
+    // One point per pixel column at most, so long runs stay cheap to draw.
+    const cols = Math.max(2, Math.min(n, Math.floor(x1 - x0)));
+    ctx.strokeStyle = rgb(STYLE.highlight);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let k = 0; k < cols; k++) {
+        const idx = Math.round(k * (n - 1) / (cols - 1));
+        const x = x0 + (x1 - x0) * k / (cols - 1), y = yOf(data[idx]);
+        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+}
+
+// ===================================================================
+// Main loop (FrozenLakeUI.Update)
+// ===================================================================
+let lastTime = performance.now();
+function frame(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+
+    if (state.playing) {
+        const delay = 1 / state.stepsPerSecond;
+        state.timer += dt;
+        // Several steps a frame at high speeds, capped so a slow frame doesn't snowball.
+        for (let i = 0; state.timer >= delay && i < 1000; i++) {
+            state.timer -= delay;
+            step();
+        }
+        state.timer = Math.min(state.timer, delay);
+    }
+    if (state.worker) updateResults();
+
+    drawLake();
+    drawChart();
+    requestAnimationFrame(frame);
+}
+
+buildControls();
+resetPlayback();
+updateOutputs();
+syncControls();
+requestAnimationFrame(frame);
+</script>
+<script src="script.js"></script>
+</body>
+</html>
