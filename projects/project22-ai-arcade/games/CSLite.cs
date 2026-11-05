@@ -23,6 +23,7 @@ namespace arcade {
         public static float GunVariance = 1;            // One degree variance/inaccuracy for every shot ( not in radians )
         public static float BulletSpeed = 600;          // World units per second
         public static float MaxRoundTime = 120;         // Seconds before the round is called a draw
+        public static float FootstepDistance = 45;      // World units walked per footstep event
     }
 
     public enum CSGameResult {
@@ -39,9 +40,26 @@ namespace arcade {
         public int      Health;
         public float    FireCooldown;
         public int      Team;        // 0 = team 1, 1 = team 2
+        public float    StepDistance; // Distance walked since the last footstep
 
         public bool     Alive => Health > 0;
         public Vector2  Forward => new Vector2( MathF.Cos( Orientation ), MathF.Sin( Orientation ) );
+    }
+
+    public enum CSEventType {
+        Shot,       // PlayerId fired
+        Footstep,   // PlayerId took a step
+        Hit,        // PlayerId was hit (and survived)
+        Death,      // PlayerId was killed
+        WallHit,    // Bullet from PlayerId hit a wall at Position
+        RoundEnd,   // Result just stopped being PLAYING
+    }
+
+    // Things that happened during a Step, for audio/effects. The simulation never reads these.
+    public struct CSEvent {
+        public CSEventType  Type;
+        public int          PlayerId;
+        public Vector2      Position;
     }
 
     public struct CSCollider {
@@ -109,6 +127,7 @@ namespace arcade {
         public List<CSPlayer>   Players = new List<CSPlayer>();
         public List<CSCollider> Collider = new List<CSCollider>();
         public List<CSBullet>   Bullets = new List<CSBullet>();
+        public List<CSEvent>    Events = new List<CSEvent>(); // Cleared at the start of every Step
 
         public CSGameResult     Result { get; private set; } = CSGameResult.PLAYING;
         public int              TickCount { get; private set; } = 0;
@@ -155,6 +174,7 @@ namespace arcade {
 
         // Real-time step: runs as many fixed ticks as dt covers.
         public CSGameResult Step( float dt, List<CSPlayerAction> playerActions ) {
+            Events.Clear();
             LastTick += dt;
             while ( LastTick >= CSSettings.InvGameTickRate ) {
                 LastTick -= CSSettings.InvGameTickRate;
@@ -165,6 +185,7 @@ namespace arcade {
 
         // Exactly one fixed tick, for agents/training.
         public CSGameResult Step( List<CSPlayerAction> playerActions ) {
+            Events.Clear();
             Tick( playerActions );
             return Result;
         }
@@ -202,7 +223,13 @@ namespace arcade {
                 if ( a.MoveDown )  move.Y += 1;
                 if ( move != Vector2.Zero ) {
                     move = Vector2.Normalize( move ) * CSSettings.PlayerSpeed * dt;
+                    Vector2 before = p.Position;
                     p.Position = MovePlayer( p.Position, move );
+                    p.StepDistance += Vector2.Distance( before, p.Position );
+                    if ( p.StepDistance >= CSSettings.FootstepDistance ) {
+                        p.StepDistance -= CSSettings.FootstepDistance;
+                        Emit( CSEventType.Footstep, i, p.Position );
+                    }
                 }
 
                 if ( a.Shoot && p.FireCooldown <= 0 ) {
@@ -211,6 +238,7 @@ namespace arcade {
                     Vector2 muzzle = p.Position + new Vector2( MathF.Cos( dir ), MathF.Sin( dir ) ) * ( CSSettings.PlayerSize / 2f + 2 );
                     Bullets.Add( new CSBullet { Position = muzzle, Direction = dir, PlayerId = i } );
                     p.FireCooldown = CSSettings.GunFireCooldown;
+                    Emit( CSEventType.Shot, i, p.Position );
                 }
 
                 Players[i] = p;
@@ -218,7 +246,13 @@ namespace arcade {
 
             UpdateBullets( dt );
             Result = EvaluateResult();
+            if ( Result != CSGameResult.PLAYING ) {
+                Emit( CSEventType.RoundEnd, -1, Vector2.Zero );
+            }
         }
+
+        private void Emit( CSEventType type, int playerId, Vector2 position ) =>
+            Events.Add( new CSEvent { Type = type, PlayerId = playerId, Position = position } );
 
         private void UpdateBullets( float dt ) {
             float radius = CSSettings.PlayerSize / 2f;
@@ -250,12 +284,16 @@ namespace arcade {
                     CSPlayer p = Players[hitPlayer];
                     p.Health = Math.Max( 0, p.Health - CSSettings.BulletDamage );
                     Players[hitPlayer] = p;
+                    Emit( p.Alive ? CSEventType.Hit : CSEventType.Death, hitPlayer, p.Position );
                     Bullets.RemoveAt( b );
                     continue;
                 }
 
                 bool outOfWorld = end.X < 0 || end.Y < 0 || end.X > WorldWidth || end.Y > WorldHeight;
                 if ( wallT != float.MaxValue || outOfWorld ) {
+                    if ( wallT != float.MaxValue ) {
+                        Emit( CSEventType.WallHit, bullet.PlayerId, Vector2.Lerp( start, end, wallT ) );
+                    }
                     Bullets.RemoveAt( b );
                     continue;
                 }

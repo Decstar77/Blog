@@ -10,6 +10,8 @@ namespace arcade {
             Raylib.InitWindow( 1300, 900, "AI Arcade - CS Lite" );
             Raylib.SetWindowMinSize( 640, 480 );
             Raylib.SetTargetFPS( 60 );
+            Raylib.InitAudioDevice();
+            CSAudio audio = new CSAudio( listenerId: 0 );
 
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
@@ -29,6 +31,7 @@ namespace arcade {
                 actions[0] = HumanAction( game, 0 );
                 actions[1] = bot.Think( game, dt );
                 game.Step( dt, actions );
+                audio.Play( game );
 
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground( Style.Background );
@@ -37,6 +40,8 @@ namespace arcade {
                 Raylib.EndDrawing();
             }
 
+            audio.Unload();
+            Raylib.CloseAudioDevice();
             Raylib.CloseWindow();
         }
 
