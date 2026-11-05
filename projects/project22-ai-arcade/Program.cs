@@ -43,6 +43,7 @@ namespace arcade {
         private static CSPlayerAction HumanAction( CSLite game, int playerIndex ) {
             CSPlayer me = game.Players[playerIndex];
             var action = new CSPlayerAction {
+                PlayerId  = playerIndex,
                 MoveLeft  = Raylib.IsKeyDown( KeyboardKey.A ),
                 MoveRight = Raylib.IsKeyDown( KeyboardKey.D ),
                 MoveUp    = Raylib.IsKeyDown( KeyboardKey.W ),

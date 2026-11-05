@@ -9,19 +9,19 @@ namespace arcade {
         public float PreferredRange = 220;                // Close in when farther than this
         public float StrafeSwitchTime = 1.2f;             // Seconds between strafe direction flips
 
-        private readonly int    PlayerIndex;
+        public readonly int     PlayerId;
         private readonly Random Rng;
         private int             StrafeSign = 1;
         private float           StrafeTimer = 0;
 
         public CSBot( int playerIndex, int? seed = null ) {
-            PlayerIndex = playerIndex;
+            PlayerId = playerIndex;
             Rng = seed.HasValue ? new Random( seed.Value ) : new Random();
         }
 
         public CSPlayerAction Think( CSLite game, float dt ) {
-            var action = new CSPlayerAction();
-            CSPlayer me = game.Players[PlayerIndex];
+            var action = new CSPlayerAction { PlayerId = PlayerId };
+            CSPlayer me = game.Players[PlayerId];
             if ( !me.Alive || game.Result != CSGameResult.PLAYING ) return action;
 
             int target = NearestEnemy( game, me );
@@ -66,7 +66,7 @@ namespace arcade {
             float bestDist = float.MaxValue;
             for ( int i = 0; i < game.Players.Count; i++ ) {
                 CSPlayer p = game.Players[i];
-                if ( i == PlayerIndex || !p.Alive || p.Team == me.Team ) continue;
+                if ( i == PlayerId || !p.Alive || p.Team == me.Team ) continue;
                 float d = Vector2.DistanceSquared( p.Position, me.Position );
                 if ( d < bestDist ) { bestDist = d; best = i; }
             }

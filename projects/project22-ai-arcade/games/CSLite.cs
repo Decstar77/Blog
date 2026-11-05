@@ -33,6 +33,7 @@ namespace arcade {
     }
 
     public struct CSPlayer {
+        public int      PlayerId;    // Index into CSLite.Players
         public Vector2  Position;
         public float    Orientation; // Radians, 0 = +X, increasing clockwise on screen (Y points down)
         public int      Health;
@@ -51,10 +52,11 @@ namespace arcade {
     public struct CSBullet {
         public Vector2  Position;
         public float    Direction;
-        public int      Owner; // Player index that fired it
+        public int      PlayerId; // Player that fired it
     }
 
     public struct CSPlayerAction {
+        public int      PlayerId; // Player this action is for
         public bool     MoveLeft;
         public bool     MoveRight;
         public bool     MoveUp;
@@ -118,6 +120,7 @@ namespace arcade {
 
         private double          LastTick = 0;
         private readonly Random Rng;
+        private readonly List<CSPlayerAction> ActionOrder = new List<CSPlayerAction>();
 
         public CSLite( CSMap map, int? seed = null ) {
             this.MapData = map;
@@ -133,6 +136,7 @@ namespace arcade {
                     if ( t == CSMap.PlayerTeam1 || t == CSMap.PlayerTeam2 ) {
                         int team = t == CSMap.PlayerTeam1 ? 0 : 1;
                         Players.Add( new CSPlayer {
+                            PlayerId = Players.Count,
                             Position = cellMin + new Vector2( cell / 2 ),
                             Orientation = team == 0 ? 0 : MathF.PI,
                             Health = CSSettings.PlayerHealth,
@@ -171,11 +175,23 @@ namespace arcade {
             float dt = (float)CSSettings.InvGameTickRate;
             TickCount++;
 
+            // Reload ticks for everyone, even players with no action this tick.
             for ( int i = 0; i < Players.Count; i++ ) {
                 CSPlayer p = Players[i];
-                if ( !p.Alive ) continue;
+                p.FireCooldown = MathF.Max( 0, p.FireCooldown - dt );
+                Players[i] = p;
+            }
 
-                CSPlayerAction a = i < playerActions.Count ? playerActions[i] : default;
+            // Apply actions in a random order each tick so no player gets a first-shot advantage.
+            ActionOrder.Clear();
+            ActionOrder.AddRange( playerActions );
+            Rng.Shuffle( System.Runtime.InteropServices.CollectionsMarshal.AsSpan( ActionOrder ) );
+
+            foreach ( CSPlayerAction a in ActionOrder ) {
+                int i = a.PlayerId;
+                if ( i < 0 || i >= Players.Count ) continue;
+                CSPlayer p = Players[i];
+                if ( !p.Alive ) continue;
 
                 p.Orientation = WrapAngle( p.Orientation + Math.Clamp( a.Rotation, -1, 1 ) * CSSettings.PlayerTurnSpeed * dt );
 
@@ -189,12 +205,11 @@ namespace arcade {
                     p.Position = MovePlayer( p.Position, move );
                 }
 
-                p.FireCooldown = MathF.Max( 0, p.FireCooldown - dt );
                 if ( a.Shoot && p.FireCooldown <= 0 ) {
                     float spread = ( (float)Rng.NextDouble() * 2 - 1 ) * CSSettings.GunVariance * MathF.PI / 180f;
                     float dir = p.Orientation + spread;
                     Vector2 muzzle = p.Position + new Vector2( MathF.Cos( dir ), MathF.Sin( dir ) ) * ( CSSettings.PlayerSize / 2f + 2 );
-                    Bullets.Add( new CSBullet { Position = muzzle, Direction = dir, Owner = i } );
+                    Bullets.Add( new CSBullet { Position = muzzle, Direction = dir, PlayerId = i } );
                     p.FireCooldown = CSSettings.GunFireCooldown;
                 }
 
@@ -223,7 +238,7 @@ namespace arcade {
                 // Earliest enemy hit, only counts if it happens before the wall.
                 int hitPlayer = -1;
                 float hitT = float.MaxValue;
-                int ownerTeam = Players[bullet.Owner].Team;
+                int ownerTeam = Players[bullet.PlayerId].Team;
                 for ( int i = 0; i < Players.Count; i++ ) {
                     CSPlayer p = Players[i];
                     if ( !p.Alive || p.Team == ownerTeam ) continue;
