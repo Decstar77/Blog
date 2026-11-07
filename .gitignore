@@ -33,3 +33,4 @@ bin
 !site/demos/**/*.wasm
 *.stex
 
+projects/projectX-rpg/Cooked
