@@ -34,13 +34,13 @@ namespace arcade {
     }
 
     public struct CSPlayer {
-        public int      PlayerId;    // Index into CSLite.Players
+        public int      PlayerId;
         public Vector2  Position;
-        public float    Orientation; // Radians, 0 = +X, increasing clockwise on screen (Y points down)
+        public float    Orientation;
         public int      Health;
         public float    FireCooldown;
-        public int      Team;        // 0 = team 1, 1 = team 2
-        public float    StepDistance; // Distance walked since the last footstep
+        public int      Team;
+        public float    StepDistance;
 
         public bool     Alive => Health > 0;
         public Vector2  Forward => new Vector2( MathF.Cos( Orientation ), MathF.Sin( Orientation ) );
