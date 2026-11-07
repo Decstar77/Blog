@@ -1,9 +1,9 @@
 ﻿namespace Engine {
     public abstract class Resource {
-        public string   Name { get; protected set; } = "";
+        private ResourceFile? resourceFile = null;
 
-        public void Initialize(string resourceName) {
-            Name = resourceName;
+        public void Initialize(ResourceFile file) {
+            resourceFile = file;
         }
 
         public abstract bool LoadFromSource( ResourceFile resourceFile );
