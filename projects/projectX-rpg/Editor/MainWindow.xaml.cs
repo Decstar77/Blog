@@ -22,7 +22,7 @@ namespace Editor {
 
         public MainWindow() {
             InitializeComponent();
-            DockManager.Theme = new Vs2013DarkTheme();
+            DockManager.Theme = new Vs2013LightTheme();
 
             ConsolePanel console = new ConsolePanel();   // first, so it captures log output from everything below
             Console.WriteLine( $"[Editor] Resources: {EditorPaths.ResourcesPath}" );
@@ -38,6 +38,7 @@ namespace Editor {
             Attach( "viewport",     Stub( "Viewport: host the OpenGL renderer here." ) );
 
             defaultLayout = SerializeLayout();
+            UpdateChromeForState();
             Loaded += ( _, _ ) => LoadSavedLayout();
             Closing += OnClosing;
         }
@@ -135,5 +136,30 @@ namespace Editor {
         }
 
         private void Exit_Click( object sender, RoutedEventArgs e ) => Close();
+
+        // ---- Custom title bar ----
+
+        private void Minimize_Click( object sender, RoutedEventArgs e ) => WindowState = WindowState.Minimized;
+
+        private void Maximize_Click( object sender, RoutedEventArgs e ) =>
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+        protected override void OnStateChanged( EventArgs e ) {
+            base.OnStateChanged( e );
+            UpdateChromeForState();
+        }
+
+        private void UpdateChromeForState() {
+            bool maximized = WindowState == WindowState.Maximized;
+            // A maximized borderless window extends past the monitor by the frame thickness; pull content back in.
+            Thickness frame = SystemParameters.WindowResizeBorderThickness;
+            RootBorder.Padding = maximized
+                ? new Thickness( frame.Left + 2, frame.Top + 2, frame.Right + 2, frame.Bottom + 2 )
+                : new Thickness( 0 );
+            RootBorder.BorderThickness = maximized ? new Thickness( 0 ) : new Thickness( 1 );
+            RootBorder.BorderBrush = (Brush)Application.Current.FindResource( "BorderBrush" );
+            MaximizeButton.Content = maximized ? "" : "";
+            MaximizeButton.ToolTip = maximized ? "Restore Down" : "Maximize";
+        }
     }
 }

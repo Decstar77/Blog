@@ -93,19 +93,19 @@
                                             <Setter Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Kind}" Value="Folder">
-                                            <Setter Property="Foreground" Value="#DCB67A" />
+                                            <Setter Property="Foreground" Value="#C08A2E" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Kind}" Value="Image">
-                                            <Setter Property="Foreground" Value="#6FB3E0" />
+                                            <Setter Property="Foreground" Value="#2B79B5" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Kind}" Value="Audio">
-                                            <Setter Property="Foreground" Value="#C586C0" />
+                                            <Setter Property="Foreground" Value="#9B4F96" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Kind}" Value="Model">
-                                            <Setter Property="Foreground" Value="#89D185" />
+                                            <Setter Property="Foreground" Value="#3E8E3A" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Kind}" Value="Archive">
-                                            <Setter Property="Foreground" Value="#CE9178" />
+                                            <Setter Property="Foreground" Value="#B5532F" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -117,7 +117,7 @@
 
                     <!-- Extension tag -->
                     <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="3" Padding="3,0"
-                            Background="#B0000000" CornerRadius="2">
+                            Background="#D0FFFFFF" CornerRadius="2">
                         <TextBlock Text="{Binding Extension}" FontSize="9" Foreground="{StaticResource TextDimBrush}" />
                         <Border.Style>
                             <Style TargetType="Border">
@@ -234,7 +234,7 @@
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate DataType="{x:Type local:FolderNode}" ItemsSource="{Binding Children}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" Foreground="#DCB67A"
+                            <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" Foreground="#C08A2E"
                                        VerticalAlignment="Center" Margin="0,0,6,0" FontSize="12" />
                             <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontSize="12" />
                         </StackPanel>

@@ -7,9 +7,9 @@ namespace Editor {
             base.OnStartup( e );
             EditorPaths.ParseArgs( e.Args );
 
-            // Built-in Fluent dark styles for stock controls (menus, trees, scrollbars, text boxes).
+            // Built-in Fluent light styles for stock controls (menus, trees, scrollbars, text boxes).
             // Set here rather than in XAML so it merges alongside the palette in App.xaml instead of being replaced by it.
-            ThemeMode = ThemeMode.Dark;
+            ThemeMode = ThemeMode.Light;
 
             MainWindow = new MainWindow();
             MainWindow.Show();
