@@ -1,10 +1,4 @@
 ﻿namespace Engine.Resources {
-    // Owns every loaded resource. Construct once after the window (it needs a GL context) and dispose
-    // before it, e.g. `using ResourceManager resources = new ResourceManager( ... );` right after the window.
-    //
-    // Lookup order for LoadResource( "Textures/grass.png" ):
-    //   1. <basePath>/Cooked/Textures/grass.png.res   (engine format, loaded directly)
-    //   2. <assetPath>/Textures/grass.png             (source asset, cooked to 1. then loaded)
     public sealed class ResourceManager : IDisposable {
         private static ResourceManager? instance;
         public static ResourceManager Instance => instance ?? throw new InvalidOperationException( "ResourceManager has not been created" );

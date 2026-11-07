@@ -2,8 +2,6 @@
 
 namespace Engine {
     public static class ImageCooker {
-        // Decodes a png/jpg/tga/bmp/... with stb_image and writes it as an ImageFileFormat header + raw
-        // RGBA8 pixels (rows top to bottom), which is what the renderer expects.
         public static bool Cook( string assetOsPath, string cookedOsPath ) {
             try {
                 ImageResult image;
