@@ -46,6 +46,7 @@ namespace Engine {
             window.Initialize();
 
             GL = window.CreateOpenGL();
+            OpenGLInstance.Set( GL );
             GL.Viewport( 0, 0, (uint)Width, (uint)Height );
             window.FramebufferResize += size => GL.Viewport( 0, 0, (uint)size.X, (uint)size.Y );
 

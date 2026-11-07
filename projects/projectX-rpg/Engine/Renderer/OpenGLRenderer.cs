@@ -1,6 +1,5 @@
 ﻿using System.Numerics;
 using System.Runtime.InteropServices;
-using Engine.Renderer;
 using Silk.NET.OpenGL;
 
 namespace Engine {
@@ -57,7 +56,39 @@ namespace Engine {
             Handle = handle; Width = width; Height = height;
         }
 
-        public void Dispose() => OpenGLInstance.Get().DeleteTexture( Handle );
+        // pixels: width * height * bytes-per-pixel for the format, rows top to bottom.
+        internal static OpenGLTexture2D Create( GL gl, int width, int height, ImageFormat format, ReadOnlySpan<byte> pixels, bool pixelated = true ) {
+            int expected = width * height * ImageFileFormat.FormatSizeBytes( format );
+            if ( expected == 0 || pixels.Length != expected ) {
+                throw new ArgumentException( $"Expected {expected} bytes of {format} data, got {pixels.Length}" );
+            }
+
+            ( InternalFormat internalFormat, PixelFormat pixelFormat, PixelType pixelType ) = format switch {
+                ImageFormat.RGB     => ( InternalFormat.Rgb8, PixelFormat.Rgb, PixelType.UnsignedByte ),
+                ImageFormat.RGBA    => ( InternalFormat.Rgba8, PixelFormat.Rgba, PixelType.UnsignedByte ),
+                ImageFormat.RGBA_F  => ( InternalFormat.Rgba32f, PixelFormat.Rgba, PixelType.Float ),
+                _                   => throw new ArgumentException( $"Unsupported image format {format}" ),
+            };
+
+            uint handle = gl.GenTexture();
+            gl.BindTexture( TextureTarget.Texture2D, handle );
+            gl.PixelStore( PixelStoreParameter.UnpackAlignment, 1 );
+            gl.TexImage2D<byte>( TextureTarget.Texture2D, 0, internalFormat, (uint)width, (uint)height, 0, pixelFormat, pixelType, pixels );
+
+            int filter = (int)( pixelated ? TextureMinFilter.Nearest : TextureMinFilter.Linear );
+            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, filter );
+            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, filter );
+            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge );
+            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge );
+
+            return new OpenGLTexture2D( handle, width, height );
+        }
+
+        public void Dispose() {
+            if ( Handle != 0 ) {
+                OpenGLInstance.Get().DeleteTexture( Handle );
+            }
+        }
     }
 
     // Immediate-mode 2D batch renderer. All draws between BeginFrame/EndFrame are collected into one
@@ -171,22 +202,7 @@ void main() {
 
         // rgba: width * height * 4 bytes, rows top to bottom.
         public OpenGLTexture2D CreateTexture( int width, int height, ReadOnlySpan<byte> rgba, bool pixelated = true ) {
-            if ( rgba.Length != width * height * 4 ) {
-                throw new ArgumentException( $"Expected {width * height * 4} bytes of RGBA data, got {rgba.Length}" );
-            }
-
-            uint handle = gl.GenTexture();
-            gl.BindTexture( TextureTarget.Texture2D, handle );
-            gl.PixelStore( PixelStoreParameter.UnpackAlignment, 1 );
-            gl.TexImage2D<byte>( TextureTarget.Texture2D, 0, InternalFormat.Rgba8, (uint)width, (uint)height, 0, PixelFormat.Rgba, PixelType.UnsignedByte, rgba );
-
-            int filter = (int)( pixelated ? TextureMinFilter.Nearest : TextureMinFilter.Linear );
-            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, filter );
-            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, filter );
-            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge );
-            gl.TexParameter( TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge );
-
-            return new OpenGLTexture2D( handle, width, height );
+            return OpenGLTexture2D.Create( gl, width, height, ImageFormat.RGBA, rgba, pixelated );
         }
 
         // ---------------------------------------------------------------- Shapes
