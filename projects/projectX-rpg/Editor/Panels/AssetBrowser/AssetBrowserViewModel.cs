@@ -156,7 +156,7 @@ namespace Editor.Panels.AssetBrowser {
 
         private void RefreshAll() {
             foreach ( FolderNode root in Roots ) {
-                root.Invalidate();
+                root.InvalidateTree();
             }
             Reload();
             Navigated?.Invoke( this, EventArgs.Empty );
@@ -376,6 +376,75 @@ namespace Editor.Panels.AssetBrowser {
             foreach ( string parent in items.Select( i => Path.GetDirectoryName( i.OsPath )! ).Distinct() ) {
                 RefreshFolder( parent );
             }
+        }
+
+        // True if paths can be moved into targetFolder: not into itself or its own subfolder, and not where they already are.
+        public bool CanMove( IReadOnlyList<string> paths, string targetFolder ) {
+            if ( IsBusy || paths.Count == 0 || !Directory.Exists( targetFolder ) || !IsUnderRoot( targetFolder ) ) {
+                return false;
+            }
+            string target = Path.GetFullPath( targetFolder );
+            bool anyElsewhere = false;
+            foreach ( string path in paths ) {
+                string full = Path.GetFullPath( path );
+                if ( Directory.Exists( full ) && IsSameOrInside( target, full ) ) {
+                    return false;
+                }
+                if ( !string.Equals( Path.GetDirectoryName( full ), target, StringComparison.OrdinalIgnoreCase ) ) {
+                    anyElsewhere = true;
+                }
+            }
+            return anyElsewhere;
+        }
+
+        // Moves resources/folders into targetFolder. Name clashes are skipped and reported rather than overwritten.
+        public void Move( IReadOnlyList<string> paths, string targetFolder ) {
+            if ( !CanMove( paths, targetFolder ) ) {
+                return;
+            }
+            int moved = 0;
+            List<string> clashes = new();
+            HashSet<string> touched = new( StringComparer.OrdinalIgnoreCase ) { targetFolder };
+            foreach ( string path in paths ) {
+                string parent = Path.GetDirectoryName( path )!;
+                if ( string.Equals( parent, targetFolder, StringComparison.OrdinalIgnoreCase ) ) {
+                    continue;
+                }
+                string dest = Path.Combine( targetFolder, Path.GetFileName( path ) );
+                if ( File.Exists( dest ) || Directory.Exists( dest ) ) {
+                    clashes.Add( Path.GetFileName( path ) );
+                    continue;
+                }
+                try {
+                    string oldName = EditorPaths.ToResourceName( path );
+                    if ( Directory.Exists( path ) ) {
+                        Directory.Move( path, dest );
+                    } else {
+                        File.Move( path, dest );
+                    }
+                    Console.WriteLine( $"[AssetBrowser] Moved {oldName} -> {EditorPaths.ToResourceName( dest )}" );
+                    touched.Add( parent );
+                    moved++;
+                } catch ( Exception e ) {
+                    Console.Error.WriteLine( $"[AssetBrowser] Couldn't move {path}: {e.Message}" );
+                }
+            }
+            foreach ( string folder in touched ) {
+                RefreshFolder( folder );
+            }
+            Status = $"Moved {moved} item(s) to {DisplayPath( targetFolder )}"
+                   + ( clashes.Count > 0 ? $", {clashes.Count} skipped (name already exists there)" : "" );
+            if ( clashes.Count > 0 ) {
+                MessageBox.Show( Application.Current.MainWindow,
+                    $"{DisplayPath( targetFolder )} already has items with these names, so they weren't moved:{Environment.NewLine}{Environment.NewLine}"
+                    + string.Join( Environment.NewLine, clashes.Take( 12 ).Select( n => "    " + n ) ),
+                    "Move", MessageBoxButton.OK, MessageBoxImage.Information );
+            }
+        }
+
+        private static bool IsSameOrInside( string path, string folder ) {
+            string rel = Path.GetRelativePath( folder, path );
+            return rel == "." || ( !rel.StartsWith( ".." ) && !Path.IsPathRooted( rel ) );
         }
 
         private static bool IsValidName( string name ) {

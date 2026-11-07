@@ -253,6 +253,9 @@
                      SelectionChanged="AssetList_SelectionChanged"
                      MouseDoubleClick="AssetList_MouseDoubleClick"
                      KeyDown="AssetList_KeyDown"
+                     PreviewMouseLeftButtonDown="AssetList_PreviewMouseLeftButtonDown"
+                     PreviewMouseLeftButtonUp="AssetList_PreviewMouseLeftButtonUp"
+                     PreviewMouseMove="AssetList_PreviewMouseMove"
                      AllowDrop="True" DragOver="Browser_DragOver" Drop="Browser_Drop" DragLeave="Browser_DragLeave">
                 <ListBox.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -276,7 +279,7 @@
                 </TextBlock.Style>
             </TextBlock>
 
-            <!-- Shown while files are dragged over the browser; says which folder they'll land in -->
+            <!-- Shown while files or tiles are dragged over the browser; says which folder they'll land in -->
             <Border x:Name="DropOverlay" Grid.Column="0" Grid.ColumnSpan="3" Visibility="Collapsed" IsHitTestVisible="False"
                     Background="#33007ACC" BorderBrush="{StaticResource AccentBrush}" BorderThickness="2" CornerRadius="4" Margin="2">
                 <Border Background="{StaticResource ToolbarBrush}" CornerRadius="4" Padding="14,8"

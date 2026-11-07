@@ -3,7 +3,7 @@ using Engine;
 using Engine.Resources;
 
 namespace game {
-    public static class Game {
+    public static class Program {
         public static void Main( string[] args ) {
             using OpenGLWindow window = new OpenGLWindow( "projectX-rpg", 1280, 720 );
             using OpenGLRenderer renderer = new OpenGLRenderer( window );
