@@ -1,16 +1,10 @@
 using System.Windows.Media;
 using Editor.Core;
 using Engine;
+using Engine.Resources;
 
 namespace Editor.Panels.AssetBrowser {
     public enum AssetKind { Folder, Image, Audio, Model, Archive, Other }
-
-    public enum CookState {
-        NotCookable,    // no cooker for this kind yet
-        Uncooked,       // cookable, no .res on disk
-        Stale,          // .res is older than the source asset
-        Cooked,         // .res is up to date
-    }
 
     public static class AssetKinds {
         private static readonly Dictionary<string, AssetKind> byExtension = new( StringComparer.OrdinalIgnoreCase ) {
@@ -24,28 +18,38 @@ namespace Editor.Panels.AssetBrowser {
             [ ".unitypackage" ] = AssetKind.Archive,
         };
 
-        // Which engine Resource knows how to cook each kind. Add an entry here when a new cooker lands.
-        private static readonly Dictionary<AssetKind, Func<Resource>> cookers = new() {
-            [ AssetKind.Image ] = () => new ImageResource(),
+        // Which engine Resource cooks each source extension. Add entries here as new cookers land;
+        // anything not listed is rejected as "not supported" on import.
+        private static readonly Dictionary<string, Func<Resource>> cookers = new( StringComparer.OrdinalIgnoreCase ) {
+            [ ".png" ]  = () => new ImageResource(),
+            [ ".jpg" ]  = () => new ImageResource(),
+            [ ".jpeg" ] = () => new ImageResource(),
+            [ ".bmp" ]  = () => new ImageResource(),
+            [ ".tga" ]  = () => new ImageResource(),
+            [ ".gif" ]  = () => new ImageResource(),
+            [ ".psd" ]  = () => new ImageResource(),
         };
 
-        public static AssetKind FromPath( string osPath ) =>
-            byExtension.TryGetValue( Path.GetExtension( osPath ), out AssetKind kind ) ? kind : AssetKind.Other;
+        public static IEnumerable<string> SupportedExtensions => cookers.Keys;
 
-        public static Resource? CreateCooker( AssetKind kind ) => cookers.TryGetValue( kind, out var make ) ? make() : null;
-        public static bool IsCookable( AssetKind kind ) => cookers.ContainsKey( kind );
+        // Works on both source files ("a.png") and resource names ("a.png" from "a.png.res").
+        public static AssetKind FromName( string name ) =>
+            byExtension.TryGetValue( Path.GetExtension( name ), out AssetKind kind ) ? kind : AssetKind.Other;
+
+        public static Resource? CreateCooker( string sourcePath ) =>
+            cookers.TryGetValue( Path.GetExtension( sourcePath ), out var make ) ? make() : null;
     }
 
+    // A folder or a cooked .res file under the Resources folder.
     public sealed class AssetItem : ObservableObject {
-        public string       Name { get; }
-        public string       OsPath { get; }
+        public string       Name { get; }       // display name: file name minus ".res"
+        public string       OsPath { get; }     // the .res file (or folder) on disk
         public AssetKind    Kind { get; }
         public bool         IsFolder => Kind == AssetKind.Folder;
-        public string       Extension => IsFolder ? "" : Path.GetExtension( OsPath ).TrimStart( '.' ).ToUpperInvariant();
+        public string       Extension => IsFolder ? "" : Path.GetExtension( Name ).TrimStart( '.' ).ToUpperInvariant();
         public long         SizeBytes { get; }
         public DateTime     Modified { get; }
         public string       ResourceName => EditorPaths.ToResourceName( OsPath );
-        public string       CookedOsPath => EditorPaths.ToCookedOsPath( OsPath );
 
         // Set when the item came from a recursive search, so the tile can show where it lives.
         public string?      Location { get; init; }
@@ -59,31 +63,20 @@ namespace Editor.Panels.AssetBrowser {
             _                 => "",
         };
 
-        private CookState cookState;
-        public CookState CookState { get => cookState; private set => Set( ref cookState, value ); }
-
         private ImageSource? thumbnail;
         public ImageSource? Thumbnail { get => thumbnail; set => Set( ref thumbnail, value ); }
 
         public AssetItem( FileSystemInfo info ) {
-            Name     = info.Name;
             OsPath   = info.FullName;
-            Kind     = info is DirectoryInfo ? AssetKind.Folder : AssetKinds.FromPath( info.FullName );
-            SizeBytes = info is FileInfo file ? file.Length : 0;
             Modified = info.LastWriteTime;
-            RefreshCookState();
-        }
-
-        public void RefreshCookState() {
-            if ( !AssetKinds.IsCookable( Kind ) ) {
-                CookState = CookState.NotCookable;
-                return;
-            }
-            FileInfo cooked = new FileInfo( CookedOsPath );
-            if ( !cooked.Exists ) {
-                CookState = CookState.Uncooked;
+            if ( info is FileInfo file ) {
+                Name      = info.Name.EndsWith( ResourceManager.Extension, StringComparison.OrdinalIgnoreCase )
+                            ? info.Name[ ..^ResourceManager.Extension.Length ] : info.Name;
+                Kind      = AssetKinds.FromName( Name );
+                SizeBytes = file.Length;
             } else {
-                CookState = cooked.LastWriteTime >= Modified ? CookState.Cooked : CookState.Stale;
+                Name = info.Name;
+                Kind = AssetKind.Folder;
             }
         }
 

@@ -25,10 +25,9 @@ namespace Editor {
             DockManager.Theme = new Vs2013DarkTheme();
 
             ConsolePanel console = new ConsolePanel();   // first, so it captures log output from everything below
-            Console.WriteLine( $"[Editor] Assets: {EditorPaths.AssetPath}" );
-            Console.WriteLine( $"[Editor] Cooked: {EditorPaths.CookedPath}" );
+            Console.WriteLine( $"[Editor] Resources: {EditorPaths.ResourcesPath}" );
 
-            assetBrowser = new AssetBrowserViewModel( EditorPaths.AssetPath );
+            assetBrowser = new AssetBrowserViewModel( EditorPaths.ResourcesPath );
             assetBrowser.SelectionChanged += ( _, _ ) =>
                 inspector.ShowAsset( assetBrowser.Selection.Count == 1 ? assetBrowser.Selection[ 0 ] : null, assetBrowser.Selection.Count );
 

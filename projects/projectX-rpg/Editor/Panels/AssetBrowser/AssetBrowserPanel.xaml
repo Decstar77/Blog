@@ -19,7 +19,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bg" Background="Transparent" CornerRadius="3">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -38,10 +38,13 @@
         </Style>
 
         <ContextMenu x:Key="ItemMenu">
-            <MenuItem Header="Cook" Command="{Binding CookCommand}" InputGestureText="Enter" />
-            <MenuItem Header="Copy resource name" Command="{Binding CopyResourceNameCommand}" InputGestureText="Ctrl+Shift+C" />
+            <MenuItem Header="Add resource..." Command="{Binding AddResourceCommand}" />
+            <MenuItem Header="New folder..." Command="{Binding NewFolderCommand}" />
             <Separator />
-            <MenuItem Header="Open with default app" Command="{Binding OpenCommand}" />
+            <MenuItem Header="Rename..." Command="{Binding RenameCommand}" InputGestureText="F2" />
+            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" InputGestureText="Del" />
+            <Separator />
+            <MenuItem Header="Copy resource name" Command="{Binding CopyResourceNameCommand}" InputGestureText="Ctrl+Shift+C" />
             <MenuItem Header="Show in Explorer" Command="{Binding ShowInExplorerCommand}" />
             <Separator />
             <MenuItem Header="Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5" />
@@ -127,32 +130,6 @@
                         </Border.Style>
                     </Border>
 
-                    <!-- Cook state dot -->
-                    <Ellipse Width="8" Height="8" Margin="4" HorizontalAlignment="Right" VerticalAlignment="Top" StrokeThickness="1.5">
-                        <Ellipse.Style>
-                            <Style TargetType="Ellipse">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CookState}" Value="Cooked">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                        <Setter Property="Fill" Value="#4EC9B0" />
-                                        <Setter Property="ToolTip" Value="Cooked" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding CookState}" Value="Stale">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                        <Setter Property="Fill" Value="#D7BA7D" />
-                                        <Setter Property="ToolTip" Value="Source changed since last cook" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding CookState}" Value="Uncooked">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                        <Setter Property="Stroke" Value="{StaticResource TextBrush}" />
-                                        <Setter Property="Fill" Value="#C0000000" />
-                                        <Setter Property="ToolTip" Value="Not cooked" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Ellipse.Style>
-                    </Ellipse>
                 </Grid>
 
                 <TextBlock Text="{Binding Name}" Margin="0,4,0,0" FontSize="11" TextAlignment="Center"
@@ -178,6 +155,7 @@
         <KeyBinding Key="Up" Modifiers="Alt" Command="{Binding UpCommand}" />
         <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding BackCommand}" />
         <KeyBinding Key="C" Modifiers="Ctrl+Shift" Command="{Binding CopyResourceNameCommand}" />
+        <KeyBinding Key="F2" Command="{Binding RenameCommand}" />
     </UserControl.InputBindings>
 
     <DockPanel>
@@ -189,6 +167,15 @@
                     <Button Style="{StaticResource ToolButton}" Content="&#xE72B;" Command="{Binding BackCommand}" ToolTip="Back (Alt+Left)" />
                     <Button Style="{StaticResource ToolButton}" Content="&#xE74A;" Command="{Binding UpCommand}" ToolTip="Up (Alt+Up)" />
                     <Button Style="{StaticResource ToolButton}" Content="&#xE72C;" Command="{Binding RefreshCommand}" ToolTip="Refresh (F5)" />
+                    <Border Width="1" Height="16" Margin="6,0" Background="{StaticResource BorderBrush}" />
+                    <Button Style="{StaticResource ToolButton}" Width="Auto" Padding="6,0" Command="{Binding AddResourceCommand}"
+                            ToolTip="Add resources to this folder (or drop files anywhere in the browser)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,5,0" />
+                            <TextBlock Text="Add resource" FontFamily="Segoe UI" FontSize="12" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolButton}" Content="&#xE8F4;" Command="{Binding NewFolderCommand}" ToolTip="New folder" />
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -221,11 +208,6 @@
         <Border DockPanel.Dock="Bottom" Background="{StaticResource ToolbarBrush}" BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,1,0,0" Padding="8,2">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Right" FontSize="11" Foreground="{StaticResource TextDimBrush}">
-                    <Run Text="●" Foreground="#4EC9B0" /> cooked
-                    <Run Text="   ●" Foreground="#D7BA7D" /> stale
-                    <Run Text="   ○" /> not cooked
-                </TextBlock>
                 <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{StaticResource TextDimBrush}" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Border>
@@ -239,7 +221,8 @@
 
             <!-- Folder tree -->
             <TreeView x:Name="FolderTree" Grid.Column="0" ItemsSource="{Binding Roots}" Background="Transparent"
-                      BorderThickness="0" SelectedItemChanged="FolderTree_SelectedItemChanged">
+                      BorderThickness="0" SelectedItemChanged="FolderTree_SelectedItemChanged"
+                      AllowDrop="True" DragOver="Browser_DragOver" Drop="Browser_Drop" DragLeave="Browser_DragLeave">
                 <TreeView.ItemContainerStyle>
                     <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -269,7 +252,8 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      SelectionChanged="AssetList_SelectionChanged"
                      MouseDoubleClick="AssetList_MouseDoubleClick"
-                     KeyDown="AssetList_KeyDown">
+                     KeyDown="AssetList_KeyDown"
+                     AllowDrop="True" DragOver="Browser_DragOver" Drop="Browser_Drop" DragLeave="Browser_DragLeave">
                 <ListBox.ItemsPanel>
                     <ItemsPanelTemplate>
                         <WrapPanel Orientation="Horizontal" />
@@ -277,8 +261,9 @@
                 </ListBox.ItemsPanel>
             </ListBox>
 
-            <TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
-                       Foreground="{StaticResource TextDimBrush}" IsHitTestVisible="False" Text="Empty">
+            <TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                       Foreground="{StaticResource TextDimBrush}" IsHitTestVisible="False"
+                       Text="Empty folder.&#x0a;Drop files here or use Add resource.">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -290,6 +275,15 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
+
+            <!-- Shown while files are dragged over the browser; says which folder they'll land in -->
+            <Border x:Name="DropOverlay" Grid.Column="0" Grid.ColumnSpan="3" Visibility="Collapsed" IsHitTestVisible="False"
+                    Background="#33007ACC" BorderBrush="{StaticResource AccentBrush}" BorderThickness="2" CornerRadius="4" Margin="2">
+                <Border Background="{StaticResource ToolbarBrush}" CornerRadius="4" Padding="14,8"
+                        HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16">
+                    <TextBlock x:Name="DropLabel" FontSize="13" />
+                </Border>
+            </Border>
         </Grid>
     </DockPanel>
 </UserControl>

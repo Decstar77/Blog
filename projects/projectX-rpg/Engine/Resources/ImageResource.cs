@@ -1,7 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 
 namespace Engine {
-    enum ImageFormat : int {
+    public enum ImageFormat : int {
         Invalid = 0,
         RGB     = 1,
         RGBA    = 2,
@@ -9,7 +9,7 @@ namespace Engine {
     }
 
     [StructLayout( LayoutKind.Sequential )]
-    struct ImageFileFormat {
+    public struct ImageFileFormat {
         public const int    Magic = 0x474D4958; // "XIMG"
 
         public int          MagicNumber;

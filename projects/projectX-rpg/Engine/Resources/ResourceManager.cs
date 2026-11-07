@@ -3,27 +3,27 @@
         private static ResourceManager? instance;
         public static ResourceManager Instance => instance ?? throw new InvalidOperationException( "ResourceManager has not been created" );
 
-        public const string CookedFolder = "Cooked";
-        public const string CookedExtension = ".res";
+        // Everything the engine loads lives under <BasePath>/Resources as cooked "<resource name>.res" files.
+        // Raw source assets (png, wav, ...) are cooked into there by the editor; the engine never sees them.
+        public const string ResourcesFolder = "Resources";
+        public const string Extension = ".res";
 
         public string BasePath { get; }
-        public string AssetPath { get; }
-        public string CookedPath => Path.Combine( BasePath, CookedFolder );
+        public string ResourcesPath => Path.Combine( BasePath, ResourcesFolder );
 
         private readonly Dictionary<string, Resource> resources = new();
 
-        public ResourceManager( string basePath, string assetPath ) {
+        public ResourceManager( string basePath ) {
             if ( instance != null ) {
                 throw new InvalidOperationException( "ResourceManager already exists" );
             }
             BasePath = basePath;
-            AssetPath = assetPath;
             instance = this;
         }
 
         public static T? Load<T>( string resourceName ) where T : Resource, new() => Instance.LoadResource<T>( resourceName );
 
-        // Returns null if the resource has neither a cooked file nor a source asset, or fails to load.
+        // Returns null if the resource doesn't exist or fails to load.
         public T? LoadResource<T>( string resourceName ) where T : Resource, new() {
             resourceName = NormalizeName( resourceName );
 
@@ -36,18 +36,10 @@
 
             T resource = new T();
 
-            string cookedOsPath = Path.Combine( CookedPath, resourceName + CookedExtension );
-            ResourceFile file = new ResourceFile( resourceName, cookedOsPath );
+            ResourceFile file = new ResourceFile( resourceName, ToOsPath( resourceName ) );
             if ( !file.Exists ) {
-                string assetOsPath = Path.Combine( AssetPath, resourceName );
-                if ( !File.Exists( assetOsPath ) || !resource.Cook( assetOsPath, cookedOsPath ) ) {
-                    Console.Error.WriteLine( $"[ResourceManager] Could not find or cook '{resourceName}'" );
-                    return null;
-                }
-                file = new ResourceFile( resourceName, cookedOsPath );
-                if ( !file.Exists ) {
-                    return null;
-                }
+                Console.Error.WriteLine( $"[ResourceManager] Resource '{resourceName}' not found at {file.OsPath}" );
+                return null;
             }
 
             resource.Initialize( file );
@@ -77,6 +69,8 @@
                 instance = null;
             }
         }
+
+        public string ToOsPath( string resourceName ) => Path.Combine( ResourcesPath, NormalizeName( resourceName ) + Extension );
 
         // So "Textures\a.png" and "textures/a.png" share one cache entry.
         private static string NormalizeName( string name ) => name.Replace( '\\', '/' ).TrimStart( '/' ).ToLowerInvariant();

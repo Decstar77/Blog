@@ -85,6 +85,22 @@ namespace Editor.Panels.AssetBrowser {
             return node;
         }
 
+        // Finds an already-loaded node for osPath without expanding anything. Null if it isn't loaded.
+        public FolderNode? Find( string osPath ) {
+            if ( string.Equals( OsPath, Path.GetFullPath( osPath ), StringComparison.OrdinalIgnoreCase ) ) {
+                return this;
+            }
+            if ( !childrenLoaded ) {
+                return null;
+            }
+            foreach ( FolderNode child in Children ) {
+                if ( child.Find( osPath ) is { } found ) {
+                    return found;
+                }
+            }
+            return null;
+        }
+
         public override string ToString() => Name;   // also what screen readers / UI automation see
 
         private static bool HasSubfolders( string path ) {

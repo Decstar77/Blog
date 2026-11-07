@@ -25,7 +25,7 @@ namespace Editor.Panels.Inspector {
             }
 
             Title.Text = item.Name;
-            Subtitle.Text = item.IsFolder ? "Folder" : $"{item.Kind} asset";
+            Subtitle.Text = item.IsFolder ? "Folder" : $"{item.Kind} resource";
 
             List<KeyValuePair<string, string>> rows = new() {
                 new( "Resource", item.ResourceName ),
@@ -34,24 +34,21 @@ namespace Editor.Panels.Inspector {
             };
             if ( !item.IsFolder ) {
                 rows.Insert( 1, new( "Size", AssetItem.FormatSize( item.SizeBytes ) ) );
-                rows.Add( new( "Cook state", item.CookState.ToString() ) );
-                if ( item.CookState != CookState.NotCookable ) {
-                    rows.Add( new( "Cooked file", item.CookedOsPath ) );
-                }
             }
             Rows.ItemsSource = rows;
 
             if ( item.Kind == AssetKind.Image ) {
-                var (size, image) = await Task.Run( () => (ThumbnailLoader.ReadSize( item.OsPath ), ThumbnailLoader.Decode( item.OsPath, 512 )) );
+                var (header, image) = await Task.Run( () => (ThumbnailLoader.ReadHeader( item.OsPath ), ThumbnailLoader.Decode( item.OsPath, 512 )) );
                 if ( id != requestId ) {
                     return;   // selection moved on while we were decoding
                 }
-                if ( size is { } s ) {
-                    rows.Insert( 2, new( "Dimensions", $"{s.Width} × {s.Height}" ) );
+                if ( header is { } h ) {
+                    rows.Insert( 2, new( "Dimensions", $"{h.Width} × {h.Height}" ) );
+                    rows.Insert( 3, new( "Format", h.Format.ToString() ) );
                     Rows.ItemsSource = null;
                     Rows.ItemsSource = rows;
                     // Pixel art stays crisp when shown small; photos look better smoothed.
-                    RenderOptions.SetBitmapScalingMode( Preview, s.Width <= 256 ? BitmapScalingMode.NearestNeighbor : BitmapScalingMode.HighQuality );
+                    RenderOptions.SetBitmapScalingMode( Preview, h.Width <= 256 ? BitmapScalingMode.NearestNeighbor : BitmapScalingMode.HighQuality );
                 }
                 if ( image != null ) {
                     Preview.Source = image;
