@@ -96,7 +96,7 @@ namespace arcade {
         private static readonly int[] DC = { 0, 0, -1, 1 };
 
         // Centre of the next cell on a shortest 4-connected grid path, or null if no path exists.
-        private static Vector2? NextWaypoint( CSLite game, Vector2 from, Vector2 to ) {
+        public static Vector2? NextWaypoint( CSLite game, Vector2 from, Vector2 to ) {
             CSMap map = game.MapData;
             var start = game.CellOf( from );
             var goal = game.CellOf( to );
