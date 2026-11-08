@@ -1,11 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Numerics;
-using System.Text;
+﻿using System.Numerics;
 
 namespace arcade {
     public struct CSGameState {
         public double[] X;
+    }
+
+    public struct GradData {
+        public double[] m;
+        public double[] r;
+        public double[] f;
+        public int ma;
+        public int ra;
+        public int fa;
     }
 
     public class CSReinforce {
@@ -21,7 +27,7 @@ namespace arcade {
         private int             agentId;
         private int             enemyId;
 
-        public CSReinforce( CSMap map, int d, int? seed ) {
+        public CSReinforce( CSMap map, int? seed ) {
             this.map = map;
             this.seed = seed;
             this.actions = new List<CSPlayerAction>();
@@ -148,6 +154,9 @@ namespace arcade {
                 if ( e.Type == CSEventType.Hit ) {
                     reward += ( e.PlayerId == agentId ) ? -0.1f : 0.1f;
                 }
+                else if ( e.Type == CSEventType.Death && e.PlayerId == enemyId ) {
+                    reward += 0.1f;
+                }
             }
 
             return reward;
@@ -155,11 +164,13 @@ namespace arcade {
         
         public double[] HeadProbs( double[] x, double[] theta, int startingRow, int rowCount ) {
             double[] p = new double[rowCount];
-            double max = 0;
+            double max = double.NegativeInfinity;
             for ( int row = 0; row < rowCount; row++ ) {
                 int off = (startingRow + row) * FeatureCount;
                 double g = 0;
-                for ( int i = 0; i < FeatureCount; i++ ) g += x[i] * theta[off + i];
+                for ( int i = 0; i < FeatureCount; i++ ) {
+                    g += x[i] * theta[off + i];
+                }
                 p[row] = g;
                 max = Math.Max( max, g );
             }
@@ -176,25 +187,41 @@ namespace arcade {
             (true,false,false,true),   (false,true,true,false),  (false,true,false,true) 
         };
 
-        public CSPlayerAction Think( CSGameState s, double[] theta ) {
-            double[] m = HeadProbs(s.X, theta, 0, 9);
-            double[] r = HeadProbs(s.X, theta, 9, 3);
-            double[] f = HeadProbs(s.X, theta, 12, 2);
-            int ma = Helpers.Choose( m.Length, i => m[i] );
-            int ra = Helpers.Choose( r.Length, i => r[i] );
-            int fa = Helpers.Choose( f.Length, i => f[i] );
+        public (CSPlayerAction, GradData) Think( CSGameState s, double[] theta ) {
+            GradData grad = new GradData();
+            grad.m = HeadProbs(s.X, theta, 0, 9);
+            grad.r = HeadProbs(s.X, theta, 9, 3);
+            grad.f = HeadProbs(s.X, theta, 12, 2);
+            grad.ma = Helpers.Choose( grad.m.Length, i => grad.m[i], rng );
+            grad.ra = Helpers.Choose( grad.r.Length, i => grad.r[i], rng );
+            grad.fa = Helpers.Choose( grad.f.Length, i => grad.f[i], rng );
             CSPlayerAction action = new CSPlayerAction();
-            action.MoveLeft     = Moves[ma].L;
-            action.MoveRight    = Moves[ma].R;
-            action.MoveUp       = Moves[ma].U;
-            action.MoveDown     = Moves[ma].D;
-            action.Rotation     = (float)ra - 1.0f;
-            action.Shoot        = fa == 0;
-            return action;
+            action.PlayerId     = agentId;
+            action.MoveLeft     = Moves[grad.ma].L;
+            action.MoveRight    = Moves[grad.ma].R;
+            action.MoveUp       = Moves[grad.ma].U;
+            action.MoveDown     = Moves[grad.ma].D;
+            action.Rotation     = (float)grad.ra - 1.0f;
+            action.Shoot        = grad.fa == 0;
+            return (action, grad);
         }
 
-        public double[] GradLogProb( CSPlayerAction action, CSGameState s, double[] theta ) {
-            throw new NotImplementedException();
+        public void HeadGrads( double[] x, double[] p, double[] grad, int a, int startingRow, int rowCount ) {
+            for ( int k = 0; k < rowCount; k++ ) {
+                int off = (startingRow + k) * FeatureCount;
+                double coef = ( k == a ? 1 : 0 ) - p[k];
+                for ( int i = 0; i < FeatureCount; i++ ) {
+                    grad[off + i] = x[i] * coef;
+                }
+            }
+        }
+
+        public double[] GradLogProb( CSPlayerAction action, CSGameState s, GradData g, double[] theta ) {
+            double[] grad = new double[D];
+            HeadGrads(s.X, g.m, grad, g.ma, 0, 9);
+            HeadGrads(s.X, g.r, grad, g.ra, 9, 3);
+            HeadGrads(s.X, g.f, grad, g.fa, 12, 2);
+            return grad;
         }
 
         public void NewGame() {
@@ -205,50 +232,61 @@ namespace arcade {
         }
 
         public bool     IsTerminal() { return game.Result != CSGameResult.PLAYING; }
-        public double[] InitialTheta() { return new double[FeatureCount * D]; }
+        public double[] InitialTheta() { return new double[D]; }
     }
 
     public class Reinforce {
         struct StateActionReward {
             public CSGameState      s;
             public CSPlayerAction   a;
+            public GradData         g;
             public float            r;
         }
 
-        public double[] PolicyControl( CSReinforce rl, int EpisodeCount, double Alpha, int? seed = null ) {
+        public double[] PolicyControl( CSReinforce rl, int EpisodeCount, double Alpha, double Gamma, int? seed = null ) {
             List<StateActionReward> episode = new List<StateActionReward>();
             List<double> returns = new List<double>();
-
             double[] theta = rl.InitialTheta();
+
+            double runningMean = 0;
+            double runningVar = 1;
+
             for ( int episodeIndex = 0; episodeIndex < EpisodeCount; episodeIndex++ ) {
                 episode.Clear();
                 rl.NewGame();
                 do {
-                    CSGameState    s = rl.GetState();
-                    CSPlayerAction a = rl.Think( s, theta );
-                    float          r = rl.Step( a );
-                    episode.Add( new StateActionReward() { s = s, a = a, r = r } );
+                    CSGameState     s = rl.GetState();
+                    (CSPlayerAction a, GradData g) = rl.Think( s, theta );
+                    float           r = rl.Step( a );
+                    episode.Add( new StateActionReward() { s = s, a = a, g = g, r = r } );
                 } while ( rl.IsTerminal() == false );
 
                 returns.Clear();
                 double G = 0;
                 for ( int t = episode.Count - 1; t >= 0; t-- ) {
-                    G = episode[t].r + G;
+                    G = episode[t].r + Gamma * G;
                     returns.Add( G );
                 }
                 returns.Reverse();
 
                 // Baseline: normalise returns.
-                double mean = returns.Average();
-                double std  = Math.Sqrt( returns.Average( g => (g - mean) * (g - mean) ) ) + 1e-8;
+                double currentMean = returns.Average();
+                double currentVar  = returns.Average( g => (g - runningMean) * (g - runningMean) );
+                double std         = Math.Sqrt( Math.Max( runningVar, 1e-2 ) );
 
                 double[] update = new double[theta.Length];
                 for ( int t = 0; t < episode.Count; t++ ) {
-                    double adv = ( returns[t] - mean ) / std;
-                    double[] grad = rl.GradLogProb( episode[t].a, episode[t].s, theta );
+                    double adv = ( returns[t] - runningMean ) / ( std );
+                    double[] grad = rl.GradLogProb( episode[t].a, episode[t].s, episode[t].g, theta );
                     for ( int i = 0; i < theta.Length; i++ ) update[i] += adv * grad[i];
                 }
-                for ( int i = 0; i < theta.Length; i++ ) theta[i] += Alpha * update[i];
+                for ( int i = 0; i < theta.Length; i++ ) { 
+                    theta[i] += Alpha * update[i] / episode.Count; 
+                }
+
+                const double Beta = 0.05;
+                runningMean += Beta * ( currentMean - runningMean );
+                runningVar += Beta * ( currentVar - runningVar );
             }
 
             return theta;

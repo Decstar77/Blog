@@ -19,8 +19,8 @@ namespace arcade {
             }
         }
 
-        public static int Choose( int Count, Func<int, double> selector ) {
-            double roll = Random.Shared.NextDouble();
+        public static int Choose( int Count, Func<int, double> selector, Random? rng = null) {
+            double roll = rng == null ? Random.Shared.NextDouble(): rng.NextDouble();
             double cumulativeSum = 0.0;
 
             for ( int i = 0; i < Count; i++ ) {

@@ -16,6 +16,11 @@ namespace arcade {
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
 
+            int seed = 40;
+            CSReinforce csrl = new CSReinforce( map, seed );
+            Reinforce reinforce = new Reinforce();
+            double[] theta = reinforce.PolicyControl( csrl, 100, 0.1, 0.9, seed );
+
             CSLite game = new CSLite( map );
             CSBot bot = new CSBot( 1 );
             var actions = new List<CSPlayerAction> { default, default };
@@ -27,8 +32,8 @@ namespace arcade {
                     game = new CSLite( map );
                     bot = new CSBot( 1 );
                 }
-
-                actions[0] = HumanAction( game, 0 );
+                
+                actions[0] = csrl.Think(  // HumanAction( game, 0 );
                 actions[1] = bot.Think( game, dt );
                 game.Step( dt, actions );
                 audio.Play( game );
