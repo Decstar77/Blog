@@ -244,22 +244,21 @@ namespace arcade {
             return (action, grad);
         }
 
-        public void HeadGrads( double[] x, double[] p, double[] grad, int a, int startingRow, int rowCount ) {
+        // into += scale * grad of ln softmax for one head: row k gets x * (onehot(a)_k - p_k).
+        public static void AccumulateHeadGrads( double[] x, double[] p, int a, int startingRow, int rowCount, double scale, double[] into ) {
             for ( int k = 0; k < rowCount; k++ ) {
                 int off = (startingRow + k) * FeatureCount;
-                double coef = ( k == a ? 1 : 0 ) - p[k];
+                double coef = scale * ( ( k == a ? 1 : 0 ) - p[k] );
                 for ( int i = 0; i < FeatureCount; i++ ) {
-                    grad[off + i] = x[i] * coef;
+                    into[off + i] += x[i] * coef;
                 }
             }
         }
 
-        public double[] GradLogProb( CSGameState s, CSPlayerAction action, GradData g, double[] theta ) {
-            double[] grad = new double[D];
-            HeadGrads(s.X, g.m, grad, g.ma, 0, 9);
-            HeadGrads(s.X, g.r, grad, g.ra, 9, 3);
-            HeadGrads(s.X, g.f, grad, g.fa, 12, 2);
-            return grad;
+        public void AccumulateGradLogProb( CSGameState s, CSPlayerAction action, GradData g, double[] theta, double scale, double[] into ) {
+            AccumulateHeadGrads( s.X, g.m, g.ma, 0,  9, scale, into );
+            AccumulateHeadGrads( s.X, g.r, g.ra, 9,  3, scale, into );
+            AccumulateHeadGrads( s.X, g.f, g.fa, 12, 2, scale, into );
         }
 
         // Per-episode stats for logging, reset by NewGame.

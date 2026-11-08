@@ -6,7 +6,7 @@
         public (TAction, TCache)    Think( TState s, double[] theta );   // sample a ~ pi(.|s, theta)
         public float                Step( TAction a );                   // apply a, return the reward
         public bool                 IsTerminal();
-        public double[]             GradLogProb( TState s, TAction a, TCache cache, double[] theta ); // grad_theta ln pi(a|s, theta)
+        public void                 AccumulateGradLogProb( TState s, TAction a, TCache cache, double[] theta, double scale, double[] into ); // into += scale * grad_theta ln pi(a|s, theta)
 
         // Logging hooks.
         public void                 EndEpisode( double episodeReward );
@@ -28,6 +28,7 @@
             var episode = new List<StateActionReward<TState, TAction, TCache>>();
             List<double> returns = new List<double>();
             double[] theta = rl.InitialTheta();
+            double[] update = new double[theta.Length];
 
             double runningMean = 0;
             double runningVar = 1;
@@ -64,11 +65,10 @@
                 double currentVar  = returns.Average( g => (g - runningMean) * (g - runningMean) );
                 double std         = Math.Sqrt( Math.Max( runningVar, 1e-2 ) );
 
-                double[] update = new double[theta.Length];
+                Array.Clear( update );
                 for ( int t = 0; t < episode.Count; t++ ) {
                     double adv = ( returns[t] - runningMean ) / ( std );
-                    double[] grad = rl.GradLogProb( episode[t].s, episode[t].a, episode[t].c, theta );
-                    for ( int i = 0; i < theta.Length; i++ ) update[i] += adv * grad[i];
+                    rl.AccumulateGradLogProb( episode[t].s, episode[t].a, episode[t].c, theta, adv, update );
                 }
                 for ( int i = 0; i < theta.Length; i++ ) {
                     theta[i] += Alpha * update[i] / episode.Count;
