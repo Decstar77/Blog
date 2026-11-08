@@ -18,7 +18,7 @@ namespace arcade {
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
 
             int? seed = null;// 40;
-            CSReinforce csrl = new CSReinforce( map, seed );
+            CSReinforceLinear csrl = new CSReinforceLinear( map, seed );
             Reinforce reinforce = new Reinforce();
             // alpha/gamma tuned with `dotnet run -c Release -- train` (gamma is per decision, i.e. per ActionRepeat ticks).
             double[] theta = reinforce.PolicyControl( csrl, 200000, 0.3, 0.995, seed, LogEvery: 500 );
@@ -70,7 +70,7 @@ namespace arcade {
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
             Console.WriteLine( $"REINFORCE  episodes={episodes}  alpha={alpha}  gamma={gamma}  seed={seed}" );
-            new Reinforce().PolicyControl( new CSReinforce( map, seed ), episodes, alpha, gamma, seed, LogEvery: Math.Max( 1, episodes / 20 ) );
+            new Reinforce().PolicyControl( new CSReinforceLinear( map, seed ), episodes, alpha, gamma, seed, LogEvery: Math.Max( 1, episodes / 20 ) );
         }
 
         private static CSPlayerAction HumanAction( CSLite game, int playerIndex ) {

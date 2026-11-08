@@ -1,55 +1,61 @@
 ﻿using System.Numerics;
 
 namespace arcade {
-    public struct CSGameState {
-        public double[] X;
-    }
+    class CSTrainingLog {
+        int     episodes;
+        int     wins;
+        int     losses;
+        int     draws;
+        int     hitsDealt;
+        int     hitsTaken;
+        int     shots;
+        double  reward;
+        long    ticks;
 
-    public struct GradData {
-        public double[] m;
-        public double[] r;
-        public double[] f;
-        public int ma;
-        public int ra;
-        public int fa;
-    }
-
-    public class CSReinforce : PolicyGradientInterface<CSGameState, CSPlayerAction, GradData> {
-        private CSBot           bot;
-        private CSLite          game;
-        private CSMap           map;
-        private int?            seed;
-        private Random          rng;
-
-        private List<CSPlayerAction>    actions;
-
-        // Agent = the team-0 player ('1' on the map), so CSGameResult.WIN means the agent won. Players are created in map-scan order, so this index differs per map (map001: 1, map002: 0).
-        private int             agentId;
-        private int             enemyId;
-
-        public CSReinforce( CSMap map, int? seed ) {
-            this.map = map;
-            this.seed = seed;
-            this.actions = new List<CSPlayerAction>();
-            if ( seed != null ) {
-                this.rng = new Random( seed.Value );
-            }
-            else {
-                this.rng = new Random();
-            }
+        public void Add( CSGameResult result, double episodeReward, int length, int dealt, int taken, int fired ) {
+            episodes++;
+            if ( result == CSGameResult.WIN ) wins++;
+            else if ( result == CSGameResult.LOSS ) losses++;
+            else draws++;
+            reward += episodeReward;
+            ticks += length;
+            hitsDealt += dealt;
+            hitsTaken += taken;
+            shots += fired;
         }
 
-        // ------------------------------------------------------------------ Features
+        public void Print( int episode, int total, double seconds ) {
+            if ( episodes == 0 ) return;
+            double n = episodes;
+            double accuracy = shots > 0 ? hitsDealt / (double)shots : 0;
+            Console.WriteLine(
+                $"ep {episode,5}/{total}  win {wins / n,5:P0}  loss {losses / n,5:P0}  draw {draws / n,5:P0}  " +
+                $"reward {reward / n,6:F2}  len {ticks / n * CSSettings.InvGameTickRate,5:F1}s  " +
+                $"dealt {hitsDealt / n,4:F1}  taken {hitsTaken / n,4:F1}  acc {accuracy,4:P0}  [{seconds:F0}s]" );
+        }
 
-        public const int    RayCount      = 8;
-        public const float  RayRange      = 300;   // 6 cells
-        public const int    FeatureCount  = 7 + 7 + 2 + RayCount + 5 + 1; // = 30
-        public const int    D             = FeatureCount * 14;
+        public void Reset() {
+            episodes = wins = losses = draws = hitsDealt = hitsTaken = shots = 0;
+            reward = 0;
+            ticks = 0;
+        }
+    }
 
-        public CSGameState GetState() { return GetState( game, agentId, enemyId ); }
+    public struct CSGameState {
+        public double[] X;
 
-        // Features for any game, so a trained theta can drive the agent in a game this class doesn't own (e.g. the rendered one).
-        public static CSGameState GetState( CSLite game, int agentId, int enemyId ) {
+        public static int    RayCount      = 8;
+        public static float  RayRange      = 300;   // 6 cells
+        public static int    FeatureCount  = 7 + 7 + 2 + RayCount + 5 + 1; // = 30
+        public static int    OutputCount   = FeatureCount * 14; // 14 rows
+
+        public static readonly (bool L, bool R, bool U, bool D)[] Moves = {
+            (false,false,false,false), (true,false,false,false), (false,true,false,false),
+            (false,false,true,false),  (false,false,false,true), (true,false,true,false),
+            (true,false,false,true),   (false,true,true,false),  (false,true,false,true)
+        };
+
+        public static CSGameState Create(CSLite game, int agentId, int enemyId ) {
             CSPlayer me    = game.Players[agentId];
             CSPlayer enemy = game.Players[enemyId];
 
@@ -131,14 +137,50 @@ namespace arcade {
             return new CSGameState { X = x };
         }
 
-        // Angle from my facing to `dir`, in [-pi, pi]. Positive = turn with positive Rotation.
-        private static float RelativeBearing( CSPlayer me, Vector2 dir ) {
+        private static float RelativeBearing( CSPlayer me, Vector2 dir ) { // Angle from my facing to `dir`, in [-pi, pi]. Positive = turn with positive Rotation.
             if ( dir.LengthSquared() < 1e-6f ) return 0;
             return CSLite.WrapAngle( MathF.Atan2( dir.Y, dir.X ) - me.Orientation );
         }
+    }
 
-        // Each policy decision is held for this many game ticks (60 Hz / 6 = 10 decisions per second).
-        // Resampling every tick makes a random policy jitter in place and stretches credit assignment over hundreds of steps.
+    public struct GradDataLinear {
+        public double[] m;
+        public double[] r;
+        public double[] f;
+        public int ma;
+        public int ra;
+        public int fa;
+    }
+
+    public class CSReinforceLinear : PolicyGradientInterface<CSGameState, CSPlayerAction, GradDataLinear> {
+        private CSBot           bot;
+        private CSLite          game;
+        private CSMap           map;
+        private int?            seed;
+        private Random          rng;
+
+        private List<CSPlayerAction>    actions;
+
+        // Agent = the team-0 player ('1' on the map), so CSGameResult.WIN means the agent won. Players are created in map-scan order, so this index differs per map (map001: 1, map002: 0).
+        private int             agentId;
+        private int             enemyId;
+
+        public CSReinforceLinear( CSMap map, int? seed ) {
+            this.map = map;
+            this.seed = seed;
+            this.actions = new List<CSPlayerAction>();
+            if ( seed != null ) {
+                this.rng = new Random( seed.Value );
+            }
+            else {
+                this.rng = new Random();
+            }
+        }
+
+        // ------------------------------------------------------------------ Features
+
+        public CSGameState GetState() { return CSGameState.Create( game, agentId, enemyId ); }
+
         public static int ActionRepeat = 6;
         public int        Ticks { get; private set; }
 
@@ -187,9 +229,9 @@ namespace arcade {
             double[] p = new double[rowCount];
             double max = double.NegativeInfinity;
             for ( int row = 0; row < rowCount; row++ ) {
-                int off = (startingRow + row) * FeatureCount;
+                int off = (startingRow + row) * CSGameState.FeatureCount;
                 double g = 0;
-                for ( int i = 0; i < FeatureCount; i++ ) {
+                for ( int i = 0; i < CSGameState.FeatureCount; i++ ) {
                     g += x[i] * theta[off + i];
                 }
                 p[row] = g;
@@ -202,11 +244,7 @@ namespace arcade {
             return p;
         }
 
-        static readonly (bool L, bool R, bool U, bool D)[] Moves = {
-            (false,false,false,false), (true,false,false,false), (false,true,false,false),
-            (false,false,true,false),  (false,false,false,true), (true,false,true,false),
-            (true,false,false,true),   (false,true,true,false),  (false,true,false,true) 
-        };
+
 
         // Run the trained policy for the team-0 player of an external game.
         // Holds each decision for ActionRepeat ticks, matching how the policy was trained.
@@ -218,15 +256,15 @@ namespace arcade {
             if ( tick < heldSinceTick || tick - heldSinceTick >= ActionRepeat ) { // tick < heldSinceTick: the game was restarted
                 int me    = external.Players.FindIndex( p => p.Team == 0 );
                 int enemy = external.Players.FindIndex( p => p.Team == 1 );
-                (heldAction, _) = Think( GetState( external, me, enemy ), theta );
+                (heldAction, _) = Think( CSGameState.Create( external, me, enemy ), theta );
                 heldAction.PlayerId = me;
                 heldSinceTick = tick;
             }
             return heldAction;
         }
 
-        public (CSPlayerAction, GradData) Think( CSGameState s, double[] theta ) {
-            GradData grad = new GradData();
+        public (CSPlayerAction, GradDataLinear) Think( CSGameState s, double[] theta ) {
+            GradDataLinear grad = new GradDataLinear();
             grad.m = HeadProbs(s.X, theta, 0, 9);
             grad.r = HeadProbs(s.X, theta, 9, 3);
             grad.f = HeadProbs(s.X, theta, 12, 2);
@@ -235,10 +273,10 @@ namespace arcade {
             grad.fa = Helpers.Choose( grad.f.Length, i => grad.f[i], rng );
             CSPlayerAction action = new CSPlayerAction();
             action.PlayerId     = agentId;
-            action.MoveLeft     = Moves[grad.ma].L;
-            action.MoveRight    = Moves[grad.ma].R;
-            action.MoveUp       = Moves[grad.ma].U;
-            action.MoveDown     = Moves[grad.ma].D;
+            action.MoveLeft     = CSGameState.Moves[grad.ma].L;
+            action.MoveRight    = CSGameState.Moves[grad.ma].R;
+            action.MoveUp       = CSGameState.Moves[grad.ma].U;
+            action.MoveDown     = CSGameState.Moves[grad.ma].D;
             action.Rotation     = (float)grad.ra - 1.0f;
             action.Shoot        = grad.fa == 0;
             return (action, grad);
@@ -247,15 +285,15 @@ namespace arcade {
         // into += scale * grad of ln softmax for one head: row k gets x * (onehot(a)_k - p_k).
         public static void AccumulateHeadGrads( double[] x, double[] p, int a, int startingRow, int rowCount, double scale, double[] into ) {
             for ( int k = 0; k < rowCount; k++ ) {
-                int off = (startingRow + k) * FeatureCount;
+                int off = (startingRow + k) * CSGameState.FeatureCount;
                 double coef = scale * ( ( k == a ? 1 : 0 ) - p[k] );
-                for ( int i = 0; i < FeatureCount; i++ ) {
+                for ( int i = 0; i < CSGameState.FeatureCount; i++ ) {
                     into[off + i] += x[i] * coef;
                 }
             }
         }
 
-        public void AccumulateGradLogProb( CSGameState s, CSPlayerAction action, GradData g, double[] theta, double scale, double[] into ) {
+        public void AccumulateGradLogProb( CSGameState s, CSPlayerAction action, GradDataLinear g, double[] theta, double scale, double[] into ) {
             AccumulateHeadGrads( s.X, g.m, g.ma, 0,  9, scale, into );
             AccumulateHeadGrads( s.X, g.r, g.ra, 9,  3, scale, into );
             AccumulateHeadGrads( s.X, g.f, g.fa, 12, 2, scale, into );
@@ -276,54 +314,11 @@ namespace arcade {
         }
 
         public bool     IsTerminal() { return game.Result != CSGameResult.PLAYING; }
-        public double[] InitialTheta() { return new double[D]; }
+        public double[] InitialTheta() { return new double[CSGameState.OutputCount]; }
 
         // ------------------------------------------------------------------ Logging
-
-        private readonly TrainingLog log = new TrainingLog();
-
-        public void EndEpisode( double episodeReward ) {
-            log.Add( Result, episodeReward, Ticks, HitsDealt, HitsTaken, ShotsFired );
-        }
-
-        public void PrintLog( int episode, int total, double seconds ) {
-            log.Print( episode, total, seconds );
-            log.Reset();
-        }
-
-        // Aggregates episode outcomes between log lines.
-        class TrainingLog {
-            int    episodes, wins, losses, draws, hitsDealt, hitsTaken, shots;
-            double reward;
-            long   ticks;
-
-            public void Add( CSGameResult result, double episodeReward, int length, int dealt, int taken, int fired ) {
-                episodes++;
-                if ( result == CSGameResult.WIN ) wins++;
-                else if ( result == CSGameResult.LOSS ) losses++;
-                else draws++;
-                reward    += episodeReward;
-                ticks     += length;
-                hitsDealt += dealt;
-                hitsTaken += taken;
-                shots     += fired;
-            }
-
-            public void Print( int episode, int total, double seconds ) {
-                if ( episodes == 0 ) return;
-                double n = episodes;
-                double accuracy = shots > 0 ? hitsDealt / (double)shots : 0;
-                Console.WriteLine(
-                    $"ep {episode,5}/{total}  win {wins / n,5:P0}  loss {losses / n,5:P0}  draw {draws / n,5:P0}  " +
-                    $"reward {reward / n,6:F2}  len {ticks / n * CSSettings.InvGameTickRate,5:F1}s  " +
-                    $"dealt {hitsDealt / n,4:F1}  taken {hitsTaken / n,4:F1}  acc {accuracy,4:P0}  [{seconds:F0}s]" );
-            }
-
-            public void Reset() {
-                episodes = wins = losses = draws = hitsDealt = hitsTaken = shots = 0;
-                reward = 0;
-                ticks = 0;
-            }
-        }
+        private readonly CSTrainingLog log = new CSTrainingLog();
+        public void EndEpisode( double episodeReward ) { log.Add( Result, episodeReward, Ticks, HitsDealt, HitsTaken, ShotsFired ); }
+        public void PrintLog( int episode, int total, double seconds ) { log.Print( episode, total, seconds ); log.Reset(); }
     }
 }
