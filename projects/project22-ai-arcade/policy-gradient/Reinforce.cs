@@ -37,7 +37,6 @@ namespace arcade {
             else {
                 this.rng = new Random();
             }
-            NewGame();
         }
 
         // ------------------------------------------------------------------ Features
@@ -138,12 +137,26 @@ namespace arcade {
             return CSLite.WrapAngle( MathF.Atan2( dir.Y, dir.X ) - me.Orientation );
         }
 
+        // Each policy decision is held for this many game ticks (60 Hz / 6 = 10 decisions per second).
+        // Resampling every tick makes a random policy jitter in place and stretches credit assignment over hundreds of steps.
+        public static int ActionRepeat = 6;
+        public int        Ticks { get; private set; }
+
         public float Step( CSPlayerAction policyAction ) {
+            float reward = 0;
+            for ( int k = 0; k < ActionRepeat && !IsTerminal(); k++ ) {
+                reward += StepTick( policyAction );
+            }
+            return reward;
+        }
+
+        private float StepTick( CSPlayerAction policyAction ) {
             CSPlayerAction botAction = bot.Think( game, (float)CSSettings.InvGameTickRate );
             actions.Clear();
             actions.Add( botAction );
             actions.Add( policyAction );
             game.Step( actions );
+            Ticks++;
 
             float reward = 0;
             if ( game.Result == CSGameResult.WIN ) {
@@ -154,6 +167,11 @@ namespace arcade {
             }
 
             foreach ( CSEvent e in game.Events ) {
+                bool hit = e.Type == CSEventType.Hit || e.Type == CSEventType.Death;
+                if ( hit && e.PlayerId == agentId ) HitsTaken++;
+                if ( hit && e.PlayerId == enemyId ) HitsDealt++;
+                if ( e.Type == CSEventType.Shot && e.PlayerId == agentId ) ShotsFired++;
+
                 if ( e.Type == CSEventType.Hit ) {
                     reward += ( e.PlayerId == agentId ) ? -0.1f : 0.1f;
                 }
@@ -191,12 +209,20 @@ namespace arcade {
         };
 
         // Run the trained policy for the team-0 player of an external game.
+        // Holds each decision for ActionRepeat ticks, matching how the policy was trained.
+        private CSPlayerAction  heldAction;
+        private int             heldSinceTick = int.MaxValue;
+
         public CSPlayerAction Act( CSLite external, double[] theta ) {
-            int me    = external.Players.FindIndex( p => p.Team == 0 );
-            int enemy = external.Players.FindIndex( p => p.Team == 1 );
-            (CSPlayerAction action, _) = Think( GetState( external, me, enemy ), theta );
-            action.PlayerId = me;
-            return action;
+            int tick = external.TickCount;
+            if ( tick < heldSinceTick || tick - heldSinceTick >= ActionRepeat ) { // tick < heldSinceTick: the game was restarted
+                int me    = external.Players.FindIndex( p => p.Team == 0 );
+                int enemy = external.Players.FindIndex( p => p.Team == 1 );
+                (heldAction, _) = Think( GetState( external, me, enemy ), theta );
+                heldAction.PlayerId = me;
+                heldSinceTick = tick;
+            }
+            return heldAction;
         }
 
         public (CSPlayerAction, GradData) Think( CSGameState s, double[] theta ) {
@@ -236,7 +262,14 @@ namespace arcade {
             return grad;
         }
 
+        // Per-episode stats for logging, reset by NewGame.
+        public int          HitsDealt   { get; private set; }
+        public int          HitsTaken   { get; private set; }
+        public int          ShotsFired  { get; private set; }
+        public CSGameResult Result      => game.Result;
+
         public void NewGame() {
+            HitsDealt = HitsTaken = ShotsFired = Ticks = 0;
             game = new CSLite( map, seed );
             agentId = game.Players.FindIndex( p => p.Team == 0 );
             enemyId = game.Players.FindIndex( p => p.Team == 1 );
@@ -255,7 +288,11 @@ namespace arcade {
             public float            r;
         }
 
-        public double[] PolicyControl( CSReinforce rl, int EpisodeCount, double Alpha, double Gamma, int? seed = null ) {
+        // Prints a summary line every LogEvery episodes (0 = silent).
+        public double[] PolicyControl( CSReinforce rl, int EpisodeCount, double Alpha, double Gamma, int? seed = null, int LogEvery = 10 ) {
+            var log = new TrainingLog();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
             List<StateActionReward> episode = new List<StateActionReward>();
             List<double> returns = new List<double>();
             double[] theta = rl.InitialTheta();
@@ -272,6 +309,14 @@ namespace arcade {
                     float           r = rl.Step( a );
                     episode.Add( new StateActionReward() { s = s, a = a, g = g, r = r } );
                 } while ( rl.IsTerminal() == false );
+
+                double episodeReward = 0;
+                foreach ( var step in episode ) episodeReward += step.r;
+                log.Add( rl.Result, episodeReward, rl.Ticks, rl.HitsDealt, rl.HitsTaken, rl.ShotsFired );
+                if ( LogEvery > 0 && ( episodeIndex + 1 ) % LogEvery == 0 ) {
+                    log.Print( episodeIndex + 1, EpisodeCount, clock.Elapsed.TotalSeconds );
+                    log.Reset();
+                }
 
                 returns.Clear();
                 double G = 0;
@@ -302,6 +347,41 @@ namespace arcade {
             }
 
             return theta;
+        }
+
+        // Aggregates episode outcomes between log lines.
+        class TrainingLog {
+            int    episodes, wins, losses, draws, hitsDealt, hitsTaken, shots;
+            double reward;
+            long   ticks;
+
+            public void Add( CSGameResult result, double episodeReward, int length, int dealt, int taken, int fired ) {
+                episodes++;
+                if ( result == CSGameResult.WIN ) wins++;
+                else if ( result == CSGameResult.LOSS ) losses++;
+                else draws++;
+                reward    += episodeReward;
+                ticks     += length;
+                hitsDealt += dealt;
+                hitsTaken += taken;
+                shots     += fired;
+            }
+
+            public void Print( int episode, int total, double seconds ) {
+                if ( episodes == 0 ) return;
+                double n = episodes;
+                double accuracy = shots > 0 ? hitsDealt / (double)shots : 0;
+                Console.WriteLine(
+                    $"ep {episode,5}/{total}  win {wins / n,5:P0}  loss {losses / n,5:P0}  draw {draws / n,5:P0}  " +
+                    $"reward {reward / n,6:F2}  len {ticks / n * CSSettings.InvGameTickRate,5:F1}s  " +
+                    $"dealt {hitsDealt / n,4:F1}  taken {hitsTaken / n,4:F1}  acc {accuracy,4:P0}  [{seconds:F0}s]" );
+            }
+
+            public void Reset() {
+                episodes = wins = losses = draws = hitsDealt = hitsTaken = shots = 0;
+                reward = 0;
+                ticks = 0;
+            }
         }
     }
 }

@@ -6,15 +6,22 @@ namespace arcade {
         // CS Lite: the team-0 player is driven by the REINFORCE policy trained at startup,
         // the team-1 player is a CSBot. R restarts the round.
         public static void Main( string[] Args ) {
+            // Headless training run for tuning: dotnet run -- train [episodes] [alpha] [gamma] [seed]
+            if ( Args.Length > 0 && Args[0] == "train" ) {
+                Train( Args );
+                return;
+            }
+
             Console.WriteLine( "Training..." );
 
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
 
-            int seed = 40;
+            int? seed = null;// 40;
             CSReinforce csrl = new CSReinforce( map, seed );
             Reinforce reinforce = new Reinforce();
-            double[] theta = reinforce.PolicyControl( csrl, 10000, 0.1, 0.9, seed );
+            // alpha/gamma tuned with `dotnet run -c Release -- train` (gamma is per decision, i.e. per ActionRepeat ticks).
+            double[] theta = reinforce.PolicyControl( csrl, 200000, 0.3, 0.995, seed, LogEvery: 500 );
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
             Raylib.InitWindow( 1300, 900, "AI Arcade - CS Lite" );
@@ -51,6 +58,19 @@ namespace arcade {
             audio.Unload();
             Raylib.CloseAudioDevice();
             Raylib.CloseWindow();
+        }
+
+        private static void Train( string[] args ) {
+            var inv      = System.Globalization.CultureInfo.InvariantCulture;
+            int episodes = args.Length > 1 ? int.Parse( args[1] ) : 10000;
+            double alpha = args.Length > 2 ? double.Parse( args[2], inv ) : 0.3;
+            double gamma = args.Length > 3 ? double.Parse( args[3], inv ) : 0.995;
+            int seed     = args.Length > 4 ? int.Parse( args[4] ) : 40;
+
+            var map = new CSMap();
+            map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
+            Console.WriteLine( $"REINFORCE  episodes={episodes}  alpha={alpha}  gamma={gamma}  seed={seed}" );
+            new Reinforce().PolicyControl( new CSReinforce( map, seed ), episodes, alpha, gamma, seed, LogEvery: Math.Max( 1, episodes / 20 ) );
         }
 
         private static CSPlayerAction HumanAction( CSLite game, int playerIndex ) {
