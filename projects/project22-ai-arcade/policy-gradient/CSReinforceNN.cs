@@ -64,7 +64,7 @@
         }
 
         private int ThetaBiasIndexFor( int layerIndex, int neuron ) {
-            return LayerOffsets[layerIndex + 1 > LayerOffsets.Length ? layerIndex : layerIndex + 1] - LayerNC[layerIndex] + neuron;
+            return LayerOffsets[layerIndex] + LayerInputs[layerIndex] * LayerNC[layerIndex] + neuron;
         }
 
         private static double[] HeadProbs( double[] x, int start, int n ) {
@@ -75,7 +75,7 @@
             }
 
             double sum = 0;
-            for ( int r = 0; r < n; r++ ) { p[r] = Math.Exp( p[r] - max ); sum += p[r]; } // subtract max: no overflow
+            for ( int r = 0; r < n; r++ ) { p[r] = Math.Exp( x[start + r] - max ); sum += p[r]; } // subtract max: no overflow
             for ( int r = 0; r < n; r++ ) p[r] /= sum;
             return p;
         }
@@ -89,14 +89,14 @@
             for ( int l = 0; l < LayerSizes.Length; l++ ) {
                 inputs.Add( new double[LayerNC[l]] );
 
-                for ( int n = 0; n < inputs[l].Length; n++ ) {
-                    double sum = ThetaBiasIndexFor(l, n);
+                for ( int n = 0; n < LayerNC[l]; n++ ) {
+                    double sum = theta[ThetaBiasIndexFor(l, n)];
                     for ( int w = 0; w < LayerInputs[l]; w++ ) {
                         int index = ThetaWeightIndexFor(l, n, w);
                         sum += theta[index] * inputs[l][w];
                     }
- 
-                    inputs[l + 1][n] = l < LayerSizes.Length ? ActivationFuncs.Relu( sum ) : Math.Exp( sum );
+
+                    inputs[l + 1][n] = l < LayerSizes.Length - 1 ? ActivationFuncs.Relu( sum ) : sum;
                 }
             }
 
