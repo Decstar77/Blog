@@ -47,7 +47,10 @@ namespace arcade {
         public const int    FeatureCount  = 7 + 7 + 2 + RayCount + 5 + 1; // = 30
         public const int    D             = FeatureCount * 14;
 
-        public CSGameState GetState() {
+        public CSGameState GetState() { return GetState( game, agentId, enemyId ); }
+
+        // Features for any game, so a trained theta can drive the agent in a game this class doesn't own (e.g. the rendered one).
+        public static CSGameState GetState( CSLite game, int agentId, int enemyId ) {
             CSPlayer me    = game.Players[agentId];
             CSPlayer enemy = game.Players[enemyId];
 
@@ -162,7 +165,7 @@ namespace arcade {
             return reward;
         }
         
-        public double[] HeadProbs( double[] x, double[] theta, int startingRow, int rowCount ) {
+        public static double[] HeadProbs( double[] x, double[] theta, int startingRow, int rowCount ) {
             double[] p = new double[rowCount];
             double max = double.NegativeInfinity;
             for ( int row = 0; row < rowCount; row++ ) {
@@ -186,6 +189,15 @@ namespace arcade {
             (false,false,true,false),  (false,false,false,true), (true,false,true,false),
             (true,false,false,true),   (false,true,true,false),  (false,true,false,true) 
         };
+
+        // Run the trained policy for the team-0 player of an external game.
+        public CSPlayerAction Act( CSLite external, double[] theta ) {
+            int me    = external.Players.FindIndex( p => p.Team == 0 );
+            int enemy = external.Players.FindIndex( p => p.Team == 1 );
+            (CSPlayerAction action, _) = Think( GetState( external, me, enemy ), theta );
+            action.PlayerId = me;
+            return action;
+        }
 
         public (CSPlayerAction, GradData) Think( CSGameState s, double[] theta ) {
             GradData grad = new GradData();

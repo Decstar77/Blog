@@ -3,15 +3,10 @@ using System.Numerics;
 
 namespace arcade {
     public class Program {
-        // CS Lite: player 0 is the human (WASD to move, mouse to aim, left click / space to shoot),
-        // player 1 is a CSBot. R restarts the round.
+        // CS Lite: the team-0 player is driven by the REINFORCE policy trained at startup,
+        // the team-1 player is a CSBot. R restarts the round.
         public static void Main( string[] Args ) {
-            Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
-            Raylib.InitWindow( 1300, 900, "AI Arcade - CS Lite" );
-            Raylib.SetWindowMinSize( 640, 480 );
-            Raylib.SetTargetFPS( 60 );
-            Raylib.InitAudioDevice();
-            CSAudio audio = new CSAudio( listenerId: 0 );
+            Console.WriteLine( "Training..." );
 
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
@@ -19,10 +14,18 @@ namespace arcade {
             int seed = 40;
             CSReinforce csrl = new CSReinforce( map, seed );
             Reinforce reinforce = new Reinforce();
-            double[] theta = reinforce.PolicyControl( csrl, 100, 0.1, 0.9, seed );
+            double[] theta = reinforce.PolicyControl( csrl, 10000, 0.1, 0.9, seed );
+
+            Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
+            Raylib.InitWindow( 1300, 900, "AI Arcade - CS Lite" );
+            Raylib.SetWindowMinSize( 640, 480 );
+            Raylib.SetTargetFPS( 60 );
+            Raylib.InitAudioDevice();
+            CSAudio audio = new CSAudio( listenerId: 0 );
 
             CSLite game = new CSLite( map );
-            CSBot bot = new CSBot( 1 );
+            int botId = game.Players.FindIndex( p => p.Team == 1 );
+            CSBot bot = new CSBot( botId );
             var actions = new List<CSPlayerAction> { default, default };
 
             while ( !Raylib.WindowShouldClose() ) {
@@ -30,10 +33,10 @@ namespace arcade {
 
                 if ( Raylib.IsKeyPressed( KeyboardKey.R ) ) {
                     game = new CSLite( map );
-                    bot = new CSBot( 1 );
+                    bot = new CSBot( botId );
                 }
                 
-                actions[0] = csrl.Think(  // HumanAction( game, 0 );
+                actions[0] = csrl.Act( game, theta );  // or HumanAction( game, 0 ) to play yourself
                 actions[1] = bot.Think( game, dt );
                 game.Step( dt, actions );
                 audio.Play( game );
@@ -41,7 +44,7 @@ namespace arcade {
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground( Style.Background );
                 game.Render( dt, actions );
-                Raylib.DrawText( "WASD move  |  mouse aim  |  LMB/Space shoot  |  R restart", 12, Raylib.GetScreenHeight() - 28, 18, Style.TextDim );
+                Raylib.DrawText( "REINFORCE agent vs CSBot  |  R restart", 12, Raylib.GetScreenHeight() - 28, 18, Style.TextDim );
                 Raylib.EndDrawing();
             }
 
