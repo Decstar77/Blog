@@ -1,9 +1,10 @@
 ﻿namespace arcade {
     public struct GradDataNN {
-        public double[] results;
+        public List<double[]> inputs;
         public double[] m;
         public double[] r;
         public double[] f;
+        public double[] h;
         public int ma;
         public int ra;
         public int fa;
@@ -100,11 +101,12 @@
                 }
             }
 
+            double[] results = inputs.Last();
             GradDataNN grad = new GradDataNN();
-            grad.results = inputs.Last();
-            grad.m = HeadProbs( grad.results, 0, 9 );
-            grad.r = HeadProbs( grad.results, 9, 3 );
-            grad.f = HeadProbs( grad.results, 12, 2 );
+            grad.inputs = inputs;
+            grad.m = HeadProbs( results, 0, 9 );
+            grad.r = HeadProbs( results, 9, 3 );
+            grad.f = HeadProbs( results, 12, 2 );
             grad.ma = Helpers.Choose( grad.m.Length, i => grad.m[i], rng );
             grad.ra = Helpers.Choose( grad.r.Length, i => grad.r[i], rng );
             grad.fa = Helpers.Choose( grad.f.Length, i => grad.f[i], rng );
@@ -119,6 +121,11 @@
             action.Shoot     = grad.fa == 0;
 
             return (action, grad);
+        }
+
+        public static void AccumulateHeadGrads( List<double[]> inputs, double[] p, int a, int startingRow, int rowCount, double scale, double[] into ) {
+            
+
         }
 
         /*
