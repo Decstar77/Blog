@@ -3,12 +3,17 @@ using System.Numerics;
 
 namespace arcade {
     public class Program {
-        // CS Lite: the team-0 player is driven by the REINFORCE policy trained at startup,
+        // CS Lite: the team-0 player is driven by the best NEAT genome evolved at startup,
         // the team-1 player is a CSBot. R restarts the round.
         public static void Main( string[] Args ) {
             // Headless training run for tuning: dotnet run -- train [episodes] [alpha] [gamma] [seed]
             if ( Args.Length > 0 && Args[0] == "train" ) {
                 Train( Args );
+                return;
+            }
+            // Headless NEAT run: dotnet run -- neat [generations] [population] [seed]
+            if ( Args.Length > 0 && Args[0] == "neat" ) {
+                TrainNeat( Args );
                 return;
             }
 
@@ -17,11 +22,15 @@ namespace arcade {
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
 
+            NeatSettings neatSettings = new NeatSettings() {
+                PopulationSize = 250,
+                CompatibilityThreshold = 0.85,
+                MaxStagnation = 100
+            };
+
             int? seed = null;// 40;
-            CSReinforceLinear csrl = new CSReinforceLinear( map, seed );
-            Reinforce reinforce = new Reinforce();
-            // alpha/gamma tuned with `dotnet run -c Release -- train` (gamma is per decision, i.e. per ActionRepeat ticks).
-            double[] theta = reinforce.PolicyControl( csrl, 200000, 0.3, 0.995, seed, LogEvery: 500 );
+            CSNeatBasic neat = new CSNeatBasic( map, seed, 3, neatSettings );
+            Genome champion = neat.Train( 1000, 25 );
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
             Raylib.InitWindow( 1300, 900, "AI Arcade - CS Lite" );
@@ -43,7 +52,7 @@ namespace arcade {
                     bot = new CSBot( botId );
                 }
                 
-                actions[0] = csrl.Act( game, theta );  // or HumanAction( game, 0 ) to play yourself
+                actions[0] = neat.Act( game, champion );  // or HumanAction( game, 0 ) to play yourself
                 actions[1] = bot.Think( game, dt );
                 game.Step( dt, actions );
                 audio.Play( game );
@@ -51,7 +60,7 @@ namespace arcade {
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground( Style.Background );
                 game.Render( dt, actions );
-                Raylib.DrawText( "REINFORCE agent vs CSBot  |  R restart", 12, Raylib.GetScreenHeight() - 28, 18, Style.TextDim );
+                Raylib.DrawText( "NEAT agent vs CSBot  |  R restart", 12, Raylib.GetScreenHeight() - 28, 18, Style.TextDim );
                 Raylib.EndDrawing();
             }
 
@@ -71,6 +80,17 @@ namespace arcade {
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
             Console.WriteLine( $"REINFORCE  episodes={episodes}  alpha={alpha}  gamma={gamma}  seed={seed}" );
             new Reinforce().PolicyControl( new CSReinforceLinear( map, seed ), episodes, alpha, gamma, seed, LogEvery: Math.Max( 1, episodes / 20 ) );
+        }
+
+        private static void TrainNeat( string[] args ) {
+            int generations = args.Length > 1 ? int.Parse( args[1] ) : 50;
+            int population  = args.Length > 2 ? int.Parse( args[2] ) : 150;
+            int seed        = args.Length > 3 ? int.Parse( args[3] ) : 40;
+
+            var map = new CSMap();
+            map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
+            Console.WriteLine( $"NEAT  generations={generations}  population={population}  seed={seed}" );
+            new CSNeatBasic( map, seed, settings: new NeatSettings { PopulationSize = population } ).Train( generations );
         }
 
         private static CSPlayerAction HumanAction( CSLite game, int playerIndex ) {
