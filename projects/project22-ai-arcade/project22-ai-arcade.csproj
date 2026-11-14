@@ -16,4 +16,8 @@
     <None Update="maps\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="diagnostics\" />
+  </ItemGroup>
+
 </Project>

@@ -12,6 +12,7 @@
         public static int OutputCount   = 9 + 3 + 2;
 
         private readonly CSMap          map;
+        private readonly int?           seed;
         private readonly int            gamesPerGenome;
         private readonly Random         seedRng;
         private readonly int[]          validationSeeds;
@@ -31,6 +32,7 @@
          */
         public CSNeatBasic( CSMap map, int? seed = null, int gamesPerGenome = 8, NeatSettings? settings = null ) {
             this.map = map;
+            this.seed = seed;
             this.gamesPerGenome = gamesPerGenome;
             if ( seed != null ) RNG.Seed( seed.Value );
             seedRng = seed != null ? new Random( seed.Value * 7919 + 1 ) : new Random();
@@ -48,11 +50,17 @@
          */
         public Genome Train( int generations, int LogEvery = 1 ) {
             var timer = System.Diagnostics.Stopwatch.StartNew();
+            TrainingDashboard.BeginRun( "neat-cs", new {
+                generations, seed, gamesPerGenome, ValidationGames, ValidateTopK, ActionRepeat,
+                inputs = CSGameState.FeatureCount, outputs = OutputCount, settings = Population.Settings
+            } );
             for ( int g = 0; g < generations; g++ ) {
+                double genStart = timer.Elapsed.TotalSeconds;
                 int[] seeds = Enumerable.Range( 0, gamesPerGenome ).Select( _ => seedRng.Next() ).ToArray();
                 var log = new CSTrainingLog();
                 Population.Evaluate( genome => Fitness( genome, seeds, log ) );
                 ValidateElites();
+                LogToDashboard( g, log, timer.Elapsed.TotalSeconds - genStart );
 
                 if ( LogEvery > 0 && ( g % LogEvery == 0 || g == generations - 1 ) ) {
                     Genome best = Population.Genomes.MaxBy( x => x.fitness )!;
@@ -66,7 +74,43 @@
 
                 if ( g < generations - 1 ) Population.Evolve();
             }
+            TrainingDashboard.EndRun();
             return Champion!;
+        }
+
+        /*
+        ==========================
+        One line per generation. Series sharing a prefix share a chart, so each prefix
+        only holds values on the same scale.
+        ==========================
+         */
+        private void LogToDashboard( int generation, CSTrainingLog pop, double seconds ) {
+            CSTrainingLog champ = ChampionLog!;
+            var fitness = Population.Genomes.Select( x => x.fitness ).ToArray();
+            TrainingDashboard.Log( generation, new Dictionary<string, double> {
+                ["champion win rate/win"]   = champ.WinRate,
+                ["champion win rate/loss"]  = champ.LossRate,
+                ["champion win rate/draw"]  = champ.DrawRate,
+                ["population win rate/win"]  = pop.WinRate,
+                ["population win rate/loss"] = pop.LossRate,
+                ["population win rate/draw"] = pop.DrawRate,
+                ["fitness/best"]            = fitness.Max(),
+                ["fitness/mean"]            = fitness.Average(),
+                ["fitness/champion (validation)"] = champ.AvgReward,
+                ["hits per game/dealt (pop)"]  = pop.AvgDealt,
+                ["hits per game/taken (pop)"]  = pop.AvgTaken,
+                ["hits per game/dealt (champ)"] = champ.AvgDealt,
+                ["hits per game/taken (champ)"] = champ.AvgTaken,
+                ["accuracy/population"]     = pop.Accuracy,
+                ["accuracy/champion"]       = champ.Accuracy,
+                ["game length (s)/population"] = pop.AvgLengthSeconds,
+                ["game length (s)/champion"]   = champ.AvgLengthSeconds,
+                ["species/count"]           = Population.SpeciesCount,
+                ["compatibility threshold/value"] = Population.CompatibilityThreshold,
+                ["champion hidden nodes/count"]   = Champion!.nodes.Count( n => n.type == GeneNodeType.Hidden ),
+                ["champion enabled links/count"]  = Champion.connections.Count( c => c.enabled ),
+                ["seconds per generation/value"]  = seconds,
+            } );
         }
 
         /*

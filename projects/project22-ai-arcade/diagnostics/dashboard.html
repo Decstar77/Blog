@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg:        #f4f4f2;
+    --surface:   #fcfcfb;
+    --border:    #e3e2de;
+    --grid:      #ecebe7;
+    --text:      #0b0b0b;
+    --text-2:    #52514e;
+    --text-3:    #8a8984;
+    --live:      #008300;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #111110; --surface: #1a1a19; --border: #2c2c2a; --grid: #262624;
+      --text: #f0efec; --text-2: #c3c2b7; --text-3: #85847d; --live: #3fae3f;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --border: #2c2c2a; --grid: #262624;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #85847d; --live: #3fae3f;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center;
+    padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface);
+    position: sticky; top: 0; z-index: 2;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header label { color: var(--text-2); display: flex; gap: 8px; align-items: center; }
+  header .spacer { flex: 1; }
+  #status { color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .layout { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 53px); }
+  aside { border-right: 1px solid var(--border); padding: 12px; background: var(--surface); }
+  aside h2, .config h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 4px 0 8px; font-weight: 600; }
+  .run { display: flex; gap: 8px; align-items: flex-start; padding: 6px; border-radius: 6px; cursor: pointer; }
+  .run:hover { background: var(--bg); }
+  .run input { margin-top: 3px; }
+  .run .name { font-weight: 500; word-break: break-all; }
+  .run .when { color: var(--text-3); font-size: 12px; }
+  .run .style { font-size: 12px; color: var(--text-2); font-family: ui-monospace, monospace; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--live); margin-left: 6px; vertical-align: middle; }
+  main { padding: 16px; min-width: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 12px 8px; min-width: 0; }
+  .card h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+  .card .canvas-wrap { position: relative; height: 240px; }
+  .config { margin-top: 16px; }
+  .config pre {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+    font-size: 12px; overflow: auto; max-height: 360px; color: var(--text-2); margin: 0 0 8px;
+  }
+  .empty { color: var(--text-3); padding: 40px 0; text-align: center; }
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--border); }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Training Dashboard</h1>
+  <label>Smoothing <input id="smooth" type="range" min="0" max="0.98" step="0.01" value="0"> <span id="smoothVal">0.00</span></label>
+  <label><input id="follow" type="checkbox" checked> Follow newest run</label>
+  <span class="spacer"></span>
+  <span id="status">connecting…</span>
+</header>
+<div class="layout">
+  <aside>
+    <h2>Runs</h2>
+    <div id="runs"></div>
+    <div class="config" id="config"></div>
+  </aside>
+  <main>
+    <div class="grid" id="charts"></div>
+    <div class="empty" id="empty">No data yet. Start a run that calls TrainingDashboard.BeginRun.</div>
+  </main>
+</div>
+
+<script>
+const POLL_MS = 1500;
+const LIVE_MS = 15000;                       // a run file touched this recently counts as live
+const DASHES  = [[], [6, 4], [2, 3], [10, 3, 2, 3]]; // run 1 solid, run 2 dashed, ...
+
+const runs     = new Map();   // file -> { meta, offset, rest, rows: [{step, t, v}] }
+let   runList  = [];          // from /runs, newest first
+let   selected = [];          // files, in selection order
+const charts   = new Map();   // group -> { chart, card }
+const keyOrder = new Map();   // group -> [series keys in first-seen order], fixes color per key
+
+const $ = id => document.getElementById(id);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/* ---------------- data ---------------- */
+
+let busy = false;
+
+async function poll() {
+  await refresh();
+  setTimeout(poll, POLL_MS);
+}
+
+// One refresh at a time, otherwise two overlapping tails of a run would append the same rows twice.
+async function refresh() {
+  if (busy) return;
+  busy = true;
+  try {
+    runList = await (await fetch('/runs')).json();
+    if ($('follow').checked && runList.length && selected[0] !== runList[0].file) {
+      selected = [runList[0].file];
+    }
+    selected = selected.filter(f => runList.some(r => r.file === f));
+    for (const file of selected) await tail(file);
+    renderRuns();
+    renderCharts();
+    $('status').textContent = `updated ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    $('status').textContent = 'server offline, retrying…';
+  } finally {
+    busy = false;
+  }
+}
+
+// Fetch only the bytes appended since last time and parse complete lines.
+async function tail(file) {
+  let run = runs.get(file);
+  if (!run) runs.set(file, run = { meta: null, offset: 0, rest: '', rows: [] });
+  const res = await fetch(`/runs/${encodeURIComponent(file)}?from=${run.offset}`);
+  if (!res.ok) return;
+  const buf = new Uint8Array(await res.arrayBuffer());
+  run.offset += buf.length;
+  const text = run.rest + new TextDecoder().decode(buf);
+  const lines = text.split('\n');
+  run.rest = lines.pop();                     // possibly half-written last line
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (rec.type === 'meta') run.meta = rec;
+    else if (rec.v) run.rows.push(rec);
+  }
+}
+
+function runLabel(file) {
+  const run = runs.get(file);
+  return run?.meta?.name ?? file.replace(/\.jsonl$/, '');
+}
+
+/* ---------------- sidebar ---------------- */
+
+function renderRuns() {
+  const now = Date.now();
+  const el = $('runs');
+  el.innerHTML = '';
+  if (!runList.length) { el.innerHTML = '<div class="when">No runs in diagnostics/runs yet.</div>'; }
+  for (const r of runList) {
+    const idx = selected.indexOf(r.file);
+    const live = now - Date.parse(r.modified) < LIVE_MS;
+    const m = r.file.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})_(.*)\.jsonl$/);
+    const name = m ? m[7] : r.file;
+    const when = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : '';
+    const row = document.createElement('label');
+    row.className = 'run';
+    row.innerHTML = `
+      <input type="checkbox" ${idx >= 0 ? 'checked' : ''}>
+      <div>
+        <div class="name">${escapeHtml(name)}${live ? '<span class="dot" title="live"></span>' : ''}</div>
+        <div class="when">${when}</div>
+        ${idx >= 0 && selected.length > 1 ? `<div class="style">${['solid', 'dashed', 'dotted', 'dash-dot'][idx % 4]} line</div>` : ''}
+      </div>`;
+    row.querySelector('input').addEventListener('change', ev => {
+      $('follow').checked = false;
+      if (ev.target.checked) selected.push(r.file);
+      else selected = selected.filter(f => f !== r.file);
+      refresh();
+    });
+    el.appendChild(row);
+  }
+
+  const cfg = $('config');
+  cfg.innerHTML = '';
+  for (const file of selected) {
+    const meta = runs.get(file)?.meta;
+    if (!meta?.config) continue;
+    cfg.insertAdjacentHTML('beforeend',
+      `<h2>Config · ${escapeHtml(meta.name)}</h2><pre>${escapeHtml(JSON.stringify(meta.config, null, 2))}</pre>`);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ---------------- charts ---------------- */
+
+function splitKey(key) {
+  const i = key.indexOf('/');
+  return i < 0 ? [key, key] : [key.slice(0, i), key.slice(i + 1)];
+}
+
+// Exponential moving average with bias correction, like TensorBoard's smoothing.
+function smooth(points, alpha) {
+  if (alpha <= 0) return points;
+  let last = 0, n = 0;
+  return points.map(p => {
+    last = last * alpha + (1 - alpha) * p.y;
+    n++;
+    return { x: p.x, y: last / (1 - Math.pow(alpha, n)) };
+  });
+}
+
+function renderCharts() {
+  const alpha = parseFloat($('smooth').value);
+  const groups = new Map(); // group -> [{ file, key, points }]
+
+  selected.forEach(file => {
+    const run = runs.get(file);
+    if (!run) return;
+    const series = new Map();
+    for (const row of run.rows) {
+      for (const [key, y] of Object.entries(row.v)) {
+        if (!series.has(key)) series.set(key, []);
+        series.get(key).push({ x: row.step, y });
+      }
+    }
+    for (const [key, points] of series) {
+      const [group, name] = splitKey(key);
+      if (!keyOrder.has(group)) keyOrder.set(group, []);
+      if (!keyOrder.get(group).includes(name)) keyOrder.get(group).push(name);
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push({ file, name, points });
+    }
+  });
+
+  $('empty').style.display = groups.size ? 'none' : '';
+
+  // Drop charts whose group no longer has data (e.g. a run was deselected).
+  for (const [group, c] of charts) {
+    if (!groups.has(group)) { c.chart.destroy(); c.card.remove(); charts.delete(group); }
+  }
+
+  const palette = [1, 2, 3, 4, 5, 6, 7, 8].map(i => css(`--s${i}`));
+  const multiRun = selected.length > 1;
+
+  for (const [group, list] of groups) {
+    const order = keyOrder.get(group);
+    const datasets = list.map(s => {
+      const color = palette[order.indexOf(s.name) % palette.length];
+      const last = s.points.length ? s.points[s.points.length - 1].y : NaN;
+      return {
+        label: (multiRun ? `${s.name} · ${runLabel(s.file)}` : s.name) + `  ${fmt(last)}`,
+        id: `${s.file}|${s.name}`,
+        data: smooth(s.points, alpha),
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
+        borderDash: DASHES[selected.indexOf(s.file) % DASHES.length],
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0,
+      };
+    });
+
+    let c = charts.get(group);
+    if (!c) c = makeChart(group);
+
+    // Keep legend toggles across updates, keyed by series id rather than position.
+    const hidden = new Set();
+    c.chart.data.datasets.forEach((d, i) => { if (!c.chart.isDatasetVisible(i)) hidden.add(d.id); });
+    datasets.forEach(d => { d.hidden = hidden.has(d.id); });
+    c.chart.data.datasets = datasets;
+    c.chart.update('none');
+  }
+}
+
+function fmt(v) {
+  if (!Number.isFinite(v)) return '';
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 0.01 || a >= 1e5)) return v.toExponential(2);
+  return a >= 100 ? v.toFixed(0) : a >= 10 ? v.toFixed(1) : v.toFixed(3);
+}
+
+function makeChart(group) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3>${escapeHtml(group)}</h3><div class="canvas-wrap"><canvas></canvas></div>`;
+  // Insert in first-seen order so the layout is stable.
+  $('charts').appendChild(card);
+
+  const text = css('--text-2'), muted = css('--text-3'), grid = css('--grid'), surface = css('--surface'), border = css('--border');
+  const chart = new Chart(card.querySelector('canvas'), {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      parsing: false,
+      normalized: true,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 'step', color: muted }, ticks: { color: muted }, grid: { color: grid }, border: { color: border } },
+        y: { ticks: { color: muted }, grid: { color: grid }, border: { color: border } },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: text, boxWidth: 12, boxHeight: 2, padding: 10, font: { size: 12 } } },
+        tooltip: {
+          mode: 'index', intersect: false,
+          backgroundColor: surface, borderColor: border, borderWidth: 1,
+          titleColor: css('--text'), bodyColor: text, padding: 8,
+          callbacks: {
+            title: items => items.length ? `step ${items[0].parsed.x}` : '',
+            label: item => ` ${item.dataset.label.split('  ')[0]}: ${fmt(item.parsed.y)}`,
+          },
+        },
+      },
+    },
+  });
+  const c = { chart, card };
+  charts.set(group, c);
+  return c;
+}
+
+// Colors come from CSS tokens, so rebuild the charts when the OS theme flips.
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  for (const c of charts.values()) { c.chart.destroy(); c.card.remove(); }
+  charts.clear();
+  renderCharts();
+});
+
+$('smooth').addEventListener('input', () => {
+  $('smoothVal').textContent = parseFloat($('smooth').value).toFixed(2);
+  renderCharts();
+});
+$('follow').addEventListener('change', () => { if ($('follow').checked) refresh(); });
+
+poll();
+</script>
+</body>
+</html>

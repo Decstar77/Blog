@@ -467,6 +467,7 @@
         public int                      SpeciesCount => species.Count;
         public Genome?                  BestGenome { get; private set; }
         public double                   CompatibilityThreshold { get; private set; }
+        public NeatSettings             Settings => settings;
 
         /*
         ==========================

@@ -17,6 +17,10 @@ namespace arcade {
         public double LossRate => episodes == 0 ? 0 : losses / (double)episodes;
         public double DrawRate => episodes == 0 ? 0 : draws / (double)episodes;
         public double AvgReward => episodes == 0 ? 0 : reward / episodes;
+        public double AvgDealt  => episodes == 0 ? 0 : hitsDealt / (double)episodes;
+        public double AvgTaken  => episodes == 0 ? 0 : hitsTaken / (double)episodes;
+        public double Accuracy  => shots == 0 ? 0 : hitsDealt / (double)shots;
+        public double AvgLengthSeconds => episodes == 0 ? 0 : ticks / (double)episodes * CSSettings.InvGameTickRate;
 
         public void Add( CSGameResult result, double episodeReward, int length, int dealt, int taken, int fired ) {
             episodes++;

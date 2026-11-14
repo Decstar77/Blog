@@ -11,12 +11,21 @@ namespace arcade {
                 Train( Args );
                 return;
             }
+            // Dashboard only, to browse old runs: dotnet run -- dash
+            if ( Args.Length > 0 && Args[0] == "dash" ) {
+                TrainingDashboard.Start();
+                Console.WriteLine( "Ctrl+C to stop." );
+                Thread.Sleep( Timeout.Infinite );
+                return;
+            }
             // Headless NEAT run: dotnet run -- neat [generations] [population] [seed]
             if ( Args.Length > 0 && Args[0] == "neat" ) {
+                TrainingDashboard.Start();
                 TrainNeat( Args );
                 return;
             }
 
+            TrainingDashboard.Start();
             Console.WriteLine( "Training..." );
 
             var map = new CSMap();
