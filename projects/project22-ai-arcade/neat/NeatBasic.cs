@@ -1,48 +1,73 @@
 namespace neat {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public sealed class NeatSettings {
-        public int PopulationSize { get; init; } = 150;
-        public double CompatibilityThreshold { get; init; } = 3;
-        public double ExcessCoefficient { get; init; } = 1;
-        public double DisjointCoefficient { get; init; } = 1;
+        public int    PopulationSize              { get; init; } = 150;
+        public double CompatibilityThreshold      { get; init; } = 3;
+        public double ExcessCoefficient           { get; init; } = 1;
+        public double DisjointCoefficient         { get; init; } = 1;
         public double WeightDifferenceCoefficient { get; init; } = 0.4;
-        public double SurvivalFraction { get; init; } = 0.2;
-        public double CrossoverChance { get; init; } = 0.75;
-        public double WeightSelectionChance { get; init; } = 0.8;
-        public double WeightMutationChance { get; init; } = 0.9;
-        public double WeightPerturbScale { get; init; } = 1;
-        public double BiasSelectionChance { get; init; } = 0.8;
-        public double BiasMutationChance { get; init; } = 0.9;
-        public double BiasPerturbScale { get; init; } = 1;
-        public double ConnectionSelectionChance { get; init; } = 0.08;
-        public double NodeSelectionChance { get; init; } = 0.03;
-        public int MaxStagnation { get; init; } = 20;
+        public double SurvivalFraction            { get; init; } = 0.2;
+        public double CrossoverChance             { get; init; } = 0.75;
+        public double WeightSelectionChance       { get; init; } = 0.8;
+        public double WeightMutationChance        { get; init; } = 0.9;
+        public double WeightPerturbScale          { get; init; } = 1;
+        public double BiasSelectionChance         { get; init; } = 0.8;
+        public double BiasMutationChance          { get; init; } = 0.9;
+        public double BiasPerturbScale            { get; init; } = 1;
+        public double ConnectionSelectionChance   { get; init; } = 0.08;
+        public double NodeSelectionChance         { get; init; } = 0.03;
+        public int    MaxStagnation               { get; init; } = 20;
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public static class RNG {
         public static Random random = new Random();
-        public static void Seed( int s ) { random = new Random( s ); }
-        public static double NextWeight() { return random.NextDouble() * 2 - 1; }
 
-        public static T Choose<T>( T a, T b ) { return random.NextDouble() > 0.5 ? a : b; }
+        public static void      Seed( int s )         { random = new Random( s ); }
+        public static double    NextWeight()          { return random.NextDouble() * 2 - 1; }
+        public static T         Choose<T>( T a, T b ) { return random.NextDouble() > 0.5 ? a : b; }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public static class ActivationFunctions {
         public static double Sigmoid( double x ) { return 1.0 / ( 1.0 + Math.Exp( -x ) ); }
-        public static double ReLu( double x ) { return x > 0 ? x : 0; }
+        public static double ReLu( double x )    { return x > 0 ? x : 0; }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public enum GeneNodeType {
         Input,
         Hidden,
         Output
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public static class InnovationRegistry {
         public static int GlobalNodeIdCounter = 1;
         public static int GlobalInnovationCounter = 1;
-        public static Dictionary<(int SrcId, int DstId), int> connectionInnovations = new Dictionary<(int SrcId, int DstId), int>();
-        public static Dictionary<int, int> splits = new Dictionary<int, int>();
 
+        public static Dictionary<(int SrcId, int DstId), int>   connectionInnovations = new Dictionary<(int SrcId, int DstId), int>();
+        public static Dictionary<int, int>                      splits = new Dictionary<int, int>();
+
+        /*
+        ==========================
+        ==========================
+         */
         public static GeneNode Split( int innovationNumber ) {
             if ( !splits.TryGetValue( innovationNumber, out int nodeId ) ) {
                 nodeId = GlobalNodeIdCounter++;
@@ -51,6 +76,10 @@ namespace neat {
             return new GeneNode( GeneNodeType.Hidden, nodeId );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static GeneConnection MakeConnection( GeneNode src, GeneNode dst ) {
             if ( !connectionInnovations.TryGetValue( (src.nodeId, dst.nodeId), out int innovationNumber ) ) {
                 innovationNumber = GlobalInnovationCounter++;
@@ -60,12 +89,20 @@ namespace neat {
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class GeneNode {
         public int nodeId;
         public GeneNodeType type;
         public double value;
         public double bias;
         public int layer;
+        /*
+        ==========================
+        ==========================
+         */
         public GeneNode( GeneNodeType type, int id ) {
             nodeId = id;
             this.type = type;
@@ -75,10 +112,14 @@ namespace neat {
     public class GeneConnection {
         public GeneNode src;
         public GeneNode dst;
-        public double weight;
-        public bool enabled;
-        public int innovationNumber;
+        public double   weight;
+        public bool     enabled;
+        public int      innovationNumber;
 
+        /*
+        ==========================
+        ==========================
+         */
         public GeneConnection( GeneNode src, GeneNode dst, int innovationNumber ) {
             this.src = src;
             this.dst = dst;
@@ -88,11 +129,19 @@ namespace neat {
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class Genome {
-        public List<GeneNode> nodes = new List<GeneNode>();
+        public List<GeneNode>       nodes = new List<GeneNode>();
         public List<GeneConnection> connections = new List<GeneConnection>();
-        public double fitness = 0;
+        public double               fitness = 0;
 
+        /*
+        ==========================
+        ==========================
+         */
         public Genome Clone() {
             Genome clone = new Genome() { fitness = fitness };
             Dictionary<int, GeneNode> map = new Dictionary<int, GeneNode>();
@@ -112,6 +161,10 @@ namespace neat {
             return clone;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Mutate( NeatSettings settings ) {
             WeightMutation( settings.WeightSelectionChance, settings.WeightMutationChance, settings.WeightPerturbScale );
             BiasMutation( settings.BiasSelectionChance, settings.BiasMutationChance, settings.BiasPerturbScale );
@@ -119,6 +172,10 @@ namespace neat {
             NodeMutation( settings.NodeSelectionChance );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void WeightMutation( double selectionChance, double mutationChance, double perturbScale ) {
             if ( RNG.random.NextDouble() < selectionChance ) {
                 for ( int c = 0; c < connections.Count; c++ ) {
@@ -132,6 +189,10 @@ namespace neat {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void BiasMutation( double selectionChance, double mutationChance, double perturbScale ) {
             if ( RNG.random.NextDouble() < selectionChance ) {
                 foreach ( GeneNode node in nodes ) {
@@ -144,6 +205,10 @@ namespace neat {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void ConnectionMutation( double selectionChance ) {
             if ( RNG.random.NextDouble() < selectionChance ) {
                 for ( int tries = 0; tries < 1000; tries++ ) {
@@ -167,6 +232,10 @@ namespace neat {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void NodeMutation( double selectionChance ) {
             if ( RNG.random.NextDouble() < selectionChance ) {
                 for ( int tries = 0; tries < 1000; tries++ ) {
@@ -202,6 +271,10 @@ namespace neat {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double[] Forward( double[] inputs ) {
             int maxLayer = 0;
             int outputCount = 0;
@@ -244,8 +317,11 @@ namespace neat {
             return outputs;
         }
 
-        // Assumes parentA is more fit than parentB
-        public static Genome Cross( Genome parentA, Genome parentB ) {
+        /*
+        ==========================
+        ==========================
+         */
+        public static Genome Cross( Genome parentA, Genome parentB ) { // Assumes parentA is more fit than parentB
             Genome child = new Genome();
             Dictionary<int, GeneNode> map = new Dictionary<int, GeneNode>();
             foreach ( GeneNode n in parentA.nodes ) {
@@ -266,6 +342,10 @@ namespace neat {
             return child;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static int DisjointGenes( Genome a, Genome b ) {
             HashSet<int> aInnovations = a.connections.Select(c => c.innovationNumber).ToHashSet();
             HashSet<int> bInnovations = b.connections.Select(c => c.innovationNumber).ToHashSet();
@@ -275,6 +355,10 @@ namespace neat {
             return aInnovations.Count( i => i <= sharedLimit && !bInnovations.Contains( i ) ) + bInnovations.Count( i => i <= sharedLimit && !aInnovations.Contains( i ) );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static int ExcessGenes( Genome a, Genome b ) {
             if ( a.connections.Count == 0 ) return b.connections.Count;
             if ( b.connections.Count == 0 ) return a.connections.Count;
@@ -284,6 +368,10 @@ namespace neat {
             return a.connections.Count( c => c.innovationNumber > bMax ) + b.connections.Count( c => c.innovationNumber > aMax );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static double AverageWeightDifference( Genome a, Genome b ) {
             Dictionary<int, GeneConnection> bByInnov = b.connections.ToDictionary(c => c.innovationNumber);
             double difference = 0;
@@ -297,6 +385,10 @@ namespace neat {
             return matchingCount == 0 ? 0 : difference / matchingCount;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static double Delta( Genome a, Genome b, double e, double d, double w ) {
             double N = Math.Max(1, Math.Max(a.connections.Count, b.connections.Count));
             double E = Genome.ExcessGenes(a, b);
@@ -305,6 +397,10 @@ namespace neat {
             return ( e * E / N ) + ( d * D / N ) + ( w * W );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public List<GeneNode>? TopologicalOrder() // null => cycle
         {
             var inDeg = nodes.ToDictionary(n => n.nodeId, _ => 0);
@@ -320,6 +416,10 @@ namespace neat {
             return order.Count == nodes.Count ? order : null;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double TestForward( double i1, double i2 ) {
             nodes[0].value = i1;
             nodes[1].value = i2;
@@ -329,26 +429,41 @@ namespace neat {
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class Species {
         public List<Genome> members = new List<Genome>();
-        public Genome representative;
-        public double bestFitness = double.NegativeInfinity;
-        public int stagnation;
+        public Genome       representative;
+        public double       bestFitness = double.NegativeInfinity;
+        public int          stagnation;
 
+        /*
+        ==========================
+        ==========================
+         */
         public Species( Genome representative ) { this.representative = representative.Clone(); }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public sealed class NeatPopulation {
-        private readonly NeatSettings settings;
-        private List<Genome> genomes = new List<Genome>();
-        private readonly List<Species> species = new List<Species>();
-        private bool evaluated;
+        private readonly NeatSettings   settings;
+        private List<Genome>            genomes = new List<Genome>();
+        private readonly List<Species>  species = new List<Species>();
 
-        public IReadOnlyList<Genome> Genomes => genomes.AsReadOnly();
-        public int Generation { get; private set; }
-        public int SpeciesCount => species.Count;
-        public Genome? BestGenome { get; private set; }
+        public IReadOnlyList<Genome>    Genomes => genomes.AsReadOnly();
+        public int                      Generation { get; private set; }
+        public int                      SpeciesCount => species.Count;
+        public Genome?                  BestGenome { get; private set; }
 
+        /*
+        ==========================
+        ==========================
+         */
         public NeatPopulation( int inputCount, int outputCount, NeatSettings? settings = null ) {
             this.settings = settings ?? new NeatSettings();
 
@@ -366,6 +481,10 @@ namespace neat {
             Speciate();
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Evaluate( Func<Genome, double> fitnessFunction ) {
             foreach ( Genome genome in genomes ) {
                 double fitness = fitnessFunction(genome);
@@ -384,9 +503,12 @@ namespace neat {
                     group.stagnation++;
                 }
             }
-            evaluated = true;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private void Speciate() {
             foreach ( Species group in species ) group.members.Clear();
             foreach ( Genome genome in genomes ) {
@@ -403,6 +525,10 @@ namespace neat {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Evolve() {
             Genome champion = genomes.MaxBy(g => g.fitness)!;
             species.RemoveAll( s => s.stagnation >= settings.MaxStagnation && !s.members.Contains( champion ) );
@@ -443,9 +569,12 @@ namespace neat {
             genomes = nextGeneration;
             Speciate();
             Generation++;
-            evaluated = false;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static Genome SelectParent( List<Genome> parents ) {
             double maxFitness = parents[0].fitness;
             if ( maxFitness == 0 ) return parents[RNG.random.Next( parents.Count )];
