@@ -75,6 +75,11 @@ namespace arcade {
             (true,false,false,true),   (false,true,true,false),  (false,true,false,true)
         };
 
+        // A move in the canonical (team 0) frame, rotated 180° back into the world for team 1.
+        public static (bool L, bool R, bool U, bool D) MirrorMove( (bool L, bool R, bool U, bool D) m, int team ) {
+            return team == 1 ? ( m.R, m.L, m.D, m.U ) : m;
+        }
+
         public static CSGameState Create(CSLite game, int agentId, int enemyId ) {
             CSPlayer me    = game.Players[agentId];
             CSPlayer enemy = game.Players[enemyId];
@@ -90,10 +95,19 @@ namespace arcade {
             x[i++] = 1;
             x[i++] = me.Health / (double)CSSettings.PlayerHealth;
             x[i++] = me.FireCooldown / CSSettings.GunFireCooldown;
-            x[i++] = MathF.Cos( me.Orientation );
-            x[i++] = MathF.Sin( me.Orientation );
-            x[i++] = me.Position.X / game.WorldWidth;
-            x[i++] = me.Position.Y / game.WorldHeight;
+            // Self-play: the map is 180° rotationally symmetric, so team 1 sees the world rotated
+            // into team 0's frame and one policy can play either side. Only these absolute
+            // features change; everything below is egocentric and already rotation invariant.
+            // Whoever turns the policy output into an action must mirror absolute moves for
+            // team 1 too (MirrorMove).
+            bool   mirror = me.Team == 1;
+            float  flip   = mirror ? -1 : 1;
+            double px     = me.Position.X / game.WorldWidth;
+            double py     = me.Position.Y / game.WorldHeight;
+            x[i++] = flip * MathF.Cos( me.Orientation );
+            x[i++] = flip * MathF.Sin( me.Orientation );
+            x[i++] = mirror ? 1 - px : px;
+            x[i++] = mirror ? 1 - py : py;
 
             // Enemy, egocentric (7)
             Vector2 toEnemy  = enemy.Position - me.Position;

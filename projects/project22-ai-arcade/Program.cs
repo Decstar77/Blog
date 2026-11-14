@@ -18,7 +18,7 @@ namespace arcade {
                 Thread.Sleep( Timeout.Infinite );
                 return;
             }
-            // Score a saved champion on the validation games: dotnet run -- eval [path]
+            // Score a saved champion against CSBot on the fixed benchmark games: dotnet run -- eval [path]
             if ( Args.Length > 0 && Args[0] == "eval" ) {
                 string? path = Args.Length > 1 ? Args[1] : TrainingDashboard.LatestArtifact( "champion.bin" );
                 if ( path == null || !File.Exists( path ) ) {
@@ -28,8 +28,8 @@ namespace arcade {
                 var evalMap = new CSMap();
                 evalMap.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
                 Genome genome = Genome.Load( path );
-                CSTrainingLog log = new CSNeatBasic( evalMap, settings: new NeatSettings { PopulationSize = 1 } ).Validate( genome );
-                Console.WriteLine( $"{Path.GetFileName( path )}: win {log.WinRate:P0}  loss {log.LossRate:P0}  draw {log.DrawRate:P0}  score {log.AvgReward:F3}  ({log.Episodes} games)" );
+                CSTrainingLog log = new CSNeatBasic( evalMap, settings: new NeatSettings { PopulationSize = 1 } ).BenchmarkVsBot( genome );
+                Console.WriteLine( $"{Path.GetFileName( path )} vs CSBot: win {log.WinRate:P0}  loss {log.LossRate:P0}  draw {log.DrawRate:P0}  score {log.AvgReward:F3}  ({log.Episodes} games)" );
                 return;
             }
             // Headless NEAT run: dotnet run -- neat [generations] [population] [seed]
@@ -42,7 +42,6 @@ namespace arcade {
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
 
-            CSNeatBasic neat;
             Genome champion;
             // Play a saved champion instead of training: dotnet run -- play [path]
             // With no path it picks the newest champion.bin in diagnostics/runs.
@@ -54,7 +53,6 @@ namespace arcade {
                 }
                 Console.WriteLine( $"Playing {path}" );
                 champion = Genome.Load( path );
-                neat = new CSNeatBasic( map, settings: new NeatSettings { PopulationSize = 1 } ); // only used for Act
             }
             else {
                 TrainingDashboard.Start();
@@ -68,7 +66,7 @@ namespace arcade {
                 };
 
                 int? seed = null;// 40;
-                neat = new CSNeatBasic( map, seed, 8, neatSettings );
+                CSNeatBasic neat = new CSNeatBasic( map, seed, 8, neatSettings );
                 champion = neat.Train( 25, 25 );
             }
 
@@ -80,27 +78,38 @@ namespace arcade {
             CSAudio audio = new CSAudio( listenerId: 0 );
 
             CSLite game = new CSLite( map );
-            int botId = game.Players.FindIndex( p => p.Team == 1 );
-            CSBot bot = new CSBot( botId );
+            int agentId = game.Players.FindIndex( p => p.Team == 0 );
+            int otherId = game.Players.FindIndex( p => p.Team == 1 );
+            CSBot bot = new CSBot( otherId );
+            var agent  = new CSNeatController( champion, agentId );
+            var mirror = new CSNeatController( champion, otherId );   // the champion playing itself
+            string[] opponents = { "You", "CSBot", "Champion (self-play)" };
+            int opponent = 0;
             var actions = new List<CSPlayerAction> { default, default };
 
             while ( !Raylib.WindowShouldClose() ) {
                 float dt = Raylib.GetFrameTime();
 
-                if ( Raylib.IsKeyPressed( KeyboardKey.R ) ) {
+                bool cycle = Raylib.IsKeyPressed( KeyboardKey.O );
+                if ( cycle ) opponent = ( opponent + 1 ) % opponents.Length;
+                if ( cycle || Raylib.IsKeyPressed( KeyboardKey.R ) ) {
                     game = new CSLite( map );
-                    bot = new CSBot( botId );
+                    bot = new CSBot( otherId );
                 }
-                
-                actions[0] = neat.Act( game, champion );  // or HumanAction( game, 0 ) to play yourself
-                actions[1] = HumanAction( game, 0 );// bot.Think( game, dt );
+
+                actions[0] = agent.Act( game );
+                actions[1] = opponent switch {
+                    0 => HumanAction( game, otherId ),
+                    1 => bot.Think( game, dt ),
+                    _ => mirror.Act( game ),
+                };
                 game.Step( dt, actions );
                 audio.Play( game );
 
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground( Style.Background );
                 game.Render( dt, actions );
-                Raylib.DrawText( "NEAT agent vs CSBot  |  R restart", 12, Raylib.GetScreenHeight() - 28, 18, Style.TextDim );
+                Raylib.DrawText( $"NEAT champion vs {opponents[opponent]}  |  O change opponent  |  R restart", 12, Raylib.GetScreenHeight() - 28, 18, Style.TextDim );
                 Raylib.EndDrawing();
             }
 
