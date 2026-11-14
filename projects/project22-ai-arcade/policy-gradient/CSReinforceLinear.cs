@@ -1,7 +1,7 @@
 ﻿using System.Numerics;
 
 namespace arcade {
-    class CSTrainingLog {
+    public class CSTrainingLog {
         int     episodes;
         int     wins;
         int     losses;
@@ -11,6 +11,12 @@ namespace arcade {
         int     shots;
         double  reward;
         long    ticks;
+
+        public int    Episodes => episodes;
+        public double WinRate  => episodes == 0 ? 0 : wins / (double)episodes;
+        public double LossRate => episodes == 0 ? 0 : losses / (double)episodes;
+        public double DrawRate => episodes == 0 ? 0 : draws / (double)episodes;
+        public double AvgReward => episodes == 0 ? 0 : reward / episodes;
 
         public void Add( CSGameResult result, double episodeReward, int length, int dealt, int taken, int fired ) {
             episodes++;

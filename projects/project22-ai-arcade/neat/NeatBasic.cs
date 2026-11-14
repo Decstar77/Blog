@@ -1,4 +1,4 @@
-namespace arcade {
+﻿namespace arcade {
     /*
     ===============================================================================
     ===============================================================================
@@ -12,14 +12,16 @@ namespace arcade {
         public double SurvivalFraction            { get; init; } = 0.2;
         public double CrossoverChance             { get; init; } = 0.75;
         public double WeightSelectionChance       { get; init; } = 0.8;
-        public double WeightMutationChance        { get; init; } = 0.9;
-        public double WeightPerturbScale          { get; init; } = 1;
+        public double WeightMutationChance        { get; init; } = 0.98;   // Per weight: perturb with this chance, otherwise re-randomise
+        public double WeightPerturbScale          { get; init; } = 0.2;    // Std dev of the Gaussian perturbation
         public double BiasSelectionChance         { get; init; } = 0.8;
-        public double BiasMutationChance          { get; init; } = 0.9;
-        public double BiasPerturbScale            { get; init; } = 1;
+        public double BiasMutationChance          { get; init; } = 0.98;
+        public double BiasPerturbScale            { get; init; } = 0.2;
         public double ConnectionSelectionChance   { get; init; } = 0.08;
         public double NodeSelectionChance         { get; init; } = 0.03;
         public int    MaxStagnation               { get; init; } = 20;
+        public int    TargetSpeciesCount          { get; init; } = 15;     // 0 keeps CompatibilityThreshold fixed
+        public double ThresholdAdjustRate         { get; init; } = 0.05;   // Fractional threshold change per generation when off target
     }
 
     /*
@@ -31,6 +33,7 @@ namespace arcade {
 
         public static void      Seed( int s )         { random = new Random( s ); }
         public static double    NextWeight()          { return random.NextDouble() * 2 - 1; }
+        public static double    NextGaussian()        { return Math.Sqrt( -2.0 * Math.Log( 1.0 - random.NextDouble() ) ) * Math.Cos( 2.0 * Math.PI * random.NextDouble() ); }
         public static T         Choose<T>( T a, T b ) { return random.NextDouble() > 0.5 ? a : b; }
     }
 
@@ -184,7 +187,7 @@ namespace arcade {
             if ( RNG.random.NextDouble() < selectionChance ) {
                 for ( int c = 0; c < connections.Count; c++ ) {
                     if ( RNG.random.NextDouble() < mutationChance ) {
-                        connections[c].weight += RNG.NextWeight() * perturbScale;
+                        connections[c].weight += RNG.NextGaussian() * perturbScale;
                     }
                     else {
                         connections[c].weight = RNG.NextWeight();
@@ -202,7 +205,7 @@ namespace arcade {
                 foreach ( GeneNode node in nodes ) {
                     if ( node.type == GeneNodeType.Input ) continue;
                     if ( RNG.random.NextDouble() < mutationChance )
-                        node.bias += RNG.NextWeight() * perturbScale;
+                        node.bias += RNG.NextGaussian() * perturbScale;
                     else
                         node.bias = RNG.NextWeight();
                 }
@@ -463,6 +466,7 @@ namespace arcade {
         public int                      Generation { get; private set; }
         public int                      SpeciesCount => species.Count;
         public Genome?                  BestGenome { get; private set; }
+        public double                   CompatibilityThreshold { get; private set; }
 
         /*
         ==========================
@@ -470,6 +474,7 @@ namespace arcade {
          */
         public NeatPopulation( int inputCount, int outputCount, NeatSettings? settings = null ) {
             this.settings = settings ?? new NeatSettings();
+            CompatibilityThreshold = this.settings.CompatibilityThreshold;
 
             int[] inputIds = Enumerable.Range(0, inputCount).Select(_ => InnovationRegistry.GlobalNodeIdCounter++).ToArray();
             int[] outputIds = Enumerable.Range(0, outputCount).Select(_ => InnovationRegistry.GlobalNodeIdCounter++).ToArray();
@@ -516,7 +521,7 @@ namespace arcade {
         private void Speciate() {
             foreach ( Species group in species ) group.members.Clear();
             foreach ( Genome genome in genomes ) {
-                Species? group = species.FirstOrDefault(s => Genome.Delta(genome, s.representative, settings.ExcessCoefficient, settings.DisjointCoefficient, settings.WeightDifferenceCoefficient) < settings.CompatibilityThreshold);
+                Species? group = species.FirstOrDefault(s => Genome.Delta(genome, s.representative, settings.ExcessCoefficient, settings.DisjointCoefficient, settings.WeightDifferenceCoefficient) < CompatibilityThreshold);
                 if ( group == null ) {
                     group = new Species( genome );
                     species.Add( group );
@@ -526,6 +531,13 @@ namespace arcade {
             species.RemoveAll( s => s.members.Count == 0 );
             foreach ( Species group in species ) {
                 group.representative = group.members[RNG.random.Next( group.members.Count )].Clone();
+            }
+
+            // Nudge the threshold so the species count drifts toward the target. Too many species
+            // spreads the population thin (every species gets a guaranteed slot), too few loses diversity.
+            if ( settings.TargetSpeciesCount > 0 ) {
+                if ( species.Count > settings.TargetSpeciesCount ) CompatibilityThreshold *= 1 + settings.ThresholdAdjustRate;
+                else if ( species.Count < settings.TargetSpeciesCount ) CompatibilityThreshold /= 1 + settings.ThresholdAdjustRate;
             }
         }
 

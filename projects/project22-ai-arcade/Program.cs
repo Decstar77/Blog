@@ -24,13 +24,14 @@ namespace arcade {
 
             NeatSettings neatSettings = new NeatSettings() {
                 PopulationSize = 250,
-                CompatibilityThreshold = 0.85,
+                CompatibilityThreshold = 0.85,  // Starting value, adapts toward TargetSpeciesCount
+                TargetSpeciesCount = 15,
                 MaxStagnation = 100
             };
 
             int? seed = null;// 40;
-            CSNeatBasic neat = new CSNeatBasic( map, seed, 3, neatSettings );
-            Genome champion = neat.Train( 1000, 25 );
+            CSNeatBasic neat = new CSNeatBasic( map, seed, 8, neatSettings );
+            Genome champion = neat.Train( 100, 25 );
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
             Raylib.InitWindow( 1300, 900, "AI Arcade - CS Lite" );

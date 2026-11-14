@@ -12,62 +12,94 @@
         public static int OutputCount   = 9 + 3 + 2;
 
         private readonly CSMap          map;
-        private readonly int?           seed;
         private readonly int            gamesPerGenome;
+        private readonly Random         seedRng;
+        private readonly int[]          validationSeeds;
         private readonly List<CSPlayerAction> actions = new List<CSPlayerAction>();
 
+        public static int               ValidationGames = 100;  // Fixed games the elites are re-scored on
+        public static int               ValidateTopK    = 3;    // How many of each generation's top genomes get re-scored
+
         public NeatPopulation           Population { get; }
-        public Genome?                  Best => Population.BestGenome;
+        public Genome?                  Champion { get; private set; }      // Best genome by validated win rate
+        public CSTrainingLog?           ChampionLog { get; private set; }
+        public Genome?                  Best => Champion;
 
         /*
         ==========================
         ==========================
          */
-        public CSNeatBasic( CSMap map, int? seed = null, int gamesPerGenome = 3, NeatSettings? settings = null ) {
+        public CSNeatBasic( CSMap map, int? seed = null, int gamesPerGenome = 8, NeatSettings? settings = null ) {
             this.map = map;
-            this.seed = seed;
             this.gamesPerGenome = gamesPerGenome;
             if ( seed != null ) RNG.Seed( seed.Value );
+            seedRng = seed != null ? new Random( seed.Value * 7919 + 1 ) : new Random();
+            // Same validation games every run, kept away from the training seed range.
+            validationSeeds = Enumerable.Range( 0, ValidationGames ).Select( i => 1_000_000 + i ).ToArray();
             Population = new NeatPopulation( CSGameState.FeatureCount, OutputCount, settings );
         }
 
         /*
         ==========================
-        Runs evaluate + evolve for the given number of generations, returns the best genome seen.
+        Runs evaluate + evolve for the given number of generations. Every genome in a generation
+        plays the same freshly drawn games, then the top few are re-scored on a fixed validation
+        set. The returned champion is the best by validated win rate, not the luckiest training score.
         ==========================
          */
         public Genome Train( int generations, int LogEvery = 1 ) {
             var timer = System.Diagnostics.Stopwatch.StartNew();
             for ( int g = 0; g < generations; g++ ) {
+                int[] seeds = Enumerable.Range( 0, gamesPerGenome ).Select( _ => seedRng.Next() ).ToArray();
                 var log = new CSTrainingLog();
-                Population.Evaluate( genome => Fitness( genome, log ) );
+                Population.Evaluate( genome => Fitness( genome, seeds, log ) );
+                ValidateElites();
 
                 if ( LogEvery > 0 && ( g % LogEvery == 0 || g == generations - 1 ) ) {
                     Genome best = Population.Genomes.MaxBy( x => x.fitness )!;
-                    int hidden = best.nodes.Count( n => n.type == GeneNodeType.Hidden );
-                    int links  = best.connections.Count( c => c.enabled );
-                    Console.Write( $"gen {g,4}  species {Population.SpeciesCount,3}  best {best.fitness,6:F2}  (allTime {Population.BestGenome!.fitness,6:F2})  hidden {hidden,3}  links {links,4}  | " );
+                    int hidden = Champion!.nodes.Count( n => n.type == GeneNodeType.Hidden );
+                    int links  = Champion.connections.Count( c => c.enabled );
+                    CSTrainingLog c = ChampionLog!;
+                    Console.Write( $"gen {g,4}  species {Population.SpeciesCount,3} (thr {Population.CompatibilityThreshold,5:F2})  best {best.fitness,6:F2}  " +
+                                   $"CHAMP win {c.WinRate,4:P0} loss {c.LossRate,4:P0} draw {c.DrawRate,4:P0} score {c.AvgReward,5:F2} hidden {hidden,3} links {links,4}  | pop " );
                     log.Print( g, generations, timer.Elapsed.TotalSeconds );
                 }
 
                 if ( g < generations - 1 ) Population.Evolve();
             }
-            return Population.BestGenome!;
+            return Champion!;
         }
 
         /*
         ==========================
-        Average shaped score over a few games. Kept positive because NeatPopulation's
+        Re-score this generation's top genomes on the fixed validation games and keep the best.
+        ==========================
+         */
+        private void ValidateElites() {
+            foreach ( Genome genome in Population.Genomes.OrderByDescending( x => x.fitness ).Take( ValidateTopK ) ) {
+                var log = new CSTrainingLog();
+                Fitness( genome, validationSeeds, log );
+                bool better = ChampionLog == null
+                    || log.WinRate > ChampionLog.WinRate
+                    || ( log.WinRate == ChampionLog.WinRate && log.AvgReward > ChampionLog.AvgReward );
+                if ( better ) {
+                    Champion = genome.Clone();
+                    ChampionLog = log;
+                }
+            }
+        }
+
+        /*
+        ==========================
+        Average shaped score over the given games. Kept positive because NeatPopulation's
         fitness sharing and roulette selection both divide by the max fitness.
         ==========================
          */
-        private double Fitness( Genome genome, CSTrainingLog log ) {
+        private double Fitness( Genome genome, int[] gameSeeds, CSTrainingLog log ) {
             double total = 0;
-            for ( int i = 0; i < gamesPerGenome; i++ ) {
-                int? gameSeed = seed != null ? seed.Value + i : null;
+            foreach ( int gameSeed in gameSeeds ) {
                 total += PlayGame( genome, gameSeed, log );
             }
-            return Math.Max( 0, total / gamesPerGenome );
+            return Math.Max( 0, total / gameSeeds.Length );
         }
 
         /*
@@ -102,10 +134,11 @@
             }
 
             // Baseline of 2 keeps an ordinary loss (4 hits taken) above zero so selection still
-            // sees a gradient. Hits dealt matter most, a win adds a big step, and surviving
-            // longer beats dying fast.
-            double survived = ticks * CSSettings.InvGameTickRate / CSSettings.MaxRoundTime;
-            double score = 2.0 + 1.0 * dealt - 0.25 * taken + 1.0 * survived;
+            // sees a gradient. Hits dealt matter most and a win adds a big step. The survival
+            // bonus only applies to losses (dying late beats dying fast), so hiding until the
+            // timer runs out scores below a loss where the agent actually fought.
+            double score = 2.0 + 1.0 * dealt - 0.25 * taken;
+            if ( game.Result == CSGameResult.LOSS ) score += ticks * CSSettings.InvGameTickRate / CSSettings.MaxRoundTime;
             if ( game.Result == CSGameResult.WIN ) score += 4.0;
 
             log.Add( game.Result, score, ticks, dealt, taken, fired );
