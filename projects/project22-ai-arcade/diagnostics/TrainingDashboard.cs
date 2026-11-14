@@ -85,6 +85,28 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        Path for a file that belongs to the current run, next to its .jsonl:
+        runs/<run>.<suffix>, e.g. ArtifactPath( "champion.bin" ). Null when no run is open.
+        ==========================
+         */
+        public static string? ArtifactPath( string suffix ) {
+            lock ( sync ) {
+                return RunFile == null ? null : Path.ChangeExtension( RunFile, null ) + "." + suffix;
+            }
+        }
+
+        /*
+        ==========================
+        Newest file across all runs with the given suffix, e.g. the latest champion.bin.
+        ==========================
+         */
+        public static string? LatestArtifact( string suffix ) {
+            if ( !Directory.Exists( RunsDir ) ) return null;
+            return new DirectoryInfo( RunsDir ).GetFiles( "*." + suffix ).OrderByDescending( f => f.Name ).FirstOrDefault()?.FullName;
+        }
+
         public static void EndRun() {
             lock ( sync ) {
                 writer?.Dispose();

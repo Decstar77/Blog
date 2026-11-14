@@ -141,10 +141,10 @@
     ===============================================================================
     */
     public class Genome {
+        private const int           FileVersion = 1;
         public List<GeneNode>       nodes = new List<GeneNode>();
         public List<GeneConnection> connections = new List<GeneConnection>();
         public double               fitness = 0;
-
         /*
         ==========================
         ==========================
@@ -423,10 +423,70 @@
             return order.Count == nodes.Count ? order : null;
         }
 
+
+
         /*
         ==========================
         ==========================
          */
+        public void Save( string path ) {
+            string tmp = path + ".tmp";
+            using ( var w = new BinaryWriter( File.Create( tmp ) ) ) {
+                w.Write( "NEAT"u8 );
+                w.Write( FileVersion );
+                w.Write( fitness );
+                w.Write( nodes.Count );
+                foreach ( GeneNode n in nodes ) {
+                    w.Write( n.nodeId );
+                    w.Write( (byte)n.type );
+                    w.Write( n.layer );
+                    w.Write( n.bias );
+                }
+                w.Write( connections.Count );
+                foreach ( GeneConnection c in connections ) {
+                    w.Write( c.innovationNumber );
+                    w.Write( c.src.nodeId );
+                    w.Write( c.dst.nodeId );
+                    w.Write( c.weight );
+                    w.Write( c.enabled );
+                }
+            }
+            File.Move( tmp, path, overwrite: true );
+        }
+
+        /*
+        ==========================
+        ==========================
+         */
+        public static Genome Load( string path ) {
+            using var r = new BinaryReader( File.OpenRead( path ) );
+            if ( !r.ReadBytes( 4 ).AsSpan().SequenceEqual( "NEAT"u8 ) ) throw new InvalidDataException( $"{path} is not a NEAT genome file" );
+            int version = r.ReadInt32();
+            if ( version != FileVersion ) throw new InvalidDataException( $"{path} is genome file version {version}, expected {FileVersion}" );
+
+            Genome g = new Genome { fitness = r.ReadDouble() };
+            var byId = new Dictionary<int, GeneNode>();
+            int nodeCount = r.ReadInt32();
+            for ( int i = 0; i < nodeCount; i++ ) {
+                int id = r.ReadInt32();
+                var type = (GeneNodeType)r.ReadByte();
+                GeneNode n = new GeneNode( type, id ) { layer = r.ReadInt32(), bias = r.ReadDouble() };
+                g.nodes.Add( n );
+                byId.Add( id, n );
+                InnovationRegistry.GlobalNodeIdCounter = Math.Max( InnovationRegistry.GlobalNodeIdCounter, id + 1 );
+            }
+            int linkCount = r.ReadInt32();
+            for ( int i = 0; i < linkCount; i++ ) {
+                int innovation = r.ReadInt32();
+                GeneNode src = byId[r.ReadInt32()];
+                GeneNode dst = byId[r.ReadInt32()];
+                g.connections.Add( new GeneConnection( src, dst, innovation ) { weight = r.ReadDouble(), enabled = r.ReadBoolean() } );
+                InnovationRegistry.connectionInnovations.TryAdd( (src.nodeId, dst.nodeId), innovation );
+                InnovationRegistry.GlobalInnovationCounter = Math.Max( InnovationRegistry.GlobalInnovationCounter, innovation + 1 );
+            }
+            return g;
+        }
+
         public double TestForward( double i1, double i2 ) {
             nodes[0].value = i1;
             nodes[1].value = i2;

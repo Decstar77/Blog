@@ -66,7 +66,10 @@
                 int[] seeds = Enumerable.Range( 0, gamesPerGenome ).Select( _ => seedRng.Next() ).ToArray();
                 var log = new CSTrainingLog();
                 Population.Evaluate( genome => Fitness( genome, seeds, log ) );
-                if ( ValidateElites() ) LogChampionNetwork( g );
+                if ( ValidateElites() ) {
+                    LogChampionNetwork( g );
+                    SaveChampion();
+                }
                 LogToDashboard( g, log, timer.Elapsed.TotalSeconds - genStart );
 
                 if ( LogEvery > 0 && ( g % LogEvery == 0 || g == generations - 1 ) ) {
@@ -140,6 +143,28 @@
                 }
             }
             return changed;
+        }
+
+        /*
+        ==========================
+        Scores a genome on the fixed validation games (the same ones the champion is picked on).
+        ==========================
+         */
+        public CSTrainingLog Validate( Genome genome ) {
+            var log = new CSTrainingLog();
+            Fitness( genome, validationSeeds, log );
+            return log;
+        }
+
+        /*
+        ==========================
+        Overwrites runs/<run>.champion.bin with the current champion. Load it back with
+        Genome.Load, or play it with `dotnet run -- play [path]`.
+        ==========================
+         */
+        private void SaveChampion() {
+            string? path = TrainingDashboard.ArtifactPath( "champion.bin" );
+            if ( path != null ) Champion!.Save( path );
         }
 
         /*

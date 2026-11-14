@@ -18,6 +18,20 @@ namespace arcade {
                 Thread.Sleep( Timeout.Infinite );
                 return;
             }
+            // Score a saved champion on the validation games: dotnet run -- eval [path]
+            if ( Args.Length > 0 && Args[0] == "eval" ) {
+                string? path = Args.Length > 1 ? Args[1] : TrainingDashboard.LatestArtifact( "champion.bin" );
+                if ( path == null || !File.Exists( path ) ) {
+                    Console.WriteLine( $"No champion found. Looked in {TrainingDashboard.RunsDir}" );
+                    return;
+                }
+                var evalMap = new CSMap();
+                evalMap.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
+                Genome genome = Genome.Load( path );
+                CSTrainingLog log = new CSNeatBasic( evalMap, settings: new NeatSettings { PopulationSize = 1 } ).Validate( genome );
+                Console.WriteLine( $"{Path.GetFileName( path )}: win {log.WinRate:P0}  loss {log.LossRate:P0}  draw {log.DrawRate:P0}  score {log.AvgReward:F3}  ({log.Episodes} games)" );
+                return;
+            }
             // Headless NEAT run: dotnet run -- neat [generations] [population] [seed]
             if ( Args.Length > 0 && Args[0] == "neat" ) {
                 TrainingDashboard.Start();
@@ -25,22 +39,38 @@ namespace arcade {
                 return;
             }
 
-            TrainingDashboard.Start();
-            Console.WriteLine( "Training..." );
-
             var map = new CSMap();
             map.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
 
-            NeatSettings neatSettings = new NeatSettings() {
-                PopulationSize = 250,
-                CompatibilityThreshold = 0.85,  // Starting value, adapts toward TargetSpeciesCount
-                TargetSpeciesCount = 15,
-                MaxStagnation = 100
-            };
+            CSNeatBasic neat;
+            Genome champion;
+            // Play a saved champion instead of training: dotnet run -- play [path]
+            // With no path it picks the newest champion.bin in diagnostics/runs.
+            if ( Args.Length > 0 && Args[0] == "play" ) {
+                string? path = Args.Length > 1 ? Args[1] : TrainingDashboard.LatestArtifact( "champion.bin" );
+                if ( path == null || !File.Exists( path ) ) {
+                    Console.WriteLine( $"No champion to play. Train first, or pass a path to a .champion.bin file. Looked in {TrainingDashboard.RunsDir}" );
+                    return;
+                }
+                Console.WriteLine( $"Playing {path}" );
+                champion = Genome.Load( path );
+                neat = new CSNeatBasic( map, settings: new NeatSettings { PopulationSize = 1 } ); // only used for Act
+            }
+            else {
+                TrainingDashboard.Start();
+                Console.WriteLine( "Training..." );
 
-            int? seed = null;// 40;
-            CSNeatBasic neat = new CSNeatBasic( map, seed, 8, neatSettings );
-            Genome champion = neat.Train( 100, 25 );
+                NeatSettings neatSettings = new NeatSettings() {
+                    PopulationSize = 250,
+                    CompatibilityThreshold = 0.85,  // Starting value, adapts toward TargetSpeciesCount
+                    TargetSpeciesCount = 15,
+                    MaxStagnation = 100
+                };
+
+                int? seed = null;// 40;
+                neat = new CSNeatBasic( map, seed, 8, neatSettings );
+                champion = neat.Train( 1, 25 );
+            }
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
             Raylib.InitWindow( 1300, 900, "AI Arcade - CS Lite" );
