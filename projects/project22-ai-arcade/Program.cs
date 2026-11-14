@@ -69,7 +69,7 @@ namespace arcade {
 
                 int? seed = null;// 40;
                 neat = new CSNeatBasic( map, seed, 8, neatSettings );
-                champion = neat.Train( 1, 25 );
+                champion = neat.Train( 25, 25 );
             }
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
@@ -93,7 +93,7 @@ namespace arcade {
                 }
                 
                 actions[0] = neat.Act( game, champion );  // or HumanAction( game, 0 ) to play yourself
-                actions[1] = bot.Think( game, dt );
+                actions[1] = HumanAction( game, 0 );// bot.Think( game, dt );
                 game.Step( dt, actions );
                 audio.Play( game );
 
