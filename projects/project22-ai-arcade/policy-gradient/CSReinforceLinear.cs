@@ -59,6 +59,16 @@ namespace arcade {
         public static int    FeatureCount  = 7 + 7 + 2 + RayCount + 5 + 1; // = 30
         public static int    OutputCount   = FeatureCount * 14; // 14 rows
 
+        // Names for each entry of X, in the order Create fills it. Used by the dashboard.
+        public static readonly string[] FeatureNames = {
+            "bias", "my health", "my fire cooldown", "my facing cos", "my facing sin", "my x", "my y",
+            "enemy bearing sin", "enemy bearing cos", "enemy distance", "enemy line of sight", "enemy health", "enemy aiming at me", "enemy fire cooldown",
+            "waypoint bearing sin", "waypoint bearing cos",
+            "ray 0° (ahead)", "ray 45°", "ray 90°", "ray 135°", "ray 180°", "ray 225°", "ray 270°", "ray 315°",
+            "bullet exists", "bullet ahead", "bullet right", "bullet distance", "bullet incoming",
+            "round time",
+        };
+
         public static readonly (bool L, bool R, bool U, bool D)[] Moves = {
             (false,false,false,false), (true,false,false,false), (false,true,false,false),
             (false,false,true,false),  (false,false,false,true), (true,false,true,false),

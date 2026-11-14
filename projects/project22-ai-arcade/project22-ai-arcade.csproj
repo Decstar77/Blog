@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Folder Include="diagnostics\" />
+    <Folder Include="diagnostics\runs\" />
   </ItemGroup>
 
 </Project>

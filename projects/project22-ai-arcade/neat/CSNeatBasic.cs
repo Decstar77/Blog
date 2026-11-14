@@ -11,6 +11,13 @@
         public static int ActionRepeat  = 6;    // Ticks each decision is held for, same as CSReinforceLinear
         public static int OutputCount   = 9 + 3 + 2;
 
+        // Output node names in Think's order: 9 move rows, 3 rotate rows, 2 fire rows.
+        public static readonly string[] OutputNames = {
+            "move none", "move left", "move right", "move up", "move down", "move up-left", "move down-left", "move up-right", "move down-right",
+            "turn left", "turn none", "turn right",
+            "fire", "hold fire",
+        };
+
         private readonly CSMap          map;
         private readonly int?           seed;
         private readonly int            gamesPerGenome;
@@ -59,7 +66,7 @@
                 int[] seeds = Enumerable.Range( 0, gamesPerGenome ).Select( _ => seedRng.Next() ).ToArray();
                 var log = new CSTrainingLog();
                 Population.Evaluate( genome => Fitness( genome, seeds, log ) );
-                ValidateElites();
+                if ( ValidateElites() ) LogChampionNetwork( g );
                 LogToDashboard( g, log, timer.Elapsed.TotalSeconds - genStart );
 
                 if ( LogEvery > 0 && ( g % LogEvery == 0 || g == generations - 1 ) ) {
@@ -118,7 +125,8 @@
         Re-score this generation's top genomes on the fixed validation games and keep the best.
         ==========================
          */
-        private void ValidateElites() {
+        private bool ValidateElites() {
+            bool changed = false;
             foreach ( Genome genome in Population.Genomes.OrderByDescending( x => x.fitness ).Take( ValidateTopK ) ) {
                 var log = new CSTrainingLog();
                 Fitness( genome, validationSeeds, log );
@@ -128,8 +136,44 @@
                 if ( better ) {
                     Champion = genome.Clone();
                     ChampionLog = log;
+                    changed = true;
                 }
             }
+            return changed;
+        }
+
+        /*
+        ==========================
+        Champion snapshot for the dashboard's Network tab, logged only when it changes.
+        Input/output nodes are labelled by their position among nodes of that type,
+        which matches the order Forward reads inputs and writes outputs.
+        ==========================
+         */
+        private void LogChampionNetwork( int generation ) {
+            Genome c = Champion!;
+            var nodes = new List<NetNode>();
+            int inputIndex = 0, outputIndex = 0;
+            foreach ( GeneNode n in c.nodes ) {
+                switch ( n.type ) {
+                    case GeneNodeType.Input:
+                        nodes.Add( new NetNode( n.nodeId, "input", n.layer, CSGameState.FeatureNames.ElementAtOrDefault( inputIndex++ ), 0 ) );
+                        break;
+                    case GeneNodeType.Output:
+                        nodes.Add( new NetNode( n.nodeId, "output", n.layer, OutputNames.ElementAtOrDefault( outputIndex++ ), n.bias ) );
+                        break;
+                    default:
+                        nodes.Add( new NetNode( n.nodeId, "hidden", n.layer, null, n.bias ) );
+                        break;
+                }
+            }
+            var edges = c.connections.Select( e => new NetEdge( e.src.nodeId, e.dst.nodeId, e.weight, e.enabled ) );
+            TrainingDashboard.LogNetwork( generation, "champion", nodes, edges, new {
+                generation,
+                winRate = Math.Round( ChampionLog!.WinRate, 3 ),
+                score   = Math.Round( ChampionLog.AvgReward, 3 ),
+                hidden  = c.nodes.Count( n => n.type == GeneNodeType.Hidden ),
+                links   = c.connections.Count( e => e.enabled ),
+            } );
         }
 
         /*

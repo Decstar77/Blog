@@ -18,6 +18,7 @@
     --live:      #008300;
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
     --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+    --pos: #2a78d6; --neg: #e34948; --node-in: #8a8984; --node-out: #52514e;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -26,6 +27,7 @@
       --text: #f0efec; --text-2: #c3c2b7; --text-3: #85847d; --live: #3fae3f;
       --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
       --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+      --pos: #3987e5; --neg: #e66767; --node-in: #85847d; --node-out: #c3c2b7;
     }
   }
   :root[data-theme="dark"] {
@@ -34,6 +36,7 @@
     --text: #f0efec; --text-2: #c3c2b7; --text-3: #85847d; --live: #3fae3f;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
     --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+      --pos: #3987e5; --neg: #e66767; --node-in: #85847d; --node-out: #c3c2b7;
   }
   * { box-sizing: border-box; }
   body {
@@ -70,6 +73,39 @@
     font-size: 12px; overflow: auto; max-height: 360px; color: var(--text-2); margin: 0 0 8px;
   }
   .empty { color: var(--text-3); padding: 40px 0; text-align: center; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button {
+    font: inherit; color: var(--text-2); background: none; border: 1px solid transparent;
+    border-radius: 6px; padding: 4px 12px; cursor: pointer;
+  }
+  .tabs button:hover { background: var(--bg); }
+  .tabs button[aria-selected="true"] { color: var(--text); border-color: var(--border); background: var(--bg); font-weight: 600; }
+  .smooth-ctl[hidden] { display: none; }
+  .net-toolbar { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; margin-bottom: 12px; color: var(--text-2); }
+  .net-toolbar label { display: flex; gap: 8px; align-items: center; }
+  .net-toolbar input[type=range] { width: 200px; }
+  .net-legend { display: flex; gap: 16px; align-items: center; font-size: 12px; }
+  .net-legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .net-info { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 12px; }
+  .net-info div { color: var(--text-3); font-size: 12px; }
+  .net-info b { display: block; color: var(--text); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .net-card { overflow-x: auto; }
+  #netSvg { display: block; }
+  #netSvg text { fill: var(--text-2); font-size: 11px; }
+  #netSvg .edge { fill: none; }
+  #netSvg .node circle.dot { stroke: var(--surface); stroke-width: 2; }
+  #netSvg.focus .edge:not(.hl) { opacity: .06; }
+  #netSvg.focus .node:not(.hl) { opacity: .3; }
+  #netSvg.focus .node.hl text { fill: var(--text); font-weight: 600; }
+  .tip {
+    position: fixed; pointer-events: none; z-index: 5; display: none;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; font-size: 12px; color: var(--text-2); max-width: 280px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  }
+  .tip b { color: var(--text); }
+  .tip table { border-collapse: collapse; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tip td { padding: 1px 6px 1px 0; }
+  .tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
   @media (max-width: 760px) {
     .layout { grid-template-columns: 1fr; }
     aside { border-right: 0; border-bottom: 1px solid var(--border); }
@@ -80,7 +116,11 @@
 <body>
 <header>
   <h1>Training Dashboard</h1>
-  <label>Smoothing <input id="smooth" type="range" min="0" max="0.98" step="0.01" value="0"> <span id="smoothVal">0.00</span></label>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="metrics" aria-selected="true">Metrics</button>
+    <button role="tab" data-tab="network" aria-selected="false">Network</button>
+  </nav>
+  <label class="smooth-ctl">Smoothing <input id="smooth" type="range" min="0" max="0.98" step="0.01" value="0"> <span id="smoothVal">0.00</span></label>
   <label><input id="follow" type="checkbox" checked> Follow newest run</label>
   <span class="spacer"></span>
   <span id="status">connecting…</span>
@@ -92,9 +132,23 @@
     <div class="config" id="config"></div>
   </aside>
   <main>
-    <div class="grid" id="charts"></div>
-    <div class="empty" id="empty">No data yet. Start a run that calls TrainingDashboard.BeginRun.</div>
+    <section id="metricsView">
+      <div class="grid" id="charts"></div>
+      <div class="empty" id="empty">No data yet. Start a run that calls TrainingDashboard.BeginRun.</div>
+    </section>
+    <section id="networkView" hidden>
+      <div class="net-toolbar">
+        <label>Snapshot <input id="netStep" type="range" min="0" max="0" step="1" value="0"> <span id="netStepVal"></span></label>
+        <label>Hide |w| below <input id="netMinW" type="range" min="0" max="2" step="0.05" value="0"> <span id="netMinWVal">0.00</span></label>
+        <label><input id="netDisabled" type="checkbox"> Show disabled links</label>
+        <span class="net-legend"><span><i style="background:var(--pos)"></i>positive weight</span><span><i style="background:var(--neg)"></i>negative weight</span><span>thickness = |weight|</span></span>
+      </div>
+      <div class="net-info" id="netInfo"></div>
+      <div class="card net-card"><svg id="netSvg"></svg></div>
+      <div class="empty" id="netEmpty">No network snapshots in this run yet. Log one with TrainingDashboard.LogNetwork.</div>
+    </section>
   </main>
+  <div class="tip" id="tip"></div>
 </div>
 
 <script>
@@ -132,7 +186,7 @@ async function refresh() {
     selected = selected.filter(f => runList.some(r => r.file === f));
     for (const file of selected) await tail(file);
     renderRuns();
-    renderCharts();
+    renderActive();
     $('status').textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (e) {
     $('status').textContent = 'server offline, retrying…';
@@ -144,7 +198,7 @@ async function refresh() {
 // Fetch only the bytes appended since last time and parse complete lines.
 async function tail(file) {
   let run = runs.get(file);
-  if (!run) runs.set(file, run = { meta: null, offset: 0, rest: '', rows: [] });
+  if (!run) runs.set(file, run = { meta: null, offset: 0, rest: '', rows: [], networks: [] });
   const res = await fetch(`/runs/${encodeURIComponent(file)}?from=${run.offset}`);
   if (!res.ok) return;
   const buf = new Uint8Array(await res.arrayBuffer());
@@ -157,6 +211,7 @@ async function tail(file) {
     let rec;
     try { rec = JSON.parse(line); } catch { continue; }
     if (rec.type === 'meta') run.meta = rec;
+    else if (rec.type === 'network') run.networks.push(rec);
     else if (rec.v) run.rows.push(rec);
   }
 }
@@ -192,6 +247,7 @@ function renderRuns() {
       $('follow').checked = false;
       if (ev.target.checked) selected.push(r.file);
       else selected = selected.filter(f => f !== r.file);
+      netFollow = true;
       refresh();
     });
     el.appendChild(row);
@@ -340,11 +396,242 @@ function makeChart(group) {
   return c;
 }
 
+/* ---------------- tabs ---------------- */
+
+let tab = location.hash === '#network' ? 'network' : 'metrics';
+
+function setTab(name) {
+  tab = name;
+  history.replaceState(null, '', name === 'network' ? '#network' : '#');
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === name));
+  $('metricsView').hidden = name !== 'metrics';
+  $('networkView').hidden = name !== 'network';
+  document.querySelector('.smooth-ctl').hidden = name !== 'metrics';
+  netRendered = '';
+  renderActive();
+}
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+function renderActive() {
+  if (tab === 'network') renderNetwork();
+  else renderCharts();
+}
+
+/* ---------------- network ---------------- */
+
+let netFollow   = true;   // stick to the newest snapshot until the user scrubs back
+let netRendered = '';     // what is currently drawn, so polling doesn't redraw (and drop hover) needlessly
+
+function renderNetwork() {
+  // The network tab shows one run: the first selected one.
+  const run  = runs.get(selected[0]);
+  const nets = run?.networks ?? [];
+  const slider = $('netStep');
+  $('netEmpty').style.display = nets.length ? 'none' : '';
+  $('netSvg').parentElement.style.display = nets.length ? '' : 'none';
+  $('netInfo').style.display = nets.length ? '' : 'none';
+  if (!nets.length) { netRendered = ''; $('netStepVal').textContent = ''; return; }
+
+  slider.max = nets.length - 1;
+  if (netFollow) slider.value = nets.length - 1;
+  const idx = Math.min(parseInt(slider.value), nets.length - 1);
+  const net = nets[idx];
+  $('netStepVal').textContent = `${idx + 1} / ${nets.length}  (step ${net.step})`;
+
+  const minW = parseFloat($('netMinW').value);
+  const showDisabled = $('netDisabled').checked;
+  const key = [selected[0], idx, minW, showDisabled, $('netSvg').parentElement.clientWidth, css('--pos')].join('|');
+  if (key === netRendered) return;
+  netRendered = key;
+
+  drawNetwork(net, minW, showDisabled);
+}
+
+function drawNetwork(net, minW, showDisabled) {
+  const svg = $('netSvg');
+  const NS = 'http://www.w3.org/2000/svg';
+  svg.innerHTML = '';
+  svg.classList.remove('focus');
+  $('tip').style.display = 'none';
+
+  const nodes = net.nodes;
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const valid = net.edges.filter(e => byId.has(e.src) && byId.has(e.dst));
+  const enabled = valid.filter(e => e.on);
+
+  // Info strip: whatever the trainer put in `info`, plus counts.
+  const info = { ...(net.info ?? {}) };
+  info.nodes = nodes.length;
+  info['enabled links'] = enabled.length;
+  $('netInfo').innerHTML = Object.entries(info).map(([k, v]) =>
+    `<div><b>${escapeHtml(typeof v === 'number' && !Number.isInteger(v) ? fmt(v) : v)}</b>${escapeHtml(k)}</div>`).join('');
+
+  // Columns: one per distinct layer value, ranked so gaps in layer numbers collapse.
+  const layers = [...new Set(nodes.map(n => n.layer))].sort((a, b) => a - b);
+  const colOf = new Map(layers.map((l, i) => [l, i]));
+  const cols = layers.map(() => []);
+  nodes.forEach(n => cols[colOf.get(n.layer)].push(n));
+
+  const ROW = 22, PAD = 20;
+  const maxRows = Math.max(...cols.map(c => c.length));
+  const height = PAD * 2 + (maxRows - 1) * ROW;
+  const width = Math.max(svg.parentElement.clientWidth - 26, 720);
+  const left = 170, right = 140;
+  const colX = i => layers.length === 1 ? left : left + i * (width - left - right) / (layers.length - 1);
+
+  const incoming = new Map(nodes.map(n => [n.id, []]));
+  const outgoing = new Map(nodes.map(n => [n.id, []]));
+  for (const e of valid) {
+    incoming.get(e.dst).push(e);
+    outgoing.get(e.src).push(e);
+  }
+
+  // Inputs and outputs keep their logged order. Hidden nodes are sorted by the mean
+  // height of their sources, which cuts down on crossing lines.
+  const pos = new Map();
+  cols.forEach((col, ci) => {
+    if (col.some(n => n.kind === 'hidden')) {
+      const score = n => {
+        const ys = incoming.get(n.id).filter(e => e.on && pos.has(e.src)).map(e => pos.get(e.src).y);
+        return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : height / 2;
+      };
+      const scores = new Map(col.map(n => [n.id, score(n)]));
+      col.sort((a, b) => scores.get(a.id) - scores.get(b.id));
+    }
+    const top = (height - (col.length - 1) * ROW) / 2;
+    col.forEach((n, i) => pos.set(n.id, { x: colX(ci), y: top + i * ROW }));
+  });
+
+  svg.setAttribute('width', width);
+  svg.setAttribute('height', height);
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+  // Thickness/opacity scale off the 95th percentile |w| so one huge weight
+  // doesn't flatten everything else.
+  const mags = enabled.map(e => Math.abs(e.w)).sort((a, b) => a - b);
+  const wRef = mags.length ? Math.max(mags[Math.min(mags.length - 1, Math.floor(mags.length * 0.95))], 1e-6) : 1;
+  const posC = css('--pos'), negC = css('--neg'), offC = css('--text-3');
+
+  const edgeLayer = document.createElementNS(NS, 'g');
+  svg.appendChild(edgeLayer);
+  const edgeEls = new Map(); // node id -> [{ path, other }]
+  const drawn = valid
+    .filter(e => e.on ? Math.abs(e.w) >= minW : showDisabled)
+    .sort((a, b) => Math.abs(a.w) - Math.abs(b.w)); // strong links on top
+  for (const e of drawn) {
+    const a = pos.get(e.src), b = pos.get(e.dst);
+    const t = Math.min(Math.abs(e.w) / wRef, 1);
+    const dx = (b.x - a.x) * 0.5;
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', `M${a.x},${a.y} C${a.x + dx},${a.y} ${b.x - dx},${b.y} ${b.x},${b.y}`);
+    path.setAttribute('class', 'edge');
+    if (e.on) {
+      path.setAttribute('stroke', e.w >= 0 ? posC : negC);
+      path.setAttribute('stroke-width', (0.5 + 3 * t).toFixed(2));
+      path.setAttribute('stroke-opacity', (0.12 + 0.78 * t).toFixed(2));
+    } else {
+      path.setAttribute('stroke', offC);
+      path.setAttribute('stroke-width', 1);
+      path.setAttribute('stroke-opacity', 0.5);
+      path.setAttribute('stroke-dasharray', '3 3');
+    }
+    edgeLayer.appendChild(path);
+    for (const [id, other] of [[e.src, e.dst], [e.dst, e.src]]) {
+      if (!edgeEls.has(id)) edgeEls.set(id, []);
+      edgeEls.get(id).push({ path, other });
+    }
+  }
+
+  const nodeLayer = document.createElementNS(NS, 'g');
+  svg.appendChild(nodeLayer);
+  const nodeEls = new Map();
+  const fills = { input: css('--node-in'), output: css('--node-out'), hidden: css('--s7') };
+  for (const n of nodes) {
+    const p = pos.get(n.id);
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'node');
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('class', 'dot');
+    c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
+    c.setAttribute('r', n.kind === 'hidden' ? 7 : 6);
+    c.setAttribute('fill', fills[n.kind] ?? fills.hidden);
+    g.appendChild(c);
+    if (n.kind !== 'hidden' && n.label) {
+      const txt = document.createElementNS(NS, 'text');
+      const isIn = n.kind === 'input';
+      txt.setAttribute('x', isIn ? p.x - 12 : p.x + 12);
+      txt.setAttribute('y', p.y + 4);
+      txt.setAttribute('text-anchor', isIn ? 'end' : 'start');
+      txt.textContent = n.label;
+      g.appendChild(txt);
+    }
+    // Invisible hit target bigger than the dot so small nodes are easy to hover.
+    const hit = document.createElementNS(NS, 'circle');
+    hit.setAttribute('cx', p.x); hit.setAttribute('cy', p.y); hit.setAttribute('r', 11);
+    hit.setAttribute('fill', 'transparent');
+    g.appendChild(hit);
+    g.addEventListener('mouseenter', ev => focusNode(n, ev));
+    g.addEventListener('mousemove', moveTip);
+    g.addEventListener('mouseleave', unfocus);
+    nodeLayer.appendChild(g);
+    nodeEls.set(n.id, g);
+  }
+
+  function nodeName(n) { return n.label ?? `hidden #${n.id}`; }
+
+  function focusNode(n, ev) {
+    svg.classList.add('focus');
+    nodeEls.get(n.id).classList.add('hl');
+    for (const { path, other } of edgeEls.get(n.id) ?? []) {
+      path.classList.add('hl');
+      nodeEls.get(other)?.classList.add('hl');
+    }
+    const strongest = list => list.filter(e => e.on).sort((a, b) => Math.abs(b.w) - Math.abs(a.w)).slice(0, 6);
+    const row = (e, otherId) =>
+      `<tr><td><span class="sw" style="background:${e.w >= 0 ? posC : negC}"></span></td>` +
+      `<td>${escapeHtml(nodeName(byId.get(otherId)))}</td><td>${fmt(e.w)}</td></tr>`;
+    const ins = strongest(incoming.get(n.id)), outs = strongest(outgoing.get(n.id));
+    let html = `<b>${escapeHtml(nodeName(n))}</b> <span>(${n.kind}, layer ${n.layer})</span>`;
+    if (n.kind !== 'input') html += `<div>bias ${fmt(n.bias)}</div>`;
+    if (ins.length) html += `<div style="margin-top:6px">strongest inputs</div><table>${ins.map(e => row(e, e.src)).join('')}</table>`;
+    if (outs.length) html += `<div style="margin-top:6px">strongest outputs</div><table>${outs.map(e => row(e, e.dst)).join('')}</table>`;
+    $('tip').innerHTML = html;
+    $('tip').style.display = 'block';
+    moveTip(ev);
+  }
+
+  function unfocus() {
+    svg.classList.remove('focus');
+    svg.querySelectorAll('.hl').forEach(el => el.classList.remove('hl'));
+    $('tip').style.display = 'none';
+  }
+}
+
+function moveTip(ev) {
+  const tip = $('tip');
+  const x = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8);
+  const y = Math.min(ev.clientY + 14, innerHeight - tip.offsetHeight - 8);
+  tip.style.left = `${x}px`;
+  tip.style.top = `${y}px`;
+}
+
+$('netStep').addEventListener('input', () => {
+  netFollow = parseInt($('netStep').value) === parseInt($('netStep').max);
+  renderNetwork();
+});
+$('netMinW').addEventListener('input', () => {
+  $('netMinWVal').textContent = parseFloat($('netMinW').value).toFixed(2);
+  renderNetwork();
+});
+$('netDisabled').addEventListener('change', renderNetwork);
+addEventListener('resize', () => { if (tab === 'network') renderNetwork(); });
+
 // Colors come from CSS tokens, so rebuild the charts when the OS theme flips.
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   for (const c of charts.values()) { c.chart.destroy(); c.card.remove(); }
   charts.clear();
-  renderCharts();
+  netRendered = '';
+  renderActive();
 });
 
 $('smooth').addEventListener('input', () => {
@@ -353,6 +640,7 @@ $('smooth').addEventListener('input', () => {
 });
 $('follow').addEventListener('change', () => { if ($('follow').checked) refresh(); });
 
+setTab(tab);
 poll();
 </script>
 </body>

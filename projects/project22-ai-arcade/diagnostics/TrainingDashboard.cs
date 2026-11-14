@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 
@@ -22,6 +22,16 @@ namespace arcade {
     edited without rebuilding. `dotnet run -- dash` serves the dashboard on its own.
     ===============================================================================
     */
+    /*
+    ===============================================================================
+    A network snapshot for the dashboard's Network tab. Nodes are placed in columns by
+    layer (0 = inputs on the left), kind is "input", "hidden" or "output". Edges reference
+    node ids. Works for NEAT genomes and plain MLPs alike.
+    ===============================================================================
+    */
+    public record struct NetNode( int id, string kind, int layer, string? label = null, double bias = 0 );
+    public record struct NetEdge( int src, int dst, double weight, bool enabled = true );
+
     public static class TrainingDashboard {
         public static int       Port = 5005;
 
@@ -97,6 +107,24 @@ namespace arcade {
                 if ( writer == null ) return;
                 var finite = values.Where( kv => double.IsFinite( kv.Value ) ).ToDictionary( kv => kv.Key, kv => kv.Value );
                 Write( new { step, t = Math.Round( clock.Elapsed.TotalSeconds, 3 ), v = finite } );
+            }
+        }
+
+        /*
+        ==========================
+        Logs a network snapshot. Snapshots are large compared to scalars, so log one when
+        the network actually changes (e.g. a new champion), not every step. Info is any
+        small object shown next to the drawing.
+        ==========================
+         */
+        public static void LogNetwork( int step, string name, IEnumerable<NetNode> nodes, IEnumerable<NetEdge> edges, object? info = null ) {
+            lock ( sync ) {
+                if ( writer == null ) return;
+                Write( new {
+                    type = "network", step, name, t = Math.Round( clock.Elapsed.TotalSeconds, 3 ), info,
+                    nodes = nodes.Select( n => new { n.id, n.kind, n.layer, n.label, bias = Math.Round( n.bias, 4 ) } ),
+                    edges = edges.Select( e => new { e.src, e.dst, w = Math.Round( e.weight, 4 ), on = e.enabled } ),
+                } );
             }
         }
 
