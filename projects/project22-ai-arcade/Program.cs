@@ -67,7 +67,7 @@ namespace arcade {
 
                 int? seed = null;// 40;
                 CSNeatBasic neat = new CSNeatBasic( map, seed, 8, neatSettings );
-                champion = neat.Train( 25, 25 );
+                champion = neat.Train( 250, 25 );
             }
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );
