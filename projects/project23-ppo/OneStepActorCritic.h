@@ -26,3 +26,14 @@ struct ActorCritResult {
 };
 
 ActorCritResult one_step_actor_critic( int episodeCount, float alphaTheta, float alphaW, float gamma, ActorCriticInterface * ac );
+
+struct ActorCriticSettings {
+    int episodeCount;
+    float lamdaTheta;
+    float lamdaW;
+    float alphaTheta;
+    float alphaW;
+    float gamma;
+};
+
+ActorCritResult one_step_actor_critic_etraces( ActorCriticSettings settings, ActorCriticInterface * ac );
