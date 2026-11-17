@@ -48,8 +48,6 @@ ActorCritResult one_step_actor_critic_etraces( ActorCriticSettings settings, Act
 
         tn_zero( zTheta );
         tn_zero( zW );
-        tn_zero( zThetaTemp );
-        tn_zero( zWTemp );
 
         float I = 1.0f;
         while ( ac->is_terminal() == false ) {
@@ -69,7 +67,14 @@ ActorCritResult one_step_actor_critic_etraces( ActorCriticSettings settings, Act
             tn_mul( settings.gamma * settings.lamdaTheta, zTheta );
             tn_add( zTheta, thetaGrad );
 
-            zThetaTemp =
+            tn_copy( zThetaTemp, zTheta );
+            tn_copy( zWTemp, zW );
+
+            tn_mul( settings.alphaW * delta, zThetaTemp );
+            tn_mul( settings.alphaTheta * delta, zWTemp );
+
+            tn_add( w, zWTemp );
+            tn_add( theta, zThetaTemp );
 
             I *= settings.gamma;
             s = sp;
