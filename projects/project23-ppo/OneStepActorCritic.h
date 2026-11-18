@@ -14,10 +14,8 @@ class ActorCriticInterface {
     virtual Tensor  initial_theta() = 0;
     virtual Tensor  initial_w() = 0;
 
-    // Gradient of ln pi(action | state, theta) with respect to theta
-    virtual Tensor  theta_log_grad( int state, int action, const Tensor & theta ) = 0;
-    // Gradient of v(state, w) with respect to w
-    virtual Tensor  state_value_grad( int state, const Tensor & w ) = 0;
+    virtual Tensor  theta_log_grad( int state, int action, const Tensor & theta ) = 0; // Gradient of ln pi(action | state, theta) with respect to theta.
+    virtual Tensor  state_value_grad( int state, const Tensor & w ) = 0; // Gradient of v(state, w) with respect to w.
 };
 
 struct ActorCritResult {
@@ -28,7 +26,7 @@ struct ActorCritResult {
 ActorCritResult one_step_actor_critic( int episodeCount, float alphaTheta, float alphaW, float gamma, ActorCriticInterface * ac );
 
 struct ActorCriticSettings {
-    int episodeCount;
+    int   episodeCount;
     float lamdaTheta;
     float lamdaW;
     float alphaTheta;
@@ -36,4 +34,4 @@ struct ActorCriticSettings {
     float gamma;
 };
 
-ActorCritResult one_step_actor_critic_etraces( ActorCriticSettings settings, ActorCriticInterface * ac );
+ActorCritResult actor_critic_etraces( ActorCriticSettings settings, ActorCriticInterface * ac );

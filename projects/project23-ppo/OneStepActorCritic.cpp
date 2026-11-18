@@ -33,15 +33,12 @@ ActorCritResult one_step_actor_critic( int episodeCount, float alphaTheta, float
     return res;
 }
 
-ActorCritResult one_step_actor_critic_etraces( ActorCriticSettings settings, ActorCriticInterface * ac ) {
+ActorCritResult actor_critic_etraces( ActorCriticSettings settings, ActorCriticInterface * ac ) {
     Tensor theta = ac->initial_theta();
     Tensor w = ac->initial_w();
 
     Tensor zTheta = tn_clone( theta );
     Tensor zW = tn_clone( w );
-
-    Tensor zThetaTemp = tn_clone( theta );
-    Tensor zWTemp = tn_clone( w );
 
     for ( int episodeNumber = 0; episodeNumber < settings.episodeCount; episodeNumber++ ) {
         int s = ac->new_game();
@@ -67,19 +64,16 @@ ActorCritResult one_step_actor_critic_etraces( ActorCriticSettings settings, Act
             tn_mul( settings.gamma * settings.lamdaTheta, zTheta );
             tn_add( zTheta, thetaGrad );
 
-            tn_copy( zThetaTemp, zTheta );
-            tn_copy( zWTemp, zW );
-
-            tn_mul( settings.alphaW * delta, zThetaTemp );
-            tn_mul( settings.alphaTheta * delta, zWTemp );
-
-            tn_add( w, zWTemp );
-            tn_add( theta, zThetaTemp );
+            tn_axpy( w, settings.alphaW * delta, zW );
+            tn_axpy( theta, settings.alphaTheta * delta, zTheta );
 
             I *= settings.gamma;
             s = sp;
         }
     }
+
+    tn_free( zTheta );
+    tn_free( zW );
 
     ActorCritResult res;
     res.actor = theta;
