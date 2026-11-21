@@ -75,7 +75,8 @@ namespace arcade {
 
                 int? seed = null;// 40;
                 CSNeatBasic neat = new CSNeatBasic( map, seed, 8, neatSettings );
-                champion = neat.Train( 250, 25 );
+                string path = "C:\\Projects\\2025\\Blog\\projects\\project22-ai-arcade\\diagnostics\\runs\\20261121-170438_neat-cs-selfplay.champion.bin";
+                champion = neat.Train( 250, 25, path);
             }
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );

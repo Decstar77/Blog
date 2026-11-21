@@ -1,24 +1,6 @@
 ﻿namespace arcade {
     /*
     ===============================================================================
-    Evolves NEAT genomes to play CS Lite by self-play.
-
-    Inputs are the CSGameState features (same as REINFORCE), outputs are the same
-    14 action rows split into three heads (move 9, rotate 3, fire 2). NEAT outputs
-    are sigmoids, so each head picks its argmax: the policy is deterministic.
-    Team 1 sees the map rotated into team 0's frame (see CSGameState.Create), so one
-    genome can play either seat.
-
-    Each generation:
-      1. Build an opponent panel: half past champions from the hall of fame, half
-         genomes from the current population. Every genome plays the same panel on
-         the same seeds, alternating seats, so fitness is comparable across genomes.
-      2. The top few genomes play the most recent hall-of-fame champions on fixed
-         seeds. The best of them becomes this generation's champion, gets an Elo
-         rating from those games, and joins the hall of fame.
-      3. The champion plays CSBot on fixed seeds. CSBot is never trained against, so
-         this is an outside yardstick for whether self-play is learning to play well
-         or just learning to beat its own quirks.
     ===============================================================================
     */
     public class CSNeatBasic {
@@ -79,11 +61,9 @@
 
         /*
         ==========================
-        Runs evaluate + evolve for the given number of generations and returns the last
-        generation's champion.
         ==========================
          */
-        public Genome Train( int generations, int LogEvery = 1 ) {
+        public Genome Train( int generations, int LogEvery = 1, string? loadCheckPoint = null ) {
             var timer = System.Diagnostics.Stopwatch.StartNew();
             TrainingDashboard.BeginRun( "neat-cs-selfplay", new {
                 generations, seed, gamesPerGenome, HallOfFameShare, ValidateTopK, RatingOpponents, BotBenchmarkGames, ActionRepeat,
@@ -136,9 +116,6 @@
 
         /*
         ==========================
-        Opponents every genome faces this generation. Hall-of-fame slots favour recent
-        champions but keep sampling old ones, so the population can't forget how to beat
-        strategies it has already seen. Before there is a hall of fame, it's all population.
         ==========================
          */
         private List<Genome> BuildPanel() {
@@ -159,9 +136,6 @@
 
         /*
         ==========================
-        Average shaped score over one game per panel opponent, alternating seats. Kept
-        positive because NeatPopulation's fitness sharing and roulette selection both
-        divide by the max fitness.
         ==========================
          */
         private double SelfPlayFitness( Genome genome, List<Genome> panel, int[] seeds, CSTrainingLog log ) {
@@ -174,10 +148,6 @@
 
         /*
         ==========================
-        The top candidates play the most recent champions, once from each seat, on fixed
-        seeds. The one with the most points (win 1, draw 0.5) becomes champion and is rated
-        from those games. The first generation has nobody to play, so it takes the best
-        fitness and the starting rating.
         ==========================
          */
         private CSTrainingLog CrownChampion( int generation, out double rating ) {
@@ -217,10 +187,6 @@
 
         /*
         ==========================
-        Elo performance rating: the rating R at which the expected score against these
-        opponents equals the actual score. One virtual draw against the average opponent
-        keeps it finite when a candidate wins (or loses) every game. Ratings are relative to
-        the hall of fame, so a rising curve means each champion beats the ones before it.
         ==========================
          */
         public static double PerformanceRating( List<(double opponentRating, double points)> games ) {
@@ -239,7 +205,6 @@
 
         /*
         ==========================
-        Fixed games against CSBot, half from each seat.
         ==========================
          */
         public CSTrainingLog BenchmarkVsBot( Genome genome ) {
@@ -252,8 +217,6 @@
 
         /*
         ==========================
-        One game. A null opponent means CSBot. Results are from the agent's point of view:
-        WIN means the agent won, whichever team it was on.
         ==========================
          */
         public struct Match {
@@ -310,9 +273,6 @@
 
         /*
         ==========================
-        One line per generation. Series sharing a prefix share a chart, so each prefix
-        only holds values on the same scale. Self-play win rate is left out on purpose:
-        the population plays itself, so it sits near 50% whatever happens.
         ==========================
          */
         private void LogToDashboard( int generation, CSTrainingLog selfPlay, CSTrainingLog vsRecent, CSTrainingLog vsBot, double rating, double seconds ) {
@@ -351,8 +311,6 @@
 
         /*
         ==========================
-        Overwrites runs/<run>.champion.bin with the current champion. Load it back with
-        Genome.Load, or play it with `dotnet run -- play [path]`.
         ==========================
          */
         private void SaveChampion() {
@@ -362,9 +320,6 @@
 
         /*
         ==========================
-        Champion snapshot for the dashboard's Network tab. Input/output nodes are labelled
-        by their position among nodes of that type, which matches the order Forward reads
-        inputs and writes outputs.
         ==========================
          */
         private void LogChampionNetwork( int generation, double rating, CSTrainingLog vsBot ) {
@@ -396,8 +351,6 @@
 
         /*
         ==========================
-        Policy for player `me`. Team 1's observation is already rotated into team 0's
-        frame by CSGameState.Create, so its absolute move is rotated back here.
         ==========================
          */
         public static CSPlayerAction Think( Genome genome, CSLite game, int me, int enemy ) {
@@ -433,8 +386,6 @@
 
     /*
     ===============================================================================
-    Drives one player of a CSLite game from a genome, holding each decision for
-    ActionRepeat ticks to match training. Used in training and in the game window.
     ===============================================================================
     */
     public sealed class CSNeatController {
