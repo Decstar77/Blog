@@ -2,6 +2,10 @@
 using Raylib_cs;
 
 namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class FrozenLake 
     {
         public static readonly string[] Map4x4 =
@@ -40,6 +44,10 @@ namespace arcade {
         protected int     lastAction = -1;
         protected int     lastDir = -1;
 
+        /*
+        ==========================
+        ==========================
+         */
         public FrozenLake(string[]? map = null, bool slippery = true, int maxSteps = 100, int? seed = null)
         {
             this.map = map ?? Map4x4;
@@ -67,8 +75,16 @@ namespace arcade {
 
         public int CurrentPlayer() => 0;
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] LegalActions() => IsTerminal() ? Array.Empty<int>() : new[] { 0, 1, 2, 3 };
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Apply(int action)
         {
             if (IsTerminal() || action < 0 || action >= 4)
@@ -91,6 +107,10 @@ namespace arcade {
 
         public bool IsTerminal() => Tile == 'H' || Tile == 'G' || steps >= maxSteps;
 
+        /*
+        ==========================
+        ==========================
+         */
         public float[] Returns() => new float[] { Tile == 'G' ? 1 : 0 };
 
         protected (int Row, int Col) Move(int r, int c, int dir) => (Math.Clamp(r + DRow[dir], 0, Rows - 1), Math.Clamp(c + DCol[dir], 0, Cols - 1));
@@ -101,6 +121,10 @@ namespace arcade {
         private static readonly Color WaterEdge = new Color(70, 120, 170, 255);
         private static readonly Color Slip      = new Color(255, 140, 60, 255);
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Render(Rectangle area)
         {
             Rectangle grid = Style.FitGrid(area, Cols, Rows, 24);
@@ -141,6 +165,10 @@ namespace arcade {
             DrawAgent(grid, cell);
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static void DrawFlag(Rectangle tile)
         {
             float w = tile.Width, h = tile.Height;
@@ -152,6 +180,10 @@ namespace arcade {
             Raylib.DrawTriangle(top, new Vector2(top.X, top.Y + h * 0.28f), new Vector2(top.X + w * 0.38f, top.Y + h * 0.14f), Style.P1);
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private void DrawAgent(Rectangle grid, float cell)
         {
             var p = new Vector2(grid.X + (col + 0.5f) * cell, grid.Y + (row + 0.5f) * cell);
@@ -185,6 +217,10 @@ namespace arcade {
 
         private static float Cross(Vector2 u, Vector2 v) => u.X * v.Y - u.Y * v.X;
 
+        /*
+        ==========================
+        ==========================
+         */
         public override string ToString()
         {
             var sb = new System.Text.StringBuilder();

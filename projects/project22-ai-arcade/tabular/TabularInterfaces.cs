@@ -1,10 +1,18 @@
 namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public record MdpTransition {
         public float    Prob;
         public int      NextState;
         public float    Reward;
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public interface TabularModelBasedInterface {
         public int              NumStates { get; }
         public int              NumActions { get; }
@@ -13,6 +21,10 @@ namespace arcade {
         public MdpTransition[]  Transitions(int state, int action);
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public interface TabularModelFreeInterface {
         public int              NumStates { get; }
         public int              NumActions { get; }

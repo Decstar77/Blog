@@ -30,8 +30,17 @@ namespace arcade {
     ===============================================================================
     */
     public record struct NetNode( int id, string kind, int layer, string? label = null, double bias = 0 );
+
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public record struct NetEdge( int src, int dst, double weight, bool enabled = true );
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public static class TrainingDashboard {
         public static int       Port = 5005;
 
@@ -107,6 +116,10 @@ namespace arcade {
             return new DirectoryInfo( RunsDir ).GetFiles( "*." + suffix ).OrderByDescending( f => f.Name ).FirstOrDefault()?.FullName;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static void EndRun() {
             lock ( sync ) {
                 writer?.Dispose();
@@ -114,6 +127,10 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static void Log( int step, string key, double value ) {
             Log( step, new Dictionary<string, double> { [key] = value } );
         }
@@ -154,6 +171,10 @@ namespace arcade {
             NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
         };
 
+        /*
+        ==========================
+        ==========================
+         */
         private static void Write( object record ) {
             writer!.WriteLine( JsonSerializer.Serialize( record, jsonOptions ) );
         }
@@ -190,6 +211,10 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static void Handle( HttpListenerContext ctx ) {
             string path = ctx.Request.Url!.AbsolutePath;
 
@@ -229,6 +254,10 @@ namespace arcade {
             Reply( ctx, 404, "text/plain", Encoding.UTF8.GetBytes( "not found" ) );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static void Reply( HttpListenerContext ctx, int status, string contentType, byte[] body ) {
             ctx.Response.StatusCode = status;
             ctx.Response.ContentType = contentType;

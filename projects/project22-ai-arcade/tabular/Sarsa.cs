@@ -1,16 +1,33 @@
 ﻿namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class Sarsa {
         private TabularModelFreeInterface rl;
+
+        /*
+        ===============================================================================
+        ===============================================================================
+        */
         private record StateActionReward {
             public int s;
             public int a;
             public float r;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public Sarsa( TabularModelFreeInterface rl ) {
             this.rl = rl;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyControl_OneStep( int EpisodeCount, double Alpha, double Epsilon, double Gamma = 1.0 ) {
             double[,] Q = InitialQ();
 
@@ -31,6 +48,10 @@
             return GreedyPolicy( Q );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyControl_ExpectedSarsa( int EpisodeCount, double Alpha, double Epsilon, double Gamma = 1.0 ) {
             double[,] Q = InitialQ();
 
@@ -48,6 +69,10 @@
             return GreedyPolicy( Q );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyControl_NStep( int EpisodeCount, int N, double Alpha, double Epsilon, double Gamma = 1.0 ) {
             double[,] Q = InitialQ();
 
@@ -86,6 +111,10 @@
             return GreedyPolicy( Q );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private double[,] InitialQ() {
             double[,] Q = new double[rl.NumStates, rl.NumActions];
             for ( int s = 0; s < rl.NumStates; s++ ) {
@@ -96,6 +125,10 @@
             return Q;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int EpsilonGreedyAction( double[,] Q, int s, double Epsilon ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -104,6 +137,10 @@
             return actions[Helpers.EpsilonGreedy( Epsilon, actions.Length, ( int i ) => Q[s, actions[i]] )];
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private double ExpectedQ( double[,] Q, int s, double Epsilon ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -118,6 +155,10 @@
             return ( 1 - Epsilon ) * max + Epsilon * sum / actions.Length;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int[] GreedyPolicy( double[,] Q ) {
             int[] Policy = new int[rl.NumStates];
             for ( int s = 0; s < rl.NumStates; s++ ) {

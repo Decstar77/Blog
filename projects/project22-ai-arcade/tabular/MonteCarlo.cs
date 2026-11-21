@@ -1,5 +1,13 @@
 ﻿namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class MonteCarloFirstVisitOnPolicy {
+        /*
+        ===============================================================================
+        ===============================================================================
+        */
         record TimeStep {
             public int t;
             public int state;
@@ -10,10 +18,18 @@
         private TabularModelFreeInterface rl;
         public int MaxEpisodeSteps = 1000;
 
+        /*
+        ==========================
+        ==========================
+         */
         public MonteCarloFirstVisitOnPolicy( TabularModelFreeInterface mc ) {
             this.rl = mc;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double[] PolicyEvaluation( int[] Policy, int EpisodeCount, double Gamma = 1.0 ) {
             double[] V = new double[rl.NumStates];
             int[]    N = new int[rl.NumStates];
@@ -43,6 +59,10 @@
             return V;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyControl_ExploringStarts( int EpisodeCount, double Gamma = 1.0 ) { // Policy Interation
             int[]       Policy = new int[rl.NumStates];
             int[,]      N = new int[rl.NumStates, rl.NumActions];
@@ -69,6 +89,10 @@
             return Policy;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyControl_EpsilonSoft( int EpisodeCount, double Epsilon, double Gamma = 1.0 ) {
             double[,]   Policy = new double[rl.NumStates, rl.NumActions];
             int[,]      N = new int[rl.NumStates, rl.NumActions];
@@ -115,7 +139,11 @@
             return DPolicy;
         }
 
-        // Returns the legal action with the highest Q value, ties broken randomly. Terminal states return 0.
+        /*
+        ==========================
+        Returns the legal action with the highest Q value, ties broken randomly. Terminal states return 0.
+        ==========================
+         */
         private int GreedyAction( double[,] Q, int s ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -124,6 +152,10 @@
             return actions[Helpers.ArgMax( actions.Length, ( int i ) => Q[s, actions[i]] )];
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private bool HasBeenVisited( TimeStep ep, int t, List<TimeStep> episode ) {
             for ( int i = 0; i <= t - 1; i++ ) {
                 if ( ep.state == episode[i].state && ep.action == episode[i].action ) {
@@ -133,6 +165,10 @@
             return false;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private List<TimeStep> GenerateEpisode(int[] Policy, bool randomStart) {
             if ( randomStart ) {
                 rl.RandomGame();
@@ -152,6 +188,10 @@
             return episode;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private List<TimeStep> GenerateEpisode( double[,] Policy ) {
             rl.NewGame();
             List<TimeStep> episode = new List<TimeStep>();
@@ -166,7 +206,15 @@
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class MonteCarloEveryVisitOffPolicy {
+        /*
+        ===============================================================================
+        ===============================================================================
+        */
         record TimeStep {
             public int t;
             public int state;
@@ -177,10 +225,18 @@
         private TabularModelFreeInterface mc;
         public int MaxEpisodeSteps = 1000;
 
+        /*
+        ==========================
+        ==========================
+         */
         public MonteCarloEveryVisitOffPolicy( TabularModelFreeInterface mc ) {
             this.mc = mc;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double[,] PolicyEvaluation( double[,] Policy, int EpisodeCount, double Gamma = 1.0 ) {
             double[,]   C = new double[mc.NumStates, mc.NumActions];
             double[,]   Q = new double[mc.NumStates, mc.NumActions];
@@ -209,6 +265,10 @@
             return Q;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double[,] PolicyControl( int[] Policy, int EpisodeCount, double Gamma = 1.0 ) {
             double[,]   C = new double[mc.NumStates, mc.NumActions];
             double[,]   Q = new double[mc.NumStates, mc.NumActions];
@@ -240,7 +300,11 @@
             return Q;
         }
 
-        // Uniform over legal actions, illegal actions get zero probability
+        /*
+        ==========================
+        Uniform over legal actions, illegal actions get zero probability
+        ==========================
+         */
         private double[,] UniformBehaviourPolicy() {
             double[,] B = new double[mc.NumStates, mc.NumActions];
             for ( int s = 0; s < mc.NumStates; s++ ) {
@@ -252,6 +316,10 @@
             return B;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private List<TimeStep> GenerateEpisode( double[,] Policy ) {
             mc.NewGame();
             List<TimeStep> episode = new List<TimeStep>();

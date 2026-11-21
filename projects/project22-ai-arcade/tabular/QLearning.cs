@@ -1,16 +1,33 @@
 ﻿namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class QLearning {
         private TabularModelFreeInterface rl;
+
+        /*
+        ===============================================================================
+        ===============================================================================
+        */
         private record StateActionReward {
             public int s;
             public int a;
             public float r;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public QLearning( TabularModelFreeInterface rl ) {
             this.rl = rl;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyControl_OneStep( int EpisodeCount, double Alpha, double Epsilon, double Gamma = 1.0 ) {
             double[,] Q = InitialQ();
 
@@ -28,6 +45,10 @@
             return GreedyPolicy( Q );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyControl_DoubleQ( int EpisodeCount, double Alpha, double Epsilon, double Gamma = 1.0 ) {
             double[,] Q1 = InitialQ();
             double[,] Q2 = InitialQ();
@@ -52,8 +73,12 @@
             return GreedyPolicy( QMean );
         }
 
-        // Rewards are only summed along greedy actions, the target policy never takes the others.
-        // The return is cut at the first exploratory action, which is tree backup with a greedy target.
+        /*
+        ==========================
+        Rewards are only summed along greedy actions, the target policy never takes the others.
+        The return is cut at the first exploratory action, which is tree backup with a greedy target.
+        ==========================
+         */
         public int[] PolicyControl_NStep( int EpisodeCount, int N, double Alpha, double Epsilon, double Gamma = 1.0 ) {
             double[,] Q = InitialQ();
 
@@ -96,6 +121,10 @@
             return GreedyPolicy( Q );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private double[,] InitialQ() {
             double[,] Q = new double[rl.NumStates, rl.NumActions];
             for ( int s = 0; s < rl.NumStates; s++ ) {
@@ -106,6 +135,10 @@
             return Q;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int EpsilonGreedyAction( double[,] Q, int s, double Epsilon ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -114,6 +147,10 @@
             return actions[Helpers.EpsilonGreedy( Epsilon, actions.Length, ( int i ) => Q[s, actions[i]] )];
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private double MaxQ( double[,] Q, int s ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -126,6 +163,10 @@
             return max;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private double CrossQ( double[,] QSelect, double[,] QValue, int s ) {
             int[] actions = rl.LegalActions(s);
             if ( actions.Length == 0 ) {
@@ -134,6 +175,10 @@
             return QValue[s, actions[Helpers.ArgMax( actions.Length, ( int i ) => QSelect[s, actions[i]] )]];
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int[] GreedyPolicy( double[,] Q ) {
             int[] Policy = new int[rl.NumStates];
             for ( int s = 0; s < rl.NumStates; s++ ) {

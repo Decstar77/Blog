@@ -2,9 +2,17 @@
 using System.Numerics;
 
 namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class Program {
-        // CS Lite: the team-0 player is driven by the best NEAT genome evolved at startup,
-        // the team-1 player is a CSBot. R restarts the round.
+        /*
+        ==========================
+        CS Lite: the team-0 player is driven by the best NEAT genome evolved at startup,
+        the team-1 player is a CSBot. R restarts the round.
+        ==========================
+         */
         public static void Main( string[] Args ) {
             // Headless training run for tuning: dotnet run -- train [episodes] [alpha] [gamma] [seed]
             if ( Args.Length > 0 && Args[0] == "train" ) {
@@ -118,6 +126,10 @@ namespace arcade {
             Raylib.CloseWindow();
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static void Train( string[] args ) {
             var inv      = System.Globalization.CultureInfo.InvariantCulture;
             int episodes = args.Length > 1 ? int.Parse( args[1] ) : 10000;
@@ -131,6 +143,10 @@ namespace arcade {
             new Reinforce().PolicyControl( new CSReinforceLinear( map, seed ), episodes, alpha, gamma, seed, LogEvery: Math.Max( 1, episodes / 20 ) );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static void TrainNeat( string[] args ) {
             int generations = args.Length > 1 ? int.Parse( args[1] ) : 50;
             int population  = args.Length > 2 ? int.Parse( args[2] ) : 150;
@@ -142,6 +158,10 @@ namespace arcade {
             new CSNeatBasic( map, seed, settings: new NeatSettings { PopulationSize = population } ).Train( generations );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static CSPlayerAction HumanAction( CSLite game, int playerIndex ) {
             CSPlayer me = game.Players[playerIndex];
             var action = new CSPlayerAction {

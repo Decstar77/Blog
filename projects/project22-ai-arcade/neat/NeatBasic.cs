@@ -487,6 +487,10 @@
             return g;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double TestForward( double i1, double i2 ) {
             nodes[0].value = i1;
             nodes[1].value = i2;

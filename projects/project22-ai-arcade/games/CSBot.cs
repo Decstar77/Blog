@@ -1,9 +1,13 @@
 using System.Numerics;
 
 namespace arcade {
-    // Simple scripted opponent:
-    //  - Can see an enemy: turn toward them, shoot once lined up, strafe and hold a comfortable range.
-    //  - Can't see one: BFS over the map grid toward the nearest enemy and walk the path.
+    /*
+    ===============================================================================
+    Simple scripted opponent:
+     - Can see an enemy: turn toward them, shoot once lined up, strafe and hold a comfortable range.
+     - Can't see one: BFS over the map grid toward the nearest enemy and walk the path.
+    ===============================================================================
+    */
     public class CSBot {
         public float AimTolerance = 4f * MathF.PI / 180f; // Fire when within this many radians of the target
         public float PreferredRange = 220;                // Close in when farther than this
@@ -14,11 +18,19 @@ namespace arcade {
         private int             StrafeSign = 1;
         private float           StrafeTimer = 0;
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSBot( int playerIndex, int? seed = null ) {
             PlayerId = playerIndex;
             Rng = seed.HasValue ? new Random( seed.Value ) : new Random();
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSPlayerAction Think( CSLite game, float dt ) {
             var action = new CSPlayerAction { PlayerId = PlayerId };
             CSPlayer me = game.Players[PlayerId];
@@ -61,6 +73,10 @@ namespace arcade {
             return action;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int NearestEnemy( CSLite game, CSPlayer me ) {
             int best = -1;
             float bestDist = float.MaxValue;
@@ -73,7 +89,11 @@ namespace arcade {
             return best;
         }
 
-        // Sets Rotation to turn toward the desired angle, returns the remaining angle error.
+        /*
+        ==========================
+        Sets Rotation to turn toward the desired angle, returns the remaining angle error.
+        ==========================
+         */
         private static float AimAt( ref CSPlayerAction action, CSPlayer me, float desired ) {
             float error = CSLite.WrapAngle( desired - me.Orientation );
             float maxTurnPerTick = CSSettings.PlayerTurnSpeed * (float)CSSettings.InvGameTickRate;
@@ -81,6 +101,10 @@ namespace arcade {
             return error;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static void SetMove( ref CSPlayerAction action, Vector2 dir ) {
             const float deadZone = 2f;
             if ( dir.LengthSquared() < 1e-6f ) return;
@@ -95,7 +119,11 @@ namespace arcade {
         private static readonly int[] DR = { -1, 1, 0, 0 };
         private static readonly int[] DC = { 0, 0, -1, 1 };
 
-        // Centre of the next cell on a shortest 4-connected grid path, or null if no path exists.
+        /*
+        ==========================
+        Centre of the next cell on a shortest 4-connected grid path, or null if no path exists.
+        ==========================
+         */
         public static Vector2? NextWaypoint( CSLite game, Vector2 from, Vector2 to ) {
             CSMap map = game.MapData;
             var start = game.CellOf( from );

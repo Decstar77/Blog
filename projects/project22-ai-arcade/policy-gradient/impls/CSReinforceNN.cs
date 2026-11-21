@@ -1,4 +1,8 @@
 ﻿namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct GradDataNN {
         public List<double[]> inputs;
         public double[] m;
@@ -10,6 +14,10 @@
         public int fa;
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class CSReinforceNN : PolicyGradientInterface<CSGameState, CSPlayerAction, GradDataNN> {
         private CSBot                   bot;
         private CSLite                  game;
@@ -135,6 +143,10 @@
             return (action, grad);
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static void AccumulateHeadGrads( List<double[]> inputs, double[] p, int a, int startingRow, int rowCount, double scale, double[] into ) {
             
 

@@ -1,6 +1,10 @@
 ﻿using System.Numerics;
 
 namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class CSTrainingLog {
         int     episodes;
         int     wins;
@@ -22,6 +26,10 @@ namespace arcade {
         public double Accuracy  => shots == 0 ? 0 : hitsDealt / (double)shots;
         public double AvgLengthSeconds => episodes == 0 ? 0 : ticks / (double)episodes * CSSettings.InvGameTickRate;
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Add( CSGameResult result, double episodeReward, int length, int dealt, int taken, int fired ) {
             episodes++;
             if ( result == CSGameResult.WIN ) wins++;
@@ -34,6 +42,10 @@ namespace arcade {
             shots += fired;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Print( int episode, int total, double seconds ) {
             if ( episodes == 0 ) return;
             double n = episodes;
@@ -44,6 +56,10 @@ namespace arcade {
                 $"dealt {hitsDealt / n,4:F1}  taken {hitsTaken / n,4:F1}  acc {accuracy,4:P0}  [{seconds:F0}s]" );
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Reset() {
             episodes = wins = losses = draws = hitsDealt = hitsTaken = shots = 0;
             reward = 0;
@@ -51,6 +67,10 @@ namespace arcade {
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct CSGameState {
         public double[] X;
 
@@ -75,11 +95,19 @@ namespace arcade {
             (true,false,false,true),   (false,true,true,false),  (false,true,false,true)
         };
 
-        // A move in the canonical (team 0) frame, rotated 180° back into the world for team 1.
+        /*
+        ==========================
+        A move in the canonical (team 0) frame, rotated 180° back into the world for team 1.
+        ==========================
+         */
         public static (bool L, bool R, bool U, bool D) MirrorMove( (bool L, bool R, bool U, bool D) m, int team ) {
             return team == 1 ? ( m.R, m.L, m.D, m.U ) : m;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static CSGameState Create(CSLite game, int agentId, int enemyId ) {
             CSPlayer me    = game.Players[agentId];
             CSPlayer enemy = game.Players[enemyId];
@@ -171,12 +199,20 @@ namespace arcade {
             return new CSGameState { X = x };
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static float RelativeBearing( CSPlayer me, Vector2 dir ) { // Angle from my facing to `dir`, in [-pi, pi]. Positive = turn with positive Rotation.
             if ( dir.LengthSquared() < 1e-6f ) return 0;
             return CSLite.WrapAngle( MathF.Atan2( dir.Y, dir.X ) - me.Orientation );
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct GradDataLinear {
         public double[] m;
         public double[] r;
@@ -186,6 +222,10 @@ namespace arcade {
         public int fa;
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class CSReinforceLinear : PolicyGradientInterface<CSGameState, CSPlayerAction, GradDataLinear> {
         private CSBot           bot;
         private CSLite          game;
@@ -199,6 +239,10 @@ namespace arcade {
         private int             agentId;
         private int             enemyId;
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSReinforceLinear( CSMap map, int? seed ) {
             this.map = map;
             this.seed = seed;
@@ -218,6 +262,10 @@ namespace arcade {
         public static int ActionRepeat = 6;
         public int        Ticks { get; private set; }
 
+        /*
+        ==========================
+        ==========================
+         */
         public float Step( CSPlayerAction policyAction ) {
             float reward = 0;
             for ( int k = 0; k < ActionRepeat && !IsTerminal(); k++ ) {
@@ -226,6 +274,10 @@ namespace arcade {
             return reward;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private float StepTick( CSPlayerAction policyAction ) {
             CSPlayerAction botAction = bot.Think( game, (float)CSSettings.InvGameTickRate );
             actions.Clear();
@@ -259,6 +311,10 @@ namespace arcade {
             return reward;
         }
         
+        /*
+        ==========================
+        ==========================
+         */
         public static double[] HeadProbs( double[] x, double[] theta, int startingRow, int rowCount ) {
             double[] p = new double[rowCount];
             double max = double.NegativeInfinity;
@@ -285,6 +341,10 @@ namespace arcade {
         private CSPlayerAction  heldAction;
         private int             heldSinceTick = int.MaxValue;
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSPlayerAction Act( CSLite external, double[] theta ) {
             int tick = external.TickCount;
             if ( tick < heldSinceTick || tick - heldSinceTick >= ActionRepeat ) { // tick < heldSinceTick: the game was restarted
@@ -297,6 +357,10 @@ namespace arcade {
             return heldAction;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public (CSPlayerAction, GradDataLinear) Think( CSGameState s, double[] theta ) {
             GradDataLinear grad = new GradDataLinear();
             grad.m = HeadProbs(s.X, theta, 0, 9);
@@ -316,7 +380,11 @@ namespace arcade {
             return (action, grad);
         }
 
-        // into += scale * grad of ln softmax for one head: row k gets x * (onehot(a)_k - p_k).
+        /*
+        ==========================
+        into += scale * grad of ln softmax for one head: row k gets x * (onehot(a)_k - p_k).
+        ==========================
+         */
         public static void AccumulateHeadGrads( double[] x, double[] p, int a, int startingRow, int rowCount, double scale, double[] into ) {
             for ( int k = 0; k < rowCount; k++ ) {
                 int off = (startingRow + k) * CSGameState.FeatureCount;
@@ -327,6 +395,10 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void AccumulateGradLogProb( CSGameState s, CSPlayerAction action, GradDataLinear g, double[] theta, double scale, double[] into ) {
             AccumulateHeadGrads( s.X, g.m, g.ma, 0,  9, scale, into );
             AccumulateHeadGrads( s.X, g.r, g.ra, 9,  3, scale, into );
@@ -339,6 +411,10 @@ namespace arcade {
         public int          ShotsFired  { get; private set; }
         public CSGameResult Result      => game.Result;
 
+        /*
+        ==========================
+        ==========================
+         */
         public void NewGame() {
             HitsDealt = HitsTaken = ShotsFired = Ticks = 0;
             game = new CSLite( map, seed );

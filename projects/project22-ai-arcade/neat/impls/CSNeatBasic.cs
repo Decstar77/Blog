@@ -39,6 +39,10 @@
         public static int       NetworkLogEvery     = 10;   // Network snapshot every N generations (and whenever the topology changes)
         public static double    InitialRating       = 1000;
 
+        /*
+        ===============================================================================
+        ===============================================================================
+        */
         public sealed class HallOfFameEntry {
             public required Genome  Genome;
             public required double  Rating;
@@ -259,6 +263,10 @@
             public double       Points => Result == CSGameResult.WIN ? 1 : Result == CSGameResult.DRAW ? 0.5 : 0;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private Match PlayMatch( Genome agent, Genome? opponent, int gameSeed, int agentTeam, CSTrainingLog log ) {
             CSLite game = new CSLite( map, gameSeed );
             int agentId = game.Players.FindIndex( p => p.Team == agentTeam );
@@ -410,6 +418,10 @@
             };
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static int ArgMax( double[] y, int start, int count ) {
             int best = 0;
             for ( int i = 1; i < count; i++ ) {
@@ -431,11 +443,19 @@
         private CSPlayerAction  held;
         private int             heldSinceTick = int.MaxValue;
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSNeatController( Genome genome, int playerId ) {
             Genome = genome;
             PlayerId = playerId;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSPlayerAction Act( CSLite game ) {
             int tick = game.TickCount;
             if ( tick < heldSinceTick || tick - heldSinceTick >= CSNeatBasic.ActionRepeat ) { // tick < heldSinceTick: the game was restarted

@@ -2,8 +2,12 @@ using Raylib_cs;
 using System.Numerics;
 
 namespace arcade {
-    // Plays CSLite's events from the point of view of one listener player.
-    // Requires Raylib.InitAudioDevice() to have been called.
+    /*
+    ===============================================================================
+    Plays CSLite's events from the point of view of one listener player.
+    Requires Raylib.InitAudioDevice() to have been called.
+    ===============================================================================
+    */
     public class CSAudio {
         private const string GunPack = "Other/gunsoundpack/Gamemaster Audio - Gun Sound Pack/Gun/";
         private const string Bonus   = "Other/scifisoundsandscifiweapons/Gamemaster Audio - Sci-Fi Sounds and Sci-Fi Weapons/z_ProSoundCollection_BonusSounds/";
@@ -55,10 +59,18 @@ namespace arcade {
 
         public int ListenerId;
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSAudio( int listenerId ) {
             ListenerId = listenerId;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Play( CSLite game ) {
             CSPlayer listener = game.Players[ListenerId];
 
@@ -83,14 +95,22 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Unload() {
             foreach ( var bank in new[] { Shot, Footstep, FleshImpact, Hurt, Death, WallHit, RoundWin, RoundLose } ) {
                 bank.Unload();
             }
         }
 
-        // A set of interchangeable variations of one sound. Each variation has a few aliases
-        // so rapid repeats overlap instead of cutting each other off.
+        /*
+        ===============================================================================
+        A set of interchangeable variations of one sound. Each variation has a few aliases
+        so rapid repeats overlap instead of cutting each other off.
+        ===============================================================================
+        */
         private class SoundBank {
             private const int Voices = 4;
             private const float PanWidth = 500; // Horizontal offset (world units) that pans fully to one side
@@ -100,6 +120,10 @@ namespace arcade {
             private readonly float Range; // 0 = not spatial
             private int NextVoice = 0;
 
+            /*
+            ==========================
+            ==========================
+             */
             public SoundBank( float volume, float range, params string[] assetNames ) {
                 Volume = volume;
                 Range = range;
@@ -116,6 +140,10 @@ namespace arcade {
                 }
             }
 
+            /*
+            ==========================
+            ==========================
+             */
             public void Play( Vector2 listener, Vector2 source, float volumeScale = 1 ) {
                 if ( Variants.Count == 0 ) return;
 
@@ -139,6 +167,10 @@ namespace arcade {
                 Raylib.PlaySound( s );
             }
 
+            /*
+            ==========================
+            ==========================
+             */
             public void Unload() {
                 foreach ( var (source, aliases) in Variants ) {
                     foreach ( var a in aliases ) Raylib.UnloadSoundAlias( a );

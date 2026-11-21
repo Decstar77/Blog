@@ -2,6 +2,10 @@
 using System.Numerics;
 
 namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public static class CSSettings {
         public static double GameTickRate = 60;
         public static double InvGameTickRate = 1 / GameTickRate;
@@ -26,6 +30,10 @@ namespace arcade {
         public static float FootstepDistance = 45;      // World units walked per footstep event
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public enum CSGameResult {
         PLAYING,
         WIN,    // Team 1 won
@@ -33,6 +41,10 @@ namespace arcade {
         DRAW
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct CSPlayer {
         public int      PlayerId;
         public Vector2  Position;
@@ -46,6 +58,10 @@ namespace arcade {
         public Vector2  Forward => new Vector2( MathF.Cos( Orientation ), MathF.Sin( Orientation ) );
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public enum CSEventType {
         Shot,       // PlayerId fired
         Footstep,   // PlayerId took a step
@@ -55,24 +71,40 @@ namespace arcade {
         RoundEnd,   // Result just stopped being PLAYING
     }
 
-    // Things that happened during a Step, for audio/effects. The simulation never reads these.
+    /*
+    ===============================================================================
+    Things that happened during a Step, for audio/effects. The simulation never reads these.
+    ===============================================================================
+    */
     public struct CSEvent {
         public CSEventType  Type;
         public int          PlayerId;
         public Vector2      Position;
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct CSCollider {
         public Vector2 Min;
         public Vector2 Max;
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct CSBullet {
         public Vector2  Position;
         public float    Direction;
         public int      PlayerId; // Player that fired it
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct CSPlayerAction {
         public int      PlayerId; // Player this action is for
         public bool     MoveLeft;
@@ -83,6 +115,10 @@ namespace arcade {
         public float    Rotation; // [-1, 1]
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class CSMap {
         public static char EmptyToken  = ' ';
         public static char WallToken   = 'W';
@@ -94,11 +130,19 @@ namespace arcade {
         public int Rows => MapData.GetLength( 0 );
         public int Cols => MapData.GetLength( 1 );
 
+        /*
+        ==========================
+        ==========================
+         */
         public void ParseMapFile( string mapFile ) {
             ParseMapLines( File.ReadAllLines( mapFile ) );
         }
 
-        // Rows are lines of text, columns are characters. Short lines are padded with empty cells.
+        /*
+        ==========================
+        Rows are lines of text, columns are characters. Short lines are padded with empty cells.
+        ==========================
+         */
         public void ParseMapLines( IEnumerable<string> lines ) {
             var rows = lines.Select( l => l.TrimEnd( '\r', '\n' ) ).ToList();
             while ( rows.Count > 0 && rows[^1].Trim().Length == 0 ) {
@@ -116,12 +160,20 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public bool IsWall( int row, int col ) {
             if ( row < 0 || col < 0 || row >= Rows || col >= Cols ) return true;
             return MapData[row, col] == WallToken;
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class CSLite {
         public CSMap            MapData;
         public List<CSPlayer>   Players = new List<CSPlayer>();
@@ -141,6 +193,10 @@ namespace arcade {
         private readonly Random Rng;
         private readonly List<CSPlayerAction> ActionOrder = new List<CSPlayerAction>();
 
+        /*
+        ==========================
+        ==========================
+         */
         public CSLite( CSMap map, int? seed = null ) {
             this.MapData = map;
             Rng = seed.HasValue ? new Random( seed.Value ) : new Random();
@@ -172,7 +228,11 @@ namespace arcade {
             }
         }
 
-        // Real-time step: runs as many fixed ticks as dt covers.
+        /*
+        ==========================
+        Real-time step: runs as many fixed ticks as dt covers.
+        ==========================
+         */
         public CSGameResult Step( float dt, List<CSPlayerAction> playerActions ) {
             Events.Clear();
             LastTick += dt;
@@ -183,13 +243,21 @@ namespace arcade {
             return Result;
         }
 
-        // Exactly one fixed tick, for agents/training.
+        /*
+        ==========================
+        Exactly one fixed tick, for agents/training.
+        ==========================
+         */
         public CSGameResult Step( List<CSPlayerAction> playerActions ) {
             Events.Clear();
             Tick( playerActions );
             return Result;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Tick( List<CSPlayerAction> playerActions ) {
             if ( Result != CSGameResult.PLAYING ) return;
 
@@ -251,9 +319,17 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private void Emit( CSEventType type, int playerId, Vector2 position ) =>
             Events.Add( new CSEvent { Type = type, PlayerId = playerId, Position = position } );
 
+        /*
+        ==========================
+        ==========================
+         */
         private void UpdateBullets( float dt ) {
             float radius = CSSettings.PlayerSize / 2f;
 
@@ -303,6 +379,10 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private CSGameResult EvaluateResult() {
             bool team1Alive = Players.Any( p => p.Alive && p.Team == 0 );
             bool team2Alive = Players.Any( p => p.Alive && p.Team == 1 );
@@ -314,7 +394,11 @@ namespace arcade {
             return CSGameResult.PLAYING;
         }
 
-        // Axis-separated movement so players slide along walls instead of sticking.
+        /*
+        ==========================
+        Axis-separated movement so players slide along walls instead of sticking.
+        ==========================
+         */
         private Vector2 MovePlayer( Vector2 pos, Vector2 delta ) {
             float half = CSSettings.PlayerSize / 2f;
 
@@ -335,12 +419,20 @@ namespace arcade {
             return pos;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static bool Overlaps( Vector2 pos, float half, CSCollider c ) =>
             pos.X + half > c.Min.X && pos.X - half < c.Max.X &&
             pos.Y + half > c.Min.Y && pos.Y - half < c.Max.Y;
 
         // ------------------------------------------------------------------ Queries (used by bots)
 
+        /*
+        ==========================
+        ==========================
+         */
         public bool HasLineOfSight( Vector2 from, Vector2 to ) {
             foreach ( var c in Collider ) {
                 if ( SegmentBoxEntry( from, to, c ) >= 0 ) return false;
@@ -348,19 +440,35 @@ namespace arcade {
             return true;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public (int Row, int Col) CellOf( Vector2 pos ) =>
             ( (int)( pos.Y / CSSettings.WallSize ), (int)( pos.X / CSSettings.WallSize ) );
 
+        /*
+        ==========================
+        ==========================
+         */
         public Vector2 CellCenter( int row, int col ) =>
             new Vector2( ( col + 0.5f ) * CSSettings.WallSize, ( row + 0.5f ) * CSSettings.WallSize );
 
+        /*
+        ==========================
+        ==========================
+         */
         public static float WrapAngle( float a ) {
             while ( a > MathF.PI )   a -= MathF.PI * 2;
             while ( a < -MathF.PI )  a += MathF.PI * 2;
             return a;
         }
 
-        // Parametric t in [0,1] where segment a->b enters the box, or -1 if it misses.
+        /*
+        ==========================
+        Parametric t in [0,1] where segment a->b enters the box, or -1 if it misses.
+        ==========================
+         */
         public static float SegmentBoxEntry( Vector2 a, Vector2 b, CSCollider box ) {
             Vector2 d = b - a;
             float tMin = 0, tMax = 1;
@@ -385,7 +493,11 @@ namespace arcade {
             return tMin;
         }
 
-        // Parametric t in [0,1] where segment a->b first touches the circle, or -1 if it misses.
+        /*
+        ==========================
+        Parametric t in [0,1] where segment a->b first touches the circle, or -1 if it misses.
+        ==========================
+         */
         public static float SegmentCircleEntry( Vector2 a, Vector2 b, Vector2 center, float radius ) {
             Vector2 d = b - a;
             Vector2 f = a - center;
@@ -404,6 +516,10 @@ namespace arcade {
 
         // ------------------------------------------------------------------ Rendering
 
+        /*
+        ==========================
+        ==========================
+         */
         public void Render( float dt, List<CSPlayerAction> playerActions ) {
             int sw = Raylib.GetScreenWidth();
             int sh = Raylib.GetScreenHeight();

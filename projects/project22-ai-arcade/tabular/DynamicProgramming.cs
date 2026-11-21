@@ -1,12 +1,24 @@
 ﻿
 namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class DynamicProgramming {
         private TabularModelBasedInterface mdp;
 
+        /*
+        ==========================
+        ==========================
+         */
         public DynamicProgramming( TabularModelBasedInterface mdp ) {
             this.mdp = mdp;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double[] PolicyEvaluation( int[] policy, double gamma = 1.0, double theta = 0.001 ) {
             double [] V = new double[mdp.NumStates];
             while ( true ) {
@@ -39,6 +51,10 @@ namespace arcade {
             return V;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public int[] PolicyIteration( double gamma = 1.0 ) {
             int [] Policy = new int[mdp.NumStates];
             for ( int s = 0; s < mdp.NumStates; s++ ) {
@@ -70,6 +86,10 @@ namespace arcade {
             return Policy;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private double QValue( double[] V, int s, int a, double gamma ) {
             double Q = 0;
             MdpTransition[] transitions = mdp.Transitions( s, a );
@@ -79,6 +99,10 @@ namespace arcade {
             return Q;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int ArgMaxActions( double[] V, int s, double gamma ) {
             int maxAction = 0;
             double maxValue = double.MinValue;

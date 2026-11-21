@@ -1,5 +1,13 @@
 ﻿namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class TemporalDifference {
+        /*
+        ===============================================================================
+        ===============================================================================
+        */
         private record StateReward {
             public int s;
             public float r;
@@ -7,10 +15,18 @@
 
         private TabularModelFreeInterface rl;
         
+        /*
+        ==========================
+        ==========================
+         */
         public TemporalDifference(TabularModelFreeInterface rl) {
             this.rl = rl;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double[] PolicyEvaluation_OneStep( int[] Policy, int EpisodeCount, double Alpha, double Gamma = 1.0 ) {
             double[] V = new double[rl.NumStates];
             for ( int episodeIndex = 0; episodeIndex < EpisodeCount; episodeIndex++ ) {
@@ -26,6 +42,10 @@
             return V;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public double[] PolicyEvaluation_NStep( int[] Policy, int EpisodeCount, int N, double Alpha, double Gamma = 1.0 ) {
             double[] V = new double[rl.NumStates];
             List<StateReward> store = new List<StateReward>();

@@ -1,6 +1,14 @@
 ﻿
 namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public static class Helpers {
+        /*
+        ==========================
+        ==========================
+         */
         public static int EpsilonGreedy( double Epsilon, int Count, Func<int, double> selector ) {
             double roll = Random.Shared.NextDouble();
             if ( roll < Epsilon ) {
@@ -19,6 +27,10 @@ namespace arcade {
             }
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static int Choose( int Count, Func<int, double> selector, Random? rng = null) {
             double roll = rng == null ? Random.Shared.NextDouble(): rng.NextDouble();
             double cumulativeSum = 0.0;
@@ -33,6 +45,10 @@ namespace arcade {
             return Count - 1;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         public static int ArgMax( int Count, Func<int, double> selector ) {
             int maxAction = 0;
             double maxValue = double.MinValue;

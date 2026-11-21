@@ -1,4 +1,8 @@
 ﻿namespace arcade {
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public interface PolicyGradientInterface<TState, TAction, TCache> {
         public double[]             InitialTheta();
         public void                 NewGame();
@@ -13,7 +17,15 @@
         public void                 PrintLog( int episode, int total, double seconds );
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class Reinforce {
+        /*
+        ===============================================================================
+        ===============================================================================
+        */
         struct StateActionReward<TState, TAction, TCache> {
             public TState   s;
             public TAction  a;

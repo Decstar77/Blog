@@ -1,5 +1,9 @@
 ﻿namespace arcade {
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public interface ActorCriticInterface<TState, TAction> {
         // Parameters
         public double[]     InitialActor();
@@ -24,6 +28,10 @@
         public void         PrintLog( int episode, int total, double seconds );
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct ActorCriticSettings {
         public int    episodes;
         public double gamma;
@@ -47,7 +55,15 @@
         };
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class ActorCritic {
+        /*
+        ==========================
+        ==========================
+         */
         public (double[], double[]) PolicyControl<TState, TAction>( ActorCriticInterface<TState, TAction> ac, ActorCriticSettings settings ) {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -100,7 +116,15 @@
         }
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class ActorCriticEligibilityTraces {
+        /*
+        ==========================
+        ==========================
+         */
         public (double[], double[]) PolicyControl<TState, TAction>( ActorCriticInterface<TState, TAction> ac, ActorCriticSettings settings ) {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
