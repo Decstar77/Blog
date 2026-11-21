@@ -5,7 +5,12 @@ using System.Text;
 namespace arcade {
     public interface ActorCriticInterface { 
     }
-
+    
     public class ActorCritic {
+
+    }
+
+    public class ActorCriticEligibilityTraces {
+
     }
 }
