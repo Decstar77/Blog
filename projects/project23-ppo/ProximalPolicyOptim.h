@@ -7,3 +7,9 @@ class PPOInterface {
     virtual int     step( int action, float & reward ) = 0;
 };
 
+struct PPOSettings {
+
+};
+
+void ppo( PPOSettings settings, PPOInterface * model );
+
