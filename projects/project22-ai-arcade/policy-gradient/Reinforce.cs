@@ -21,7 +21,10 @@
             public float    r;
         }
 
-        // Prints a summary line every LogEvery episodes (0 = silent).
+        /*
+        ==========================
+        ==========================
+         */
         public double[] PolicyControl<TState, TAction, TCache>( PolicyGradientInterface<TState, TAction, TCache> rl, int EpisodeCount, double Alpha, double Gamma, int? seed = null, int LogEvery = 10 ) {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 

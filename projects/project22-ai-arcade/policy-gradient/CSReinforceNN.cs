@@ -60,14 +60,26 @@
             return theta;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int ThetaWeightIndexFor(int layerIndex, int neuron, int weight ) {
             return LayerOffsets[layerIndex] + neuron * LayerInputs[layerIndex] + weight;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private int ThetaBiasIndexFor( int layerIndex, int neuron ) {
             return LayerOffsets[layerIndex] + LayerInputs[layerIndex] * LayerNC[layerIndex] + neuron;
         }
 
+        /*
+        ==========================
+        ==========================
+         */
         private static double[] HeadProbs( double[] x, int start, int n ) {
             double[] p = new double[n];
             double max = double.NegativeInfinity;
