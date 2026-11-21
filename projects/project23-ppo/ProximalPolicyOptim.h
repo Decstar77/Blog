@@ -7,5 +7,3 @@ class PPOInterface {
     virtual int     step( int action, float & reward ) = 0;
 };
 
-
-
