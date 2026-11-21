@@ -1,15 +1,8 @@
 ﻿
 namespace arcade {
     /*
-        Everything PPO needs from a game + function approximator.
-
-        The actor (policy) and critic (value function) are flat parameter vectors, same as Reinforce.
-        Note there is no TCache like in PolicyGradientInterface: PPO re-evaluates each stored sample several
-        times while theta is changing (epochs x minibatches), so anything cached at sample time goes stale.
-        The Accumulate* / LogProb / Value methods must do their own forward pass with the theta they are given.
-
-        TState is stored in the rollout buffer, so GetState() must return a snapshot (not a reference
-        into live game memory that Step() will mutate).
+    ===============================================================================
+    ===============================================================================
     */
     public interface PPOInterface<TState, TAction> {
         // Parameters
@@ -39,6 +32,10 @@ namespace arcade {
         public void PrintLog( int iteration, int total, double seconds );
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct PPOSettings {
         public int    iterations;          // number of (rollout, update) cycles
         public int    rollOut;             // env steps collected per iteration (spans episode boundaries)
@@ -52,7 +49,6 @@ namespace arcade {
         public double alphaCritic;
         public double maxGradNorm;         // global grad-norm clip per network, <= 0 disables
         public double targetKL;            // stop the epoch loop early once approx KL exceeds 1.5x this, <= 0 disables
-        public bool   normalizeAdvantages;
         public int?   seed;
         public int    logEvery;            // iterations between PrintLog calls, <= 0 disables
 
@@ -69,12 +65,15 @@ namespace arcade {
             alphaCritic         = 1e-3,
             maxGradNorm         = 0.5,
             targetKL            = 0.0,
-            normalizeAdvantages = true,
             seed                = null,
             logEvery            = 10,
         };
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public struct PPOStats {
         public int    iteration;
         public int    episodesFinished;    // episodes that ended during this iteration's rollout
@@ -84,9 +83,12 @@ namespace arcade {
         public double entropy;             // mean policy entropy, last epoch
         public double approxKL;            // mean KL(old || new) estimate, last epoch
         public double clipFraction;        // fraction of samples whose ratio was clipped, last epoch
-        public double explainedVariance;   // 1 - Var(R - V) / Var(R) on the rollout, before the update
     }
 
+    /*
+    ===============================================================================
+    ===============================================================================
+    */
     public class PPO {
         struct Sample<TState, TAction> {
             public TState  s;
@@ -164,18 +166,6 @@ namespace arcade {
                     gae = delta + settings.gamma * settings.lambda * nonTerminal * gae;
                     buffer[t].advantage = gae;
                     buffer[t].ret       = gae + buffer[t].value;
-                }
-
-                stats.explainedVariance = ExplainedVariance( buffer );
-
-                if ( settings.normalizeAdvantages ) {
-                    double mean = 0;
-                    for ( int t = 0; t < T; t++ ) mean += buffer[t].advantage;
-                    mean /= T;
-                    double var = 0;
-                    for ( int t = 0; t < T; t++ ) var += ( buffer[t].advantage - mean ) * ( buffer[t].advantage - mean );
-                    double std = Math.Sqrt( var / T ) + 1e-8;
-                    for ( int t = 0; t < T; t++ ) buffer[t].advantage = ( buffer[t].advantage - mean ) / std;
                 }
 
                 // Update ================
@@ -281,24 +271,6 @@ namespace arcade {
             if ( norm <= maxNorm ) return;
             double scale = maxNorm / norm;
             for ( int i = 0; i < g.Length; i++ ) g[i] *= scale;
-        }
-
-        /*
-        ==========================
-        ==========================
-         */
-        private static double ExplainedVariance<TState, TAction>( Sample<TState, TAction>[] buffer ) {
-            int n = buffer.Length;
-            double meanR = 0, meanE = 0;
-            for ( int t = 0; t < n; t++ ) { meanR += buffer[t].ret; meanE += buffer[t].ret - buffer[t].value; }
-            meanR /= n; meanE /= n;
-            double varR = 0, varE = 0;
-            for ( int t = 0; t < n; t++ ) {
-                double e = buffer[t].ret - buffer[t].value;
-                varR += ( buffer[t].ret - meanR ) * ( buffer[t].ret - meanR );
-                varE += ( e - meanE ) * ( e - meanE );
-            }
-            return varR < 1e-12 ? 0.0 : 1.0 - varE / varR;
         }
     }
 }

@@ -1,11 +1,5 @@
 ﻿namespace arcade {
-    /*
-        Everything the actor-critic methods need from a game + function approximator.
 
-        Same idea as PPOInterface, minus the PPO-only parts (LogProb, Entropy). Both algorithms below
-        are fully online: they update after every single step, so nothing is stored and GetState() is
-        free to return a reference into live game memory as long as it's read before Step() is called.
-    */
     public interface ActorCriticInterface<TState, TAction> {
         // Parameters
         public double[]     InitialActor();
@@ -37,11 +31,6 @@
         public double alphaCritic;
         public double lambdaActor;           // trace decay for the actor  (ActorCriticEligibilityTraces only)
         public double lambdaCritic;          // trace decay for the critic (ActorCriticEligibilityTraces only)
-
-        // Sutton & Barto multiply the actor update by I = gamma^t, which makes it a correct gradient of the
-        // discounted objective from the start state. In long episodes (lots of game ticks) I shrinks to ~0
-        // and the actor stops learning anything late in the episode, so most practical implementations
-        // drop it. Off by default.
         public bool   discountActorUpdates;
 
         public int    logEvery;              // episodes between PrintLog calls, <= 0 disables
@@ -58,16 +47,6 @@
         };
     }
 
-    /*
-        One-step actor-critic (Sutton & Barto, 2nd ed., section 13.5).
-
-        Like REINFORCE with a baseline, but instead of waiting for the full return G_t at the end of the
-        episode, the critic's estimate stands in for everything after the next reward:
-
-            delta = R + gamma * V(S') - V(S)        (TD error, the one-step advantage estimate)
-            w     += alphaCritic * delta * grad V(S)
-            theta += alphaActor  * delta * grad ln pi(A|S)
-    */
     public class ActorCritic {
         public (double[], double[]) PolicyControl<TState, TAction>( ActorCriticInterface<TState, TAction> ac, ActorCriticSettings settings ) {
             var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -121,20 +100,6 @@
         }
     }
 
-    /*
-        Actor-critic with eligibility traces (Sutton & Barto, 2nd ed., section 13.5, episodic).
-
-        Same TD error as one-step actor-critic, but instead of applying delta only to the gradient of the
-        current step, each network keeps a trace z: a decaying sum of recent gradients. A surprise (large
-        delta) now also adjusts the states/actions that led up to it, not just the last one.
-
-            z_w     = gamma * lambdaCritic * z_w     + grad V(S)
-            z_theta = gamma * lambdaActor  * z_theta + grad ln pi(A|S)
-            w      += alphaCritic * delta * z_w
-            theta  += alphaActor  * delta * z_theta
-
-        lambda = 0 gives back one-step actor-critic. lambda -> 1 approaches REINFORCE with a baseline.
-    */
     public class ActorCriticEligibilityTraces {
         public (double[], double[]) PolicyControl<TState, TAction>( ActorCriticInterface<TState, TAction> ac, ActorCriticSettings settings ) {
             var clock = System.Diagnostics.Stopwatch.StartNew();
