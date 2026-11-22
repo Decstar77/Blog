@@ -8,15 +8,13 @@
 
 /*
 ==========================
-dummy_action
-Player 2 placeholder until the PPO agent drives it: stands still, tracks player 1.
 ==========================
 */
 static PlayerAction dummy_action( const CSGame & cs ) {
     const Player & self = cs.players[ 1 ];
     const Player & target = cs.players[ 0 ];
     PlayerAction a = {};
-    a.rotation = atan2f( target.pos.y - self.pos.y, target.pos.x - self.pos.x );
+    a.rotation = cs_turn_toward( self.rotation, atan2f( target.pos.y - self.pos.y, target.pos.x - self.pos.x ) );
     return a;
 }
 

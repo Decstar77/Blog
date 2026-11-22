@@ -10,7 +10,7 @@
 */
 class PPOInterface {
   public:
-    virtual int             new_game() = 0;
+    virtual void            new_game() = 0;
     virtual bool            is_terminal() = 0;
     virtual void            step( PlayerAction action ) = 0;
     virtual float           last_reward() = 0;

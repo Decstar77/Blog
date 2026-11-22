@@ -8,8 +8,6 @@
 
 /*
 ===============================================================================
-Linear (bump) allocator. One big block up front, pushes just move an offset
-forward. Nothing is freed individually: reset the whole arena or free it.
 ===============================================================================
 */
 struct Arena {

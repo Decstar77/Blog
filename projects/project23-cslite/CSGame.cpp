@@ -63,7 +63,7 @@ void cs_new_game( CSGame & cs ) {
     // Spawn facing each other on opposite sides of the map
     float midY = CS_MAP_HEIGHT * 0.5f;
     cs.players[ 0 ] = { 0, CS_PLAYER_HEALTH, { 3.0f, midY }, 0.0f, 0.0f };
-    cs.players[ 1 ] = { 1, CS_PLAYER_HEALTH, { CS_MAP_WIDTH - 3.0f, midY }, 3.14159265f, 0.0f };
+    cs.players[ 1 ] = { 1, CS_PLAYER_HEALTH, { CS_MAP_WIDTH - 3.0f, midY }, CS_PI, 0.0f };
 }
 
 /*
@@ -117,6 +117,31 @@ static void collide_circle_with_walls( const Map & map, Vec2 & pos, float radius
 
 /*
 ==========================
+wrap_angle
+Maps any angle into [-pi, pi).
+==========================
+*/
+static float wrap_angle( float a ) {
+    a = fmodf( a + CS_PI, 2.0f * CS_PI );
+    if ( a < 0.0f ) {
+        a += 2.0f * CS_PI;
+    }
+    return a - CS_PI;
+}
+
+/*
+==========================
+cs_turn_toward
+==========================
+*/
+float cs_turn_toward( float facing, float targetAngle ) {
+    float diff = wrap_angle( targetAngle - facing );
+    float maxStep = CS_TURN_SPEED * CS_DT;
+    return fminf( fmaxf( diff / maxStep, -1.0f ), 1.0f );   // proportional, so it doesn't overshoot near the target
+}
+
+/*
+==========================
 player_apply_action
 ==========================
 */
@@ -135,8 +160,9 @@ static void player_apply_action( CSGame & cs, Player & player, const PlayerActio
         collide_circle_with_walls( cs.map, player.pos, CS_PLAYER_RADIUS );
     }
 
-    // Aim
-    player.rotation = action.rotation;
+    // Aim: rotation is a turn rate, clamped to the max turn speed. +y is down, so +angle is CW on screen.
+    float turn = fminf( fmaxf( action.rotation, -1.0f ), 1.0f );
+    player.rotation = wrap_angle( player.rotation + turn * CS_TURN_SPEED * CS_DT );
 
     // Shoot
     player.shootCooldown = fmaxf( 0.0f, player.shootCooldown - CS_DT );
@@ -322,6 +348,6 @@ PlayerAction cs_input_from_keyboard( const CSGame & cs, int playerNumber ) {
 
     Vector2 mouse = GetMousePosition();
     Vector2 centre = to_screen( p.pos );
-    a.rotation = atan2f( mouse.y - centre.y, mouse.x - centre.x );
+    a.rotation = cs_turn_toward( p.rotation, atan2f( mouse.y - centre.y, mouse.x - centre.x ) );
     return a;
 }

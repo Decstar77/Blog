@@ -7,7 +7,6 @@
 
 /*
 ==========================
-arena_create
 ==========================
 */
 Arena arena_create( size_t sizeBytes ) {
@@ -21,7 +20,6 @@ Arena arena_create( size_t sizeBytes ) {
 
 /*
 ==========================
-arena_free
 ==========================
 */
 void arena_free( Arena & arena ) {
@@ -31,7 +29,6 @@ void arena_free( Arena & arena ) {
 
 /*
 ==========================
-arena_push
 ==========================
 */
 void * arena_push( Arena & arena, size_t sizeBytes, size_t alignment ) {
@@ -54,7 +51,6 @@ void * arena_push( Arena & arena, size_t sizeBytes, size_t alignment ) {
 
 /*
 ==========================
-arena_reset
 ==========================
 */
 void arena_reset( Arena & arena ) {
