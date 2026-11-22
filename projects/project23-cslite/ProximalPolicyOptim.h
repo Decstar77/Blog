@@ -1,22 +1,38 @@
-﻿#include "Tensor.h"
+﻿#pragma once
+
+#include "Tensor.h"
 #include "Network.h"
 
 struct PlayerAction {
 
 };
 
+// The game owns the meaning of the actor's output tensor (e.g. logits of a categorical
+// distribution), so it owns sampling, log-probs and their gradients w.r.t. that tensor.
+// PPO only does the scalar chain rule and hands the result to nn_backward.
 class PPOInterface {
   public:
     virtual int     new_game() = 0;
     virtual bool    is_terminal() = 0;
     virtual void    step( PlayerAction action ) = 0;
+    virtual float   last_reward() = 0;
 
-    virtual Tensor          get_state_tensor() = 0;
-    virtual PlayerAction    action_tensor_to_action( const Tensor & action ) = 0;
-    virtual float           last_reward() = 0;
-    virtual float           log_prob( const Tensor & action ) = 0;
-    virtual float           entropy( const Tensor & action ) = 0;
+    // Returned tensor is owned by the caller (tn_free it).
+    virtual Tensor  get_state_tensor() = 0;
 
+    // Draw an action from pi( . | actorOutput ).
+    virtual PlayerAction    sample_action( const Tensor & actorOutput ) = 0;
+
+    // log pi( action | actorOutput )
+    virtual float   log_prob( const Tensor & actorOutput, const PlayerAction & action ) = 0;
+
+    // grad = d log pi( action ) / d actorOutput.        Softmax logits: one_hot(a) - pi
+    virtual void    log_prob_grad( const Tensor & actorOutput, const PlayerAction & action, Tensor & grad ) = 0;
+
+    // grad = d H( pi ) / d actorOutput.                  Softmax logits: -pi_j * ( log pi_j + H )
+    virtual void    entropy_grad( const Tensor & actorOutput, Tensor & grad ) = 0;
+
+    // Actor's output feeds log_prob etc. Critic must output a single value.
     virtual Network create_actor() = 0;
     virtual Network create_critic() = 0;
 };
@@ -36,4 +52,3 @@ struct PPOSettings {
 };
 
 void ppo( PPOSettings settings, PPOInterface * model );
-

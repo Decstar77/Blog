@@ -91,6 +91,12 @@ float tn_at( const Tensor & tn, int row, int col ) {
     return tn.data[row * tn.shape[1] + col];
 }
 
+// Value of a single-element tensor (e.g. the critic's output).
+float tn_value( const Tensor & tn ) {
+    assert( tn.count == 1 );
+    return tn.data[0];
+}
+
 // ---- Fill / init -----------------------------------------------------------
 
 void tn_fill( Tensor & tn, float value ) {
