@@ -11,8 +11,21 @@ endif()
 
 project ("ProximalPolicyOptim")
 
+# raylib, fetched and built from source at configure time
+include(FetchContent)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  raylib
+  GIT_REPOSITORY https://github.com/raysan5/raylib.git
+  GIT_TAG 5.5
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(raylib)
+
 # Add source to this project's executable.
 add_executable (ProximalPolicyOptim "Main.cpp" "ProximalPolicyOptim.cpp" "ProximalPolicyOptim.h" "Tensor.h" "Tensor.cpp" "Network.h" "Network.cpp" "CSGame.h" "CSGame.cpp" "MemoryArena.h" "MemoryArena.cpp" )
+target_link_libraries(ProximalPolicyOptim PRIVATE raylib)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET ProximalPolicyOptim PROPERTY CXX_STANDARD 20)
