@@ -18,11 +18,18 @@ struct Step {
     float           retn;       // critic target: ahat + vCurr
 };
 
+/*
+==========================
+==========================
+ */
 inline int min( int a, int b ) {
     return a < b ? a : b;
 }
 
-// Indices 0..size-1 in random order.
+/*
+==========================
+==========================
+ */
 inline std::vector<int> Shuffle( int size ) {
     static std::mt19937 rng( 1234 );
     std::vector<int> order( size );
@@ -33,6 +40,10 @@ inline std::vector<int> Shuffle( int size ) {
     return order;
 }
 
+/*
+==========================
+==========================
+ */
 void ppo( PPOSettings settings, PPOInterface * model ) {
     Network actor = model->create_actor();
     Network critic = model->create_critic();

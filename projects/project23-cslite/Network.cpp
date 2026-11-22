@@ -3,6 +3,10 @@
 #include <cassert>
 #include <cmath>
 
+/*
+==========================
+==========================
+ */
 Network nn_create( const std::vector<int> & sizes ) {
     assert( sizes.size() >= 2 );
     Network nn;
@@ -29,6 +33,10 @@ Network nn_create( const std::vector<int> & sizes ) {
     return nn;
 }
 
+/*
+==========================
+==========================
+ */
 void nn_free( Network & nn ) {
     for ( Layer & layer : nn.layers ) {
         tn_free( layer.W );
@@ -42,6 +50,10 @@ void nn_free( Network & nn ) {
     nn.layers.clear();
 }
 
+/*
+==========================
+==========================
+ */
 void nn_zero_grad( Network & nn ) {
     for ( Layer & layer : nn.layers ) {
         tn_zero( layer.dW );
@@ -49,6 +61,10 @@ void nn_zero_grad( Network & nn ) {
     }
 }
 
+/*
+==========================
+==========================
+ */
 const Tensor & nn_forward( Network & nn, const Tensor & inputs ) {
     const Tensor * x = &inputs;
     for ( Layer & layer : nn.layers ) {
@@ -73,6 +89,10 @@ const Tensor & nn_forward( Network & nn, const Tensor & inputs ) {
     return *x;
 }
 
+/*
+==========================
+==========================
+ */
 void nn_backward( Network & nn, const Tensor & fGrads ) {
     const Tensor * gradOutput = &fGrads;     // dLoss/dy for the current layer
 
@@ -108,6 +128,10 @@ void nn_backward( Network & nn, const Tensor & fGrads ) {
     }
 }
 
+/*
+==========================
+==========================
+ */
 void nn_update( Network & nn, float lr ) {
     for ( Layer & layer : nn.layers ) {
         tn_axpy( layer.W, -lr, layer.dW );
