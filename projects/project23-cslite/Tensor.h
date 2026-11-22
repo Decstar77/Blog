@@ -29,6 +29,7 @@ float & tn_at( Tensor & tn, int i );
 float   tn_at( const Tensor & tn, int i );
 float & tn_at( Tensor & tn, int row, int col );
 float   tn_at( const Tensor & tn, int row, int col );
+float   tn_value( const Tensor & tn );
 
 // ---- Fill / init -----------------------------------------------------------
 void    tn_fill( Tensor & tn, float value );
