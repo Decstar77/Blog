@@ -12,9 +12,11 @@
         public double SurvivalFraction            { get; init; } = 0.2;
         public double CrossoverChance             { get; init; } = 0.75;
         public double WeightSelectionChance       { get; init; } = 0.8;
-        public double WeightMutationChance        { get; init; } = 0.98;   // Per weight: perturb with this chance, otherwise re-randomise
+        public double WeightMutationRate          { get; init; } = 0.1;    // Share of weights touched when a genome's weights mutate
+        public double WeightMutationChance        { get; init; } = 0.98;   // Per touched weight: perturb with this chance, otherwise re-randomise
         public double WeightPerturbScale          { get; init; } = 0.2;    // Std dev of the Gaussian perturbation
         public double BiasSelectionChance         { get; init; } = 0.8;
+        public double BiasMutationRate            { get; init; } = 0.1;    // Share of biases touched when a genome's biases mutate
         public double BiasMutationChance          { get; init; } = 0.98;
         public double BiasPerturbScale            { get; init; } = 0.2;
         public double ConnectionSelectionChance   { get; init; } = 0.08;
@@ -145,12 +147,13 @@
         public List<GeneNode>       nodes = new List<GeneNode>();
         public List<GeneConnection> connections = new List<GeneConnection>();
         public double               fitness = 0;
+        public int                  evaluations = 0;    // Fitness is the mean over this many evaluations (elites keep theirs across generations)
         /*
         ==========================
         ==========================
          */
         public Genome Clone() {
-            Genome clone = new Genome() { fitness = fitness };
+            Genome clone = new Genome() { fitness = fitness, evaluations = evaluations };
             Dictionary<int, GeneNode> map = new Dictionary<int, GeneNode>();
             foreach ( GeneNode node in nodes ) {
                 GeneNode copy = new GeneNode(node.type, node.nodeId)
@@ -173,19 +176,22 @@
         ==========================
          */
         public void Mutate( NeatSettings settings ) {
-            WeightMutation( settings.WeightSelectionChance, settings.WeightMutationChance, settings.WeightPerturbScale );
-            BiasMutation( settings.BiasSelectionChance, settings.BiasMutationChance, settings.BiasPerturbScale );
+            WeightMutation( settings.WeightSelectionChance, settings.WeightMutationRate, settings.WeightMutationChance, settings.WeightPerturbScale );
+            BiasMutation( settings.BiasSelectionChance, settings.BiasMutationRate, settings.BiasMutationChance, settings.BiasPerturbScale );
             ConnectionMutation( settings.ConnectionSelectionChance );
             NodeMutation( settings.NodeSelectionChance );
         }
 
         /*
         ==========================
+        Only a share (rate) of the weights move, so a child stays close to its parent. With
+        hundreds of links, moving every weight at once mostly produces broken children.
         ==========================
          */
-        public void WeightMutation( double selectionChance, double mutationChance, double perturbScale ) {
+        public void WeightMutation( double selectionChance, double rate, double mutationChance, double perturbScale ) {
             if ( RNG.random.NextDouble() < selectionChance ) {
                 for ( int c = 0; c < connections.Count; c++ ) {
+                    if ( RNG.random.NextDouble() >= rate ) continue;
                     if ( RNG.random.NextDouble() < mutationChance ) {
                         connections[c].weight += RNG.NextGaussian() * perturbScale;
                     }
@@ -200,10 +206,11 @@
         ==========================
         ==========================
          */
-        public void BiasMutation( double selectionChance, double mutationChance, double perturbScale ) {
+        public void BiasMutation( double selectionChance, double rate, double mutationChance, double perturbScale ) {
             if ( RNG.random.NextDouble() < selectionChance ) {
                 foreach ( GeneNode node in nodes ) {
                     if ( node.type == GeneNodeType.Input ) continue;
+                    if ( RNG.random.NextDouble() >= rate ) continue;
                     if ( RNG.random.NextDouble() < mutationChance )
                         node.bias += RNG.NextGaussian() * perturbScale;
                     else
@@ -568,6 +575,7 @@
             for ( int i = 0; i < settings.PopulationSize; i++ ) {
                 Genome genome = seed.Clone();
                 genome.fitness = 0;
+                genome.evaluations = 0;
                 if ( i > 0 ) genome.Mutate( settings );
                 genomes.Add( genome );
             }
@@ -578,10 +586,14 @@
         ==========================
         ==========================
          */
+        // A genome that survived from last generation (an elite) folds the new score into its
+        // running mean, so its fitness settles on its real level instead of one lucky or unlucky
+        // draw. New children start at zero evaluations and take their first score as-is.
         public void Evaluate( Func<Genome, double> fitnessFunction ) {
             foreach ( Genome genome in genomes ) {
-                double fitness = fitnessFunction(genome);
-                genome.fitness = fitness;
+                double score = fitnessFunction(genome);
+                genome.evaluations++;
+                genome.fitness += ( score - genome.fitness ) / genome.evaluations;
             }
 
             Genome champion = genomes.MaxBy(g => g.fitness)!;
@@ -648,8 +660,7 @@
             for ( int i = 0; i < species.Count; i++ ) {
                 Species group = species[i];
                 var parents = group.members.OrderByDescending(g => g.fitness).Take(Math.Max(1, (int)Math.Ceiling(group.members.Count * settings.SurvivalFraction))).ToList();
-                Genome elite = parents[0].Clone();
-                elite.fitness = 0;
+                Genome elite = parents[0].Clone();  // Keeps fitness and evaluations, see Evaluate
                 nextGeneration.Add( elite );
                 for ( int offspring = 1; offspring < counts[i]; offspring++ ) {
                     Genome parent = SelectParent(parents);
@@ -662,6 +673,7 @@
                         child = parent.Clone();
                     }
                     child.fitness = 0;
+                    child.evaluations = 0;
                     child.Mutate( settings );
                     nextGeneration.Add( child );
                 }

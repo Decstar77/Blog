@@ -40,6 +40,22 @@ namespace arcade {
                 Console.WriteLine( $"{Path.GetFileName( path )} vs CSBot: win {log.WinRate:P0}  loss {log.LossRate:P0}  draw {log.DrawRate:P0}  score {log.AvgReward:F3}  ({log.Episodes} games)" );
                 return;
             }
+            // How noisy is self-play fitness for a saved champion: dotnet run -- noise [path] [trials] [seed]
+            if ( Args.Length > 0 && Args[0] == "noise" ) {
+                string? path = Args.Length > 1 && Args[1] != "latest" ? Args[1] : TrainingDashboard.LatestArtifact( "champion.bin" );
+                if ( path == null || !File.Exists( path ) ) {
+                    Console.WriteLine( $"No champion found. Looked in {TrainingDashboard.RunsDir}" );
+                    return;
+                }
+                int trials = Args.Length > 2 ? int.Parse( Args[2] ) : 50;
+                int seed   = Args.Length > 3 ? int.Parse( Args[3] ) : 40;
+                var noiseMap = new CSMap();
+                noiseMap.ParseMapFile( Path.Combine( AppContext.BaseDirectory, "maps", "cs_map001.txt" ) );
+                Console.WriteLine( $"Champion: {Path.GetFileName( path )}" );
+                var neat = new CSNeatBasic( noiseMap, seed, 8, new NeatSettings { PopulationSize = 250 } );
+                neat.MeasureFitnessNoise( Genome.Load( path ), trials );
+                return;
+            }
             // Headless NEAT run: dotnet run -- neat [generations] [population] [seed]
             if ( Args.Length > 0 && Args[0] == "neat" ) {
                 TrainingDashboard.Start();
@@ -75,8 +91,9 @@ namespace arcade {
 
                 int? seed = null;// 40;
                 CSNeatBasic neat = new CSNeatBasic( map, seed, 8, neatSettings );
-                string path = "C:\\Projects\\2025\\Blog\\projects\\project22-ai-arcade\\diagnostics\\runs\\20261121-170438_neat-cs-selfplay.champion.bin";
-                champion = neat.Train( 250, 25, path);
+                string path = "C:\\Projects\\2025\\Blog\\projects\\project22-ai-arcade\\diagnostics\\runs\\20261122-045445_neat-cs-selfplay.champion.bin";
+                champion = neat.Train( 5000, 25, path);
+                //champion = Genome.Load( path );
             }
 
             Raylib.SetConfigFlags( ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow | ConfigFlags.VSyncHint );

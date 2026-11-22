@@ -157,6 +157,66 @@
 
         /*
         ==========================
+        How much of a genome's fitness is skill and how much is luck?
+        The population is rebuilt around the genome the same way a checkpoint load does it
+        (one exact copy, the rest mutated), so the panels look like early-training panels.
+          1. Same genome, fresh panel and seeds each trial: the noise training actually sees.
+          2. Same genome, one fixed panel, fresh seeds: the game's own randomness on its own.
+          3. Whole population on one panel and seed set (one generation): the spread selection ranks.
+          4. Top and bottom K of step 3, re-tested on fresh panels: if both land on the
+             population mean, step 3's ranking was luck.
+        ==========================
+         */
+        public void MeasureFitnessNoise( Genome genome, int trials = 50, int topK = 10, int retests = 20 ) {
+            Population.SeedFrom( genome );
+            HallOfFame.Clear();
+            HallOfFame.Add( new HallOfFameEntry { Genome = genome.Clone(), Rating = InitialRating, Generation = -1 } );
+
+            static double Mean( IEnumerable<double> xs ) => xs.Average();
+            static double Sd( IList<double> xs ) {
+                double m = xs.Average();
+                return Math.Sqrt( xs.Sum( x => ( x - m ) * ( x - m ) ) / Math.Max( 1, xs.Count - 1 ) );
+            }
+            int[] FreshSeeds() => Enumerable.Range( 0, gamesPerGenome ).Select( _ => rng.Next() ).ToArray();
+            double FreshFitness( Genome g ) => SelfPlayFitness( g, BuildPanel(), FreshSeeds(), new CSTrainingLog() );
+
+            Console.WriteLine( $"Fitness noise test: {gamesPerGenome} games per evaluation, population {Population.Genomes.Count}" );
+
+            // 1. Fresh panel and seeds every trial.
+            var full = Enumerable.Range( 0, trials ).Select( _ => FreshFitness( genome ) ).ToList();
+            Console.WriteLine( $"1. same genome, fresh panel + seeds  ({trials} trials):  mean {Mean( full ),5:F2}  sd {Sd( full ),5:F2}  range {full.Min(),5:F2} .. {full.Max(),5:F2}" );
+
+            // 2. One fixed panel, fresh seeds every trial.
+            List<Genome> fixedPanel = BuildPanel();
+            var seedOnly = Enumerable.Range( 0, trials ).Select( _ => SelfPlayFitness( genome, fixedPanel, FreshSeeds(), new CSTrainingLog() ) ).ToList();
+            Console.WriteLine( $"2. same genome, fixed panel, fresh seeds ({trials} trials):  mean {Mean( seedOnly ),5:F2}  sd {Sd( seedOnly ),5:F2}" );
+
+            // 3. One generation's evaluation of the whole population.
+            int[] fixedSeeds = FreshSeeds();
+            var log = new CSTrainingLog();
+            var scored = Population.Genomes.Select( g => (genome: g, fitness: SelfPlayFitness( g, fixedPanel, fixedSeeds, log )) ).ToList();
+            var popFitness = scored.Select( x => x.fitness ).ToList();
+            Console.WriteLine( $"3. population on one panel + seeds:  mean {Mean( popFitness ),5:F2}  sd {Sd( popFitness ),5:F2}  best {popFitness.Max(),5:F2}" );
+
+            // 4. Re-test the extremes of step 3.
+            var ranked = scored.OrderByDescending( x => x.fitness ).ToList();
+            var top = ranked.Take( topK ).ToList();
+            var bottom = ranked.Skip( ranked.Count - topK ).ToList();
+            double Retest( Genome g ) => Enumerable.Range( 0, retests ).Average( _ => FreshFitness( g ) );
+            double topBefore = top.Average( x => x.fitness ), topAfter = top.Average( x => Retest( x.genome ) );
+            double botBefore = bottom.Average( x => x.fitness ), botAfter = bottom.Average( x => Retest( x.genome ) );
+            Console.WriteLine( $"4. top {topK}:    {topBefore,5:F2} in step 3  ->  {topAfter,5:F2} re-tested ({retests} fresh evaluations each)" );
+            Console.WriteLine( $"   bottom {topK}: {botBefore,5:F2} in step 3  ->  {botAfter,5:F2} re-tested" );
+
+            // Rough share of the step-3 spread that is real skill rather than luck.
+            double noiseVar = Sd( full ) * Sd( full ), popVar = Sd( popFitness ) * Sd( popFitness );
+            double reliability = Math.Max( 0, 1 - noiseVar / popVar );
+            Console.WriteLine( $"Rough reliability (1 - noise var / population var): {reliability:F2}   (near 0 = selection is ranking luck)" );
+            Console.WriteLine( $"Top-vs-bottom gap kept after re-test: {( topAfter - botAfter ) / Math.Max( 1e-9, topBefore - botBefore ):P0}" );
+        }
+
+        /*
+        ==========================
         ==========================
          */
         private CSTrainingLog CrownChampion( int generation, out double rating ) {
