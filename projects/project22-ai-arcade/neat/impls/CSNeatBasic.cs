@@ -64,9 +64,18 @@
         ==========================
          */
         public Genome Train( int generations, int LogEvery = 1, string? loadCheckPoint = null ) {
+            // Continue from a saved champion: seed the population with it and put it in the
+            // hall of fame so the first generations are rated against it.
+            if ( loadCheckPoint != null ) {
+                Genome start = Genome.Load( loadCheckPoint );
+                Population.SeedFrom( start );
+                HallOfFame.Add( new HallOfFameEntry { Genome = start, Rating = InitialRating, Generation = -1 } );
+                Console.WriteLine( $"Continuing from {loadCheckPoint}" );
+            }
+
             var timer = System.Diagnostics.Stopwatch.StartNew();
             TrainingDashboard.BeginRun( "neat-cs-selfplay", new {
-                generations, seed, gamesPerGenome, HallOfFameShare, ValidateTopK, RatingOpponents, BotBenchmarkGames, ActionRepeat,
+                generations, seed, gamesPerGenome, loadCheckPoint, HallOfFameShare, ValidateTopK, RatingOpponents, BotBenchmarkGames, ActionRepeat,
                 inputs = CSGameState.FeatureCount, outputs = OutputCount, settings = Population.Settings
             } );
 

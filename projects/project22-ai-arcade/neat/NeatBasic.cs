@@ -559,6 +559,25 @@
         ==========================
         ==========================
          */
+        // Replace the population with copies of a saved genome to continue training from it.
+        // One copy is kept as-is, the rest are mutated so the first generation has some variety.
+        public void SeedFrom( Genome seed ) {
+            genomes.Clear();
+            species.Clear();
+            BestGenome = null;
+            for ( int i = 0; i < settings.PopulationSize; i++ ) {
+                Genome genome = seed.Clone();
+                genome.fitness = 0;
+                if ( i > 0 ) genome.Mutate( settings );
+                genomes.Add( genome );
+            }
+            Speciate();
+        }
+
+        /*
+        ==========================
+        ==========================
+         */
         public void Evaluate( Func<Genome, double> fitnessFunction ) {
             foreach ( Genome genome in genomes ) {
                 double fitness = fitnessFunction(genome);
