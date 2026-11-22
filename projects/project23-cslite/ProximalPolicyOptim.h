@@ -44,7 +44,6 @@ struct PPOSettings {
     float   lambda;
     float   clipping;
     float   entopy;
-    int     trajectories;
     int     rollout;
     int     epochs;
     int     batchSize;

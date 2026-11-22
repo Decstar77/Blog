@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "CSPPO.h"
+
 /*
 ==========================
 ==========================
@@ -23,6 +25,21 @@ static PlayerAction dummy_action( const CSGame & cs ) {
 ==========================
  */
 int main() {
+    PPOSettings settings = {};
+    settings.gamma = 0.99f;
+    settings.lambda = 0.95f;
+    settings.clipping = 0.2f;
+    settings.entopy = 0.05f;
+    settings.rollout = 1500;
+    settings.epochs = 10;
+    settings.batchSize = 32;
+    settings.alphaActor = 0.01f;
+    settings.alphaCritic = 0.01f;
+    settings.iterationCount = 10;
+
+    CSPPO csppo;
+    ppo( settings, &csppo );
+
     CSGame cs = {};
     cs_new_game( cs );
 

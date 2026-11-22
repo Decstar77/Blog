@@ -17,12 +17,9 @@ class CSPPO : public PPOInterface {
 
     virtual Tensor          get_state_tensor() override;
     virtual PlayerAction    sample_action( const Tensor & actorOutput ) override ;
-    virtual float           log_prob( const Tensor & actorOutput, const PlayerAction & action ) override; // log pi( action | actorOutput )
-    // grad = d log pi( action ) / d actorOutput.        Softmax logits: one_hot(a) - pi
-    virtual void log_prob_grad( const Tensor & actorOutput, const PlayerAction & action, Tensor & grad ) = 0;
-
-    // grad = d H( pi ) / d actorOutput.                  Softmax logits: -pi_j * ( log pi_j + H )
-    virtual void entropy_grad( const Tensor & actorOutput, Tensor & grad ) = 0;
+    virtual float           log_prob( const Tensor & actorOutput, const PlayerAction & action ) override;
+    virtual void            log_prob_grad( const Tensor & actorOutput, const PlayerAction & action, Tensor & grad ) override;
+    virtual void            entropy_grad( const Tensor & actorOutput, Tensor & grad ) override;
 
   private:
     int     winner;

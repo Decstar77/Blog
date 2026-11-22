@@ -24,7 +24,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(raylib)
 
 # Add source to this project's executable.
-add_executable (ProximalPolicyOptim "Main.cpp" "CSPPO.h" "CSPPO.cpp" "ProximalPolicyOptim.cpp" "ProximalPolicyOptim.h" "Tensor.h" "Tensor.cpp" "Network.h" "Network.cpp" "CSGame.h" "CSGame.cpp" "MemoryArena.h" "MemoryArena.cpp" )
+add_executable (ProximalPolicyOptim "Main.cpp" "CSPPO.h" "CSPPO.cpp" "ProximalPolicyOptim.cpp" "ProximalPolicyOptim.h" "Tensor.h" "Tensor.cpp" "Network.h" "Network.cpp" "CSGame.h" "CSGame.cpp" "MemoryArena.h" "MemoryArena.cpp" "Util.h" "Util.cpp" )
 target_link_libraries(ProximalPolicyOptim PRIVATE raylib)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
