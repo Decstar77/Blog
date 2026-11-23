@@ -52,4 +52,9 @@ struct PPOSettings {
     int     iterationCount;
 };
 
-void ppo( PPOSettings settings, PPOInterface * model );
+struct PPOResult {
+    Network actor;
+    Network critic;
+};
+
+PPOResult ppo( PPOSettings settings, PPOInterface * model );

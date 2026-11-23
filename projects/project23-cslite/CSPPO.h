@@ -21,7 +21,7 @@ class CSPPO : public PPOInterface {
     virtual void            log_prob_grad( const Tensor & actorOutput, const PlayerAction & action, Tensor & grad ) override;
     virtual void            entropy_grad( const Tensor & actorOutput, Tensor & grad ) override;
 
-  private:
+  public:
     int     winner;
     CSGame  cs;
 
