@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top Down Shooter: Training a PPO Bot — Decstar's Blog</title>
+    <meta name="description" content="Training a PPO policy to beat a hand-coded bot in a small top-down shooter, from a C++ prototype that went nowhere to a 90% win rate.">
+    <link rel="icon" type="image/jpeg" href="../images/favicon.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .article-body ul, .article-body ol { padding-left: 1.4rem; margin: 0 0 1.25rem; }
+        .article-body li { margin-bottom: 0.35rem; }
+        .table-scroll { overflow-x: auto; margin: 1.2rem 0 1.6rem; }
+        .article-body table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+        .article-body th, .article-body td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; white-space: nowrap; }
+        .article-body th { color: var(--text-muted); font-weight: 600; }
+        .article-body td.num, .article-body th.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .article-body tr.best td { font-weight: 600; }
+
+        .run { margin: 1.6rem 0 2rem; }
+        .run video {
+            width: 100%;
+            max-width: 640px;
+            display: block;
+            margin: 0 auto;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #555;
+        }
+        .run figcaption {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 8px;
+        }
+        .run-tag {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--accent);
+            margin-right: 6px;
+        }
+    </style>
+</head>
+<body>
+
+<main class="wrapper article-page">
+
+    <nav class="inner-nav">
+        <a href="index.html" class="inner-nav-brand">Decstar's Blog</a>
+        <ul class="inner-nav-links">
+            <li><a href="articles.html">Articles</a></li>
+            <li><a href="projects.html" class="active">Projects</a></li>
+            <li><a href="index.html#about">About</a></li>
+        </ul>
+    </nav>
+
+    <a class="back-link" href="projects.html"><i class="fas fa-arrow-left"></i> All Projects</a>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category">Reinforcement Learning</span>
+            <h1 style="text-align: center;">Top Down Shooter: Training a PPO Bot</h1>
+            <div class="article-meta">
+                <span><i class="fas fa-tag"></i> C++ · Python · pybind11 · PyTorch · PPO</span>
+                <span><i class="fas fa-hashtag"></i> Project 23</span>
+            </div>
+        </header>
+
+        <div class="article-body">
+            <p class="lead">
+                I've been learning Reinforcement Learning (RL) and wanted a project to practice what I'd learnt.
+                The game is a simple top-down shooter, and the goal is to train a policy that beats a hand-programmed bot.
+                I honestly thought this would take a day. Oh how naïve I was. It turned out to be a hard problem,
+                and below is the whole journey: what broke, what I tried, and what finally got it to a 90% win rate.
+            </p>
+
+            <figure class="run">
+                <video src="videos/shooter-006.mp4" autoplay muted loop playsinline preload="auto"></video>
+                <figcaption>The final policy (blue) against the hand-coded bot (red). It wins about 90% of the time.</figcaption>
+            </figure>
+
+            <h2>The game and the first network</h2>
+            <p>
+                I started in C++, and the game came first. That part was easy, I've made much harder games than this.
+                I wrote the header file and had Claude write the implementation. Two players, an empty arena, shoot the
+                other one until they die.
+            </p>
+            <p>
+                Then the network. I started with a simple 2-layer net:
+            </p>
+            <ul>
+                <li><strong>Inputs:</strong> my position, health and rotation, the enemy's position, health and rotation, and the closest enemy bullet.</li>
+                <li><strong>Outputs:</strong> four movement logits (left, right, up, down, each its own Bernoulli), a fire logit (Bernoulli), and a rotation output (a Gaussian mean with a hardcoded std of 0.2).</li>
+                <li><strong>Rewards:</strong> a big reward for winning, a small reward for hitting the enemy, a small penalty for getting hit, and &minus;0.001 per tick so it doesn't stall.</li>
+            </ul>
+            <p>
+                I trained it with my own PPO implementation in C++. To cut a long story short, it made almost no progress,
+                even against a stationary opponent that never moved or fired. I didn't realise it at the time, but the
+                amount of compute needed to get a good result here is huge. I wasn't sure what was going wrong, so I
+                exposed the C++ environment to Python with pybind11 to iterate faster. I didn't write the bindings by hand
+                either, that's boilerplate and AI is good at it.
+            </p>
+
+            <h2>Moving to Python</h2>
+            <p>
+                Python isn't my main language, so I started with a plain actor-critic. That failed too. The only reward
+                for shooting arrives when the bullet hits, many ticks after the fire action. Without something like GAE
+                to carry that reward back, the model can't learn that pressing fire was the right call.
+            </p>
+            <p>
+                So I implemented PPO, which turns out to be pretty easy in Python. Success, at least on the most basic task.
+                In all the clips below the trained agent is blue and the bot is red.
+            </p>
+
+            <figure class="run">
+                <video src="videos/shooter-001.mp4" autoplay muted loop playsinline preload="metadata"></video>
+                <figcaption><span class="run-tag">001</span>Basic 2-layer network, PPO, against a stationary bot. It finds it.</figcaption>
+            </figure>
+
+            <p>
+                Next I randomised the spawns to check it was really aiming and not just memorising one angle. I also
+                added self-play and action repeats. Repeating each action for a few ticks means fewer policy queries,
+                which speeds things up, and it lets rewards travel back further in time per decision. This worked too.
+            </p>
+
+            <figure class="run">
+                <video src="videos/shooter-002.mp4" autoplay muted loop playsinline preload="metadata"></video>
+                <figcaption><span class="run-tag">002</span>Randomised spawns, self-play and action repeats.</figcaption>
+            </figure>
+
+            <h2>Training the real thing</h2>
+            <p>
+                Time to train against a bot that fights back. I bumped the network to 3 layers (one hidden layer of 128)
+                and set <code>action_repeats=2</code>. I kept training with self-play instead of training against the bot
+                directly, because self-play holds up better on hard problems, and used the bot purely as the benchmark.
+                This run took 9 hours and ended at roughly a 30% win rate.
+            </p>
+
+            <figure class="run">
+                <video src="videos/shooter-003.mp4" autoplay muted loop playsinline preload="metadata"></video>
+                <figcaption><span class="run-tag">003</span>128-wide hidden layer, action repeat of 2, self-play. About 30% wins against the bot.</figcaption>
+            </figure>
+
+            <h3>Giving it a memory</h3>
+            <p>
+                A single frame tells you where a bullet is, not where it's going. So I fed in the previous 4 frames as
+                observations, which lets the model infer movement and dodge. I also spent time batching the environments
+                to speed things up.
+            </p>
+            <p>
+                In the tables below, <em>Greedy</em> means the policy always takes its most likely action, and
+                <em>Stochastic</em> means it samples from its distribution. The policy acts at 30Hz because of the
+                action repeat. The bot runs at 60Hz, or 30Hz to match.
+            </p>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr><th>Greedy 30Hz vs Bot 60Hz</th><th class="num">W / L / D</th><th class="num">Policy acc.</th><th class="num">Bot acc.</th><th class="num">Avg ticks</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1 frame (before)</td><td class="num">32 / 68 / 0</td><td class="num">9.1% (169 / 1864)</td><td class="num">11.0% (236 / 2155)</td><td class="num">379.6</td></tr>
+                        <tr class="best"><td>4 frames</td><td class="num">52 / 46 / 2</td><td class="num">10.2% (219 / 2149)</td><td class="num">6.9% (194 / 2816)</td><td class="num">498.8</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p>
+                Dodging improved a lot. The bot's accuracy dropped from 11.0% to 6.9% and fights lasted about 30% longer.
+                The policy was now more accurate than the bot (10.2% vs 6.9%) and landed more total hits (219 vs 194).
+            </p>
+
+            <figure class="run">
+                <video src="videos/shooter-004.mp4" autoplay muted loop playsinline preload="metadata"></video>
+                <figcaption><span class="run-tag">004</span>The last 4 frames as input. About 50% wins.</figcaption>
+            </figure>
+
+            <h2>Making the hardware work</h2>
+            <p>
+                From here most of the work was engineering. I moved the threaded environment simulation into C++, since
+                stepping it from Python was slow, and now C++ fills the buffers and just hands them to Python. Then a
+                big batch size of 2048 so the tensors go to the GPU and it has something to chew on. On the model side I
+                widened the hidden layer to 256 and gave it the 5 closest bullets instead of just one, to help it dodge.
+            </p>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr><th>Matchup</th><th class="num">W / L / D</th><th class="num">Avg ticks</th><th class="num">Policy acc.</th><th class="num">Bot acc.</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Greedy 30Hz vs Bot 60Hz</td><td class="num">80 / 20 / 0</td><td class="num">378.7</td><td class="num">12.4% (263 / 2125)</td><td class="num">5.2% (113 / 2154)</td></tr>
+                        <tr><td>Greedy 30Hz vs Bot 30Hz</td><td class="num">81 / 19 / 0</td><td class="num">398.7</td><td class="num">12.0% (268 / 2235)</td><td class="num">5.2% (111 / 2135)</td></tr>
+                        <tr><td>Stochastic 30Hz vs Bot 60Hz</td><td class="num">83 / 17 / 0</td><td class="num">415.9</td><td class="num">11.6% (272 / 2336)</td><td class="num">5.7% (134 / 2356)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <figure class="run">
+                <video src="videos/shooter-005.mp4" autoplay muted loop playsinline preload="metadata"></video>
+                <figcaption><span class="run-tag">005</span>256-wide hidden layer, 5 closest bullets, multithreaded C++ simulation, batch size 2048. About 80% wins.</figcaption>
+            </figure>
+
+            <p>
+                Then I let it run for another 5000 iterations, and it finally hit a 90% win rate against the bot.
+            </p>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr><th>Matchup</th><th class="num">W / L / D</th><th class="num">Avg ticks</th><th class="num">Policy acc.</th><th class="num">Bot acc.</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Greedy 30Hz vs Bot 60Hz</td><td class="num">89 / 11 / 0</td><td class="num">388.9</td><td class="num">13.1% (287 / 2199)</td><td class="num">3.2% (70 / 2207)</td></tr>
+                        <tr class="best"><td>Greedy 30Hz vs Bot 30Hz</td><td class="num">94 / 4 / 2</td><td class="num">384.9</td><td class="num">13.4% (291 / 2178)</td><td class="num">2.7% (55 / 2042)</td></tr>
+                        <tr class="best"><td>Stochastic 30Hz vs Bot 60Hz</td><td class="num">94 / 5 / 1</td><td class="num">439.3</td><td class="num">11.8% (292 / 2471)</td><td class="num">3.0% (75 / 2489)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <figure class="run">
+                <video src="videos/shooter-006.mp4" autoplay muted loop playsinline preload="metadata"></video>
+                <figcaption><span class="run-tag">006</span>Same setup after 5000 more iterations. About 90% wins.</figcaption>
+            </figure>
+
+            <h2>The Bitter Lesson, again</h2>
+            <p>
+                This all comes back to Rich Sutton's <a href="http://www.incompleteideas.net/IncIdeas/BitterLesson.html" target="_blank" rel="noopener">Bitter Lesson</a>.
+                The only real changes to the model were:
+            </p>
+            <ol>
+                <li>Adding a hidden layer.</li>
+                <li>Putting more of the game into the inputs: the previous frames, and the 5 closest bullets instead of one.</li>
+                <li>Widening the hidden layer to 256.</li>
+            </ol>
+            <p>
+                Everything else came from compute. All the effort went into making the CPU and GPU spin as hard as possible.
+            </p>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr><th>Run</th><th>Change</th><th class="num">Wins vs bot</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>003</td><td>128 hidden, action repeat 2, self-play</td><td class="num">32%</td></tr>
+                        <tr><td>004</td><td>Last 4 frames as input</td><td class="num">52%</td></tr>
+                        <tr><td>005</td><td>256 hidden, 5 closest bullets, threaded C++ sim, batch 2048</td><td class="num">80%</td></tr>
+                        <tr class="best"><td>006</td><td>5000 more iterations</td><td class="num">90%</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p>
+                This opened my eyes to how much compute even a basic model like this needs. The final run would have
+                taken over 60 hours on my original single-threaded implementation. On the GPU version it took about 40 minutes.
+            </p>
+
+            <section class="related-section">
+                <h2>Related</h2>
+                <ul class="related-list">
+                    <li>
+                        <span class="related-kind">Project</span>
+                        <a href="project-ai-arcade.html">AI Arcade</a>
+                        <span class="related-note">: tabular RL on Frozen Lake, where I started.</span>
+                    </li>
+                </ul>
+            </section>
+
+            <div class="article-tags">
+                <span class="tag">PPO</span>
+                <span class="tag">Self-Play</span>
+                <span class="tag">Reinforcement Learning</span>
+                <span class="tag">C++</span>
+                <span class="tag">pybind11</span>
+                <span class="tag">PyTorch</span>
+            </div>
+        </div>
+    </article>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>&copy; 2026 Decstar</span>
+        <a href="projects.html">&larr; All Projects</a>
+    </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
