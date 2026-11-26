@@ -207,7 +207,7 @@ PPOResult ppo( PPOSettings settings, PPOInterface * model ) {
         }
 
         // ---- Log ---------------------------------------------------------------------------
-        if ( iteration % 100 == 0 ) {
+        if ( iteration % 25 == 0 ) {
 
             float meanValue = 0.0f;
             for ( int t = 0; t < T; t++ ) {

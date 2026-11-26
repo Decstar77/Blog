@@ -3,6 +3,7 @@
 
 void CSPPO::new_game() {
     cs_new_game( cs );
+    winner = -1;
 }
 
 bool CSPPO::is_terminal() {
@@ -11,6 +12,9 @@ bool CSPPO::is_terminal() {
 
 void CSPPO::step( PlayerAction action ) {
     cs_step( cs, action, {} );
+
+    // Update winner here so last_reward() is correct for this step, whatever order the caller uses.
+    cs_is_terminal( cs, winner );
 }
 
 float CSPPO::last_reward() {
@@ -22,7 +26,7 @@ float CSPPO::last_reward() {
 
 Network CSPPO::create_actor() {
     Tensor dummy = get_state_tensor();
-    std::vector<int> sizes = { dummy.shape[0], ACTOR_OUTPUT_SIZE };
+    std::vector<int> sizes = { dummy.shape[0], 64, 64, ACTOR_OUTPUT_SIZE };
     tn_free( dummy );
     return nn_create(sizes);
 }
